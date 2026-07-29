@@ -28,14 +28,26 @@ class ScaledPA:
         self.psat_dbm = float(psat_dbm)
         self.pae_max = float(pae_max)
 
-        # Normalized-domain saturation amplitude and small-signal gain,
-        # found numerically so any PAModel (not just Saleh) works.
-        r = np.linspace(1e-4, 20.0, 20000)
+        # Native-domain saturation amplitude and small-signal gain, found
+        # numerically so any PAModel works — unit-normalized analytic models
+        # (Saleh/GMP) and physical-amplitude LUT models (HB imports) alike.
+        # Log sweep locates the AM-AM peak wherever the model's scale sits;
+        # the small-signal gain is read at r_sat/100 (on the flat region,
+        # not at the sweep bottom, which may be outside a LUT's table).
+        r = np.logspace(-3, 3, 6000)
         a_out = np.abs(self.pa_model(r.astype(complex)))
         i_sat = int(np.argmax(a_out))
         self._r_sat = float(r[i_sat])
         self._a_sat = float(a_out[i_sat])
-        self._g0 = float(a_out[0] / r[0])  # small-signal amplitude gain
+        # Small-signal gain = the gain plateau (d log(gain) / d log(r) ~ 0)
+        # below saturation.  Neither end of the sweep is safe: LUT models
+        # clamp below their table (slope -1 there) and everything
+        # compresses near r_sat.
+        gains = a_out / r
+        slope = np.gradient(np.log(np.maximum(gains, 1e-300)), np.log(r))
+        mask = r < self._r_sat / 3.0
+        idx = int(np.argmin(np.abs(np.where(mask, slope, np.inf))))
+        self._g0 = float(gains[idx])
 
         # |y_norm| = a_sat maps to sqrt(psat_mw)
         self._k_out = np.sqrt(dbm_to_mw(self.psat_dbm)) / self._a_sat
@@ -86,3 +98,34 @@ class ScaledPA:
         p_out_w = float(np.mean(np.abs(np.asarray(y)) ** 2)) * 1e-3
         p_dc = self.dc_power_w(y)
         return p_out_w / p_dc if p_dc > 0 else 0.0
+
+
+class DriftingScaledPA:
+    """dBm-scaled wrapper around a drifting PA (temperature/aging scenario).
+
+    The dBm mapping (k_in/k_out) is frozen at drift state 0 — advancing the
+    state then genuinely changes gain and compression at the chain level,
+    which is what an adaptive DPD has to track.  Duck-types ScaledPA for
+    TxChain use (__call__, average_pae, pae, dc_power_w).
+    """
+
+    def __init__(self, drift, gain_db: float = 26.0, psat_dbm: float = 28.0,
+                 pae_max: float = 0.35):
+        self.drift = drift
+        self.scaled = ScaledPA(drift.pa(), gain_db=gain_db,
+                               psat_dbm=psat_dbm, pae_max=pae_max)
+
+    def set_state(self, state: float) -> None:
+        self.drift.set_state(state)
+        # swap only the inner model; keep the state-0 dBm scaling
+        self.scaled.pa_model = self.drift.pa()
+
+    @property
+    def state(self) -> float:
+        return self.drift.state
+
+    def __call__(self, x: np.ndarray) -> np.ndarray:
+        return self.scaled(x)
+
+    def __getattr__(self, name):
+        return getattr(self.scaled, name)

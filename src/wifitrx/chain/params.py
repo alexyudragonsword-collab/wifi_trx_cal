@@ -33,6 +33,9 @@ class TxParams:
     psat_dbm: float = 28.0
     pae_max: float = 0.35
     pa_enabled: bool = True
+    # "saleh" (memoryless) | "memory" (Wiener-Hammerstein ReferencePA);
+    # a custom PAModel instance can be passed to TxChain(pa=...) instead
+    pa_model: str = "saleh"
     seed: int = 0
 
     def randomize(self, rng: np.random.Generator) -> "TxParams":

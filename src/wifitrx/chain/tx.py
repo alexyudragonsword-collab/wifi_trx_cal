@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..pa.reference_pa import ReferencePA
 from ..pa.saleh import SalehPA
 from ..pa.scaled import ScaledPA
 from ..units import db_to_amp, power_dbm
@@ -37,11 +38,17 @@ def apply_widely_linear(x: np.ndarray, w1: np.ndarray | None,
 
 
 class TxChain:
-    def __init__(self, params: TxParams, fs: float):
+    def __init__(self, params: TxParams, fs: float, pa=None):
         self.params = params
         self.fs = float(fs)
-        self.pa = ScaledPA(SalehPA(), gain_db=params.pa_gain_db,
-                           psat_dbm=params.psat_dbm, pae_max=params.pae_max)
+        if pa is not None:
+            self.pa = pa  # prebuilt ScaledPA/DriftingScaledPA
+        else:
+            inner = (ReferencePA() if params.pa_model == "memory"
+                     else SalehPA())
+            self.pa = ScaledPA(inner, gain_db=params.pa_gain_db,
+                               psat_dbm=params.psat_dbm,
+                               pae_max=params.pae_max)
         # ---- calibration state (programmed by cal algorithms) ----
         self.dc_pre: complex = 0.0 + 0.0j       # digital DC pre-subtraction
         self.w1: np.ndarray | None = None       # widely-linear correction
