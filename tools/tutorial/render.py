@@ -11,6 +11,7 @@ import base64
 import html
 import io
 import re
+from pathlib import Path
 
 from mathsvg import latex_to_svg
 from model import Code, Diagram, Doc, F, Fig, Section, T, Table
@@ -189,10 +190,17 @@ def render_doc(doc: Doc, ctx, provenance: dict, rebuild_cmd: str) -> str:
         "</footer></main>")
 
     zh_title = html.escape(doc.title.zh)
+    favicon = ""
+    fav_path = (Path(__file__).resolve().parents[2] / "assets"
+                / "icon-32.png")
+    if fav_path.exists():
+        b64 = base64.b64encode(fav_path.read_bytes()).decode()
+        favicon = (f'<link rel="icon" type="image/png" '
+                   f'href="data:image/png;base64,{b64}">')
     return ("<!DOCTYPE html>\n"
             f'<html lang="zh" class="lang-zh"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width,'
-            f'initial-scale=1"><title>{zh_title}</title>'
+            f'initial-scale=1"><title>{zh_title}</title>{favicon}'
             f"<style>{CSS}</style></head><body>"
             f'<button id="langbtn">EN</button>'
             f"{_toc(doc)}{''.join(parts)}"

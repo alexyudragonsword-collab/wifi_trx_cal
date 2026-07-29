@@ -30,9 +30,21 @@ except ImportError as exc:  # pragma: no cover - environment-dependent
         "without it") from exc
 
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+from PySide6.QtGui import QIcon
 
 from inspector_page import InspectorPage
 from specs import ALL_ANALYSES, AnalysisResult, AnalysisSpec, ParamSpec
+
+
+def _icon_path() -> str:
+    """assets/icon.png, whether running from source or a frozen exe.
+
+    PyInstaller onefile extracts bundled data under sys._MEIPASS; Nuitka
+    onefile keeps data files relative to the extracted __file__ layout.
+    """
+    base = Path(getattr(sys, "_MEIPASS",
+                        Path(__file__).resolve().parent.parent))
+    return str(base / "assets" / "icon.png")
 
 
 class Worker(QThread):
@@ -191,6 +203,9 @@ class MainWindow(QMainWindow):
 
 def main() -> None:
     app = QApplication(sys.argv)
+    icon = QIcon(_icon_path())
+    if not icon.isNull():
+        app.setWindowIcon(icon)
     win = MainWindow()
     win.show()
     sys.exit(app.exec())

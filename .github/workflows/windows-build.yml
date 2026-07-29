@@ -1,0 +1,70 @@
+# Windows executables of the GUI workbench, built two ways on purpose:
+# PyInstaller (fast build, battle-tested hooks) and Nuitka (compiled,
+# faster startup) — ship whichever proves more reliable on real machines.
+# Heavy (Nuitka compiles PySide6+scipy, ~30+ min), so it runs on version
+# tags and manual dispatch only, never on every push.
+name: windows-build
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  pyinstaller:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e .[gui] pyinstaller
+      - name: build exe
+        run: >
+          pyinstaller --noconfirm --onefile --windowed
+          --name wifitrx-workbench
+          --icon assets/icon.ico
+          --add-data "assets/icon.png;assets"
+          --paths src --paths app
+          --collect-submodules wifitrx
+          app/main.py
+      - name: smoke check (exe exists and is nontrivial)
+        shell: pwsh
+        run: |
+          $exe = "dist/wifitrx-workbench.exe"
+          if (!(Test-Path $exe)) { throw "missing $exe" }
+          if ((Get-Item $exe).Length -lt 20MB) { throw "suspiciously small" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wifitrx-workbench-pyinstaller
+          path: dist/wifitrx-workbench.exe
+
+  nuitka:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e .[gui] nuitka
+      - name: build exe
+        run: >
+          python -m nuitka --assume-yes-for-downloads --onefile
+          --windows-console-mode=disable
+          --enable-plugin=pyside6
+          --windows-icon-from-ico=assets/icon.ico
+          --include-data-files=assets/icon.png=assets/icon.png
+          --include-package=wifitrx
+          --output-filename=wifitrx-workbench-nuitka.exe
+          --output-dir=build-nuitka
+          app/main.py
+      - name: smoke check
+        shell: pwsh
+        run: |
+          $exe = "build-nuitka/wifitrx-workbench-nuitka.exe"
+          if (!(Test-Path $exe)) { throw "missing $exe" }
+          if ((Get-Item $exe).Length -lt 20MB) { throw "suspiciously small" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wifitrx-workbench-nuitka
+          path: build-nuitka/wifitrx-workbench-nuitka.exe
