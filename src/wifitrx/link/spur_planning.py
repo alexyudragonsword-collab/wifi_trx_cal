@@ -38,6 +38,21 @@ class FracNConfig:
     vco_mult: int = 2             # VCO runs at vco_mult * f_lo
 
 
+def lock_time_s(cfg: FracNConfig, freq_step_hz: float = 100e6,
+                settle_tol_hz: float = 1e3, zeta: float = 0.7) -> float:
+    """Approximate PLL lock time for a ``freq_step_hz`` retune.
+
+    Second-order type-II envelope: t ~ ln(step/tol) / (zeta * wn), with
+    wn ~ 2*pi*loop_bw / 2 (loop -3 dB bandwidth roughly twice the natural
+    frequency at zeta=0.7).  An engineering estimate for the power-on time
+    budget — replace with the measured lock spec once the PLL team has
+    one; the point is that PLL lock appears IN the budget at all.
+    """
+    wn = TWOPI * cfg.loop_bw_hz / 2.0
+    ratio = max(abs(freq_step_hz) / settle_tol_hz, 1.0)
+    return float(np.log(ratio) / (zeta * wn))
+
+
 def frac_of(f_lo_hz: float, cfg: FracNConfig) -> float:
     n = cfg.vco_mult * f_lo_hz / cfg.fref_hz
     return float(n - np.floor(n))

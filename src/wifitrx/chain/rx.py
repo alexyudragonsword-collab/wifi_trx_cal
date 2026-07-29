@@ -47,6 +47,13 @@ class RxChain:
         self.frac_delay_iq: float = 0.0         # residual I/Q delay trim [samples]
         self.im2_trim_code: int = 1 << (params.im2.trim_bits - 1)  # analog trim
         self.noise_enabled: bool = True
+        self.temperature_c: float = 25.0
+
+    def set_temperature(self, temp_c: float) -> None:
+        """Move the die to ``temp_c`` (see TxChain.set_temperature)."""
+        self.temperature_c = float(temp_c)
+        self.params.lpf.temperature_c = float(temp_c)
+        self.params.iq.temperature_c = float(temp_c)
 
     # ------------------------------------------------------------ AGC
     def agc(self, p_in_dbm: float) -> None:

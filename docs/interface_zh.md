@@ -82,7 +82,13 @@ Schema(`wifitrx-cal-state-v1`):
                                   //   spec       该步当时生效的验收规格
                                   //              {metric, limit, sense},
                                   //              随文件走,校验时以此为准
-  "provenance": { ... }           // 生成溯源:git commit、dirty、时间、版本
+  "provenance": { ... },          // 生成溯源:git commit、dirty、时间、版本
+  "expiry": {                     // 可选:校正有效性窗口(link.temp_study 实测)
+    "calibrated_at_c": 25.0,      //   校准温度
+    "hold_min_c": -10.0,          //   实测保持范围:全部规格仍达标的温度区间
+    "hold_max_c": 55.0,           //   超出范围需重校或依赖跟踪环
+    "criteria": { ... }
+  }
 }
 ```
 

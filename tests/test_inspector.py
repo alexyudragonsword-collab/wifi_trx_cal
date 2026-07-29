@@ -28,6 +28,8 @@ def _doc(**overrides):
         "tx": {"dc_pre": [0.0, 0.0]},
         "rx": {"dc_post": {}},
         "provenance": {"git_commit": "abc", "git_dirty": False},
+        "expiry": {"calibrated_at_c": 25.0, "hold_min_c": -10.0,
+                   "hold_max_c": 55.0},
         "results": [
             {"name": "tx_iq", "passed": True, "saturated": None,
              "spec": {"metric": "irr_min_db", "limit": 50.0, "sense": "min"},
@@ -56,7 +58,18 @@ def test_inspector_imports_stdlib_only():
 
 
 def test_healthy_document_is_clean():
-    assert inspect_cal_state(_doc()) == []
+    f = inspect_cal_state(_doc())
+    # a healthy file raises nothing actionable; the only allowed finding
+    # is the informational validity-range line derived from expiry
+    assert [x for x in f if x["severity"] != "info"] == []
+    assert [x for x in f if "valid for" in x["message"]], f
+
+
+def test_missing_expiry_is_reported():
+    doc = _doc()
+    del doc["expiry"]
+    f = inspect_cal_state(doc)
+    assert any("no expiry metadata" in x["message"] for x in f)
 
 
 def test_tampered_metric_violates_embedded_spec():
@@ -74,7 +87,8 @@ def test_spec_checked_from_file_not_library():
     doc = _doc()
     doc["results"][0]["spec"]["limit"] = 45.0
     doc["results"][0]["metrics_after"]["irr_min_db"] = 46.0
-    assert inspect_cal_state(doc) == []
+    f = inspect_cal_state(doc)
+    assert [x for x in f if x["severity"] != "info"] == []
 
 
 def test_failed_step_and_railed_trim_are_reported():

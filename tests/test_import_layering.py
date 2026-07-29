@@ -33,11 +33,13 @@ ALLOWED = {
     "chain": {"dsp", "impairments", "pa", "units"},
     "cal": {"chain", "dpd", "metrics", "pa", "provenance", "units",
             "waveform"},
-    "link": {"cal", "chain", "impairments", "units", "waveform"},
+    # link studies (temp hold, sensitivity) measure EVM/leak via metrics
+    "link": {"cal", "chain", "impairments", "metrics", "units", "waveform"},
     "handoff": {"cal", "chain", "metrics", "provenance", "units",
                 "waveform"},
     "deploy": {"chain"},       # fixed-point export of programmed state
-    "report": {"cal", "metrics", "provenance"},
+    # report reads link.spur_planning.lock_time_s for the power-on budget
+    "report": {"cal", "link", "metrics", "provenance"},
     "plotting": {"metrics"},
     "__init__": set(),         # top-level package init re-exports nothing
 }

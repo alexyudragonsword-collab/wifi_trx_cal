@@ -107,7 +107,7 @@ def _figures_for(res: CalResult, figdir: Path, prefix: str) -> list[str]:
 
 def generate_report(results: list[CalResult], out_dir: str | Path,
                     title: str = "WiFi 7 收发器校准报告",
-                    fs_hz: float | None = None) -> Path:
+                    fs_hz: float | None = None, pll=None) -> Path:
     out = Path(out_dir)
     figdir = out / "figs"
     figdir.mkdir(parents=True, exist_ok=True)
@@ -129,10 +129,18 @@ def generate_report(results: list[CalResult], out_dir: str | Path,
             tot_s += s
             t = f"{s / fs_hz * 1e3:.2f}" if fs_hz else "—"
             lines.append(f"| {r.name} | {c} | {s:,} | {t} |")
-        t_tot = f"{tot_s / fs_hz * 1e3:.2f}" if fs_hz else "—"
+        lock_ms = None
+        if pll is not None:
+            from ..link.spur_planning import lock_time_s
+            lock_ms = lock_time_s(pll) * 1e3
+            lines.append(f"| pll_lock(上电一次) | — | — | {lock_ms:.3f} |")
+        t_tot = (f"{tot_s / fs_hz * 1e3 + (lock_ms or 0.0):.2f}"
+                 if fs_hz else "—")
         lines += [f"| **合计** | {tot_c} | {tot_s:,} | {t_tot} |", "",
                   "> 捕获时间 = 样本数 / fs,不含 DSP 处理时间;"
-                  "上电快速档 (profile='poweron') 用二分码搜索与短捕获压缩此预算。",
+                  "上电快速档 (profile='poweron') 用二分码搜索与短捕获压缩此预算。"
+                  + ("PLL 锁定时间为二阶环路包络估计,PLL 组给出实测锁定规格后"
+                     "应替换。" if lock_ms is not None else ""),
                   ""]
 
     # ---- summary table

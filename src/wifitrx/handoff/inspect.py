@@ -79,6 +79,16 @@ def inspect_cal_state(doc: dict) -> list[dict]:
             f"(commit {prov.get('git_commit', '?')}): numbers may not be "
             "reproducible from the commit alone")
 
+    expiry = doc.get("expiry")
+    if expiry and "hold_min_c" in expiry:
+        add("info", "-", "corrections valid for "
+            f"{expiry.get('hold_min_c')}..{expiry.get('hold_max_c')} degC "
+            f"(calibrated at {expiry.get('calibrated_at_c')} degC); outside "
+            "this range recalibrate or rely on tracking loops")
+    elif expiry is None:
+        add("info", "-", "no expiry metadata: the file does not state the "
+            "conditions under which these corrections stay valid")
+
     results = doc.get("results") or []
     if not results:
         add("info", "-", "no per-step results recorded: corrections can be "

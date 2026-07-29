@@ -29,6 +29,11 @@ class TxParams:
     iq: FreqDepIQImbalance = field(default_factory=FreqDepIQImbalance)
     lo_leak_dbm: float | None = None      # absolute leak power at modulator output
     lo_leak_phase_deg: float = 0.0
+    # leak power drift with temperature (bias-dependent feedthrough),
+    # dB per degC away from the 25 degC calibration point
+    lo_leak_tempco_db_per_c: float = 0.0
+    # driver/bias gain drift ahead of the PA, dB per degC
+    pa_gain_tempco_db_per_c: float = 0.0
     lo: LOModel = field(default_factory=LOModel)
     pa_gain_db: float = 26.0
     psat_dbm: float = 28.0
@@ -63,6 +68,8 @@ class TxParams:
             "iq": self.iq.injected(),
             "lo_leak_dbm": self.lo_leak_dbm,
             "lo_leak_phase_deg": self.lo_leak_phase_deg,
+            "lo_leak_tempco_db_per_c": self.lo_leak_tempco_db_per_c,
+            "pa_gain_tempco_db_per_c": self.pa_gain_tempco_db_per_c,
             "lo": self.lo.injected(),
         }
 

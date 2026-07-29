@@ -29,6 +29,11 @@ class TunableLPF:
     rc_code_bits: int = 5
     rc_step: float = 0.02             # fractional corner change per LSB
     rc_code: int = 16                 # current tuning code (mid = 2^(bits-1))
+    # RC-product temperature drift: fractional corner change per degC
+    # away from the 25 degC calibration point (poly-R + MOM-C tempco,
+    # typically a few 100 ppm/degC)
+    rc_tempco_per_c: float = 0.0
+    temperature_c: float = 25.0
     enabled: bool = True
 
     @property
@@ -38,7 +43,8 @@ class TunableLPF:
     @property
     def fc_actual_hz(self) -> float:
         denom = 1.0 + self.rc_step * (self.rc_code - self.code_mid)
-        return self.fc_nominal_hz * (1.0 + self.rc_error) / max(denom, 1e-3)
+        drift = 1.0 + self.rc_tempco_per_c * (self.temperature_c - 25.0)
+        return self.fc_nominal_hz * (1.0 + self.rc_error) * drift / max(denom, 1e-3)
 
     def _sos(self, fs: float) -> np.ndarray:
         wn = min(self.fc_actual_hz / (fs / 2.0), 0.99)
@@ -60,4 +66,6 @@ class TunableLPF:
 
     def injected(self) -> dict:
         return {"rc_error": self.rc_error, "fc_actual_hz": self.fc_actual_hz,
-                "rc_code": self.rc_code}
+                "rc_code": self.rc_code,
+                "rc_tempco_per_c": self.rc_tempco_per_c,
+                "temperature_c": self.temperature_c}

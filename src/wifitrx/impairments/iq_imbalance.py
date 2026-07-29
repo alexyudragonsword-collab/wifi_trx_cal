@@ -98,7 +98,17 @@ class FreqDepIQImbalance:
     # additional quadrature phase error per RX front-end gain state index
     # (front-end load changes shift the LO quadrature slightly per state)
     state_phase_step_deg: float = 0.0
+    # quadrature phase drift with temperature (LO buffer/divider delay
+    # tempco), degrees per degC away from the 25 degC calibration point
+    phase_tempco_deg_per_c: float = 0.0
+    temperature_c: float = 25.0
     enabled: bool = True
+
+    @property
+    def phase_eff_deg(self) -> float:
+        """Quadrature phase error at the current temperature."""
+        return self.phase_deg + self.phase_tempco_deg_per_c * (
+            self.temperature_c - 25.0)
 
     def rail_firs(self, fs: float) -> tuple[np.ndarray, np.ndarray]:
         """(h_i, h_q) real rail FIRs at sample rate fs."""
@@ -119,7 +129,7 @@ class FreqDepIQImbalance:
     def _combiner(self) -> tuple[complex, complex]:
         gi = 10.0 ** (self.gain_db / 40.0)
         gq = 1.0 / gi
-        phi = np.deg2rad(self.phase_deg)
+        phi = np.deg2rad(self.phase_eff_deg)
         a = gi * np.exp(+0.5j * phi)       # multiplies filtered I
         b = 1j * gq * np.exp(-0.5j * phi)  # multiplies filtered Q
         return a, b
@@ -173,4 +183,6 @@ class FreqDepIQImbalance:
             "gd_mismatch_ps": self.gd_mismatch_ps,
             "rail_ripple_db": self.rail_ripple_db,
             "rail_gd_ripple_ns": self.rail_gd_ripple_ns,
+            "phase_tempco_deg_per_c": self.phase_tempco_deg_per_c,
+            "phase_eff_deg": self.phase_eff_deg,
         }

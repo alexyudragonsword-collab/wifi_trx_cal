@@ -59,12 +59,24 @@ class TxChain:
         # inter-chain alignment (MIMO): digital pre-rotation and delay trim
         self.phase_corr_deg: float = 0.0
         self.delay_corr_samples: float = 0.0
+        self.temperature_c: float = 25.0
 
     # ------------------------------------------------------------ pieces
+    def set_temperature(self, temp_c: float) -> None:
+        """Move the die to ``temp_c``; tempco-carrying impairments drift.
+
+        Corrections stay programmed — that is the point: the hold study
+        measures how far a 25 degC calibration survives.
+        """
+        self.temperature_c = float(temp_c)
+        self.params.lpf.temperature_c = float(temp_c)
+        self.params.iq.temperature_c = float(temp_c)
+
     def _lo_leak(self) -> complex:
         p = self.params.lo_leak_dbm
         if p is None:
             return 0.0 + 0.0j
+        p = p + self.params.lo_leak_tempco_db_per_c * (self.temperature_c - 25.0)
         amp = np.sqrt(10.0 ** (p / 10.0))
         return amp * np.exp(1j * np.deg2rad(self.params.lo_leak_phase_deg))
 
@@ -115,6 +127,10 @@ class TxChain:
             nodes["mixer_out_dbm"] = power_dbm(y)
 
         if p.pa_enabled:
+            # driver/bias gain tempco: the PA sees a drifted drive level
+            drift_db = p.pa_gain_tempco_db_per_c * (self.temperature_c - 25.0)
+            if drift_db:
+                y = y * db_to_amp(drift_db)
             y = self.pa(y)
             if nodes is not None:
                 nodes["pa_out_dbm"] = power_dbm(y)

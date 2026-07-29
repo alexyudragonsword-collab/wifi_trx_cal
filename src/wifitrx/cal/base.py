@@ -78,8 +78,14 @@ def _jsonable(obj: Any) -> Any:
 
 
 def save_cal_state(path: str | Path, tx_state: dict, rx_state: dict,
-                   results: list[CalResult] | None = None) -> None:
-    """Persist the full correction state (and optional result summaries)."""
+                   results: list[CalResult] | None = None,
+                   expiry: dict | None = None) -> None:
+    """Persist the full correction state (and optional result summaries).
+
+    ``expiry``: validity metadata for the corrections (e.g. the measured
+    temperature hold range from ``link.temp_study``) — corrections are not
+    forever, and the file should say so.
+    """
     from ..provenance import provenance
     doc = {
         "format": "wifitrx-cal-state-v1",
@@ -88,6 +94,8 @@ def save_cal_state(path: str | Path, tx_state: dict, rx_state: dict,
         "results": [r.summary() for r in (results or [])],
         "provenance": provenance(),
     }
+    if expiry:
+        doc["expiry"] = _jsonable(expiry)
     Path(path).write_text(json.dumps(doc, indent=2))
 
 
