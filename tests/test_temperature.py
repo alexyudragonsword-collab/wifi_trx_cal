@@ -101,6 +101,11 @@ def test_moderate_tempco_holds_over_industrial_range(calibrated_pair):
     assert out["expiry"]["hold_max_c"] >= 55.0
     # temperatures restored after the study
     assert tx.temperature_c == 25.0 and rx.temperature_c == 25.0
+    # the expiry answers "then what": a priced minimal recal plan
+    plan = out["expiry"]["recal_plan"]
+    assert "tx_lo_leak_loopback" in plan["steps"]
+    assert plan["capture_ms"] > 0.0
+    assert len(plan["steps"]) < sum(1 for _ in results)
 
 
 def test_large_tempco_shrinks_the_hold_range(calibrated_pair):

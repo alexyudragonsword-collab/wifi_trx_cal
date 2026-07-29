@@ -38,8 +38,10 @@ def calibrate_rx_dc(rx: RxChain, n: int = 1 << 14, seed: int = 0) -> CalResult:
         estimated={f"state{idx}": table[idx] for idx in table},
         corrections={"dc_post": {str(k): [v.real, v.imag] for k, v in table.items()}},
         metrics_before={f"dc_dbfs_state{k}": v for k, v in before.items()},
-        metrics_after={f"dc_dbfs_state{k}": v for k, v in after.items()},
+        metrics_after={"worst_dc_dbfs": worst_after,
+                       **{f"dc_dbfs_state{k}": v for k, v in after.items()}},
         passed=worst_after < -50.0,
+        spec={"metric": "worst_dc_dbfs", "limit": -50.0, "sense": "max"},
         cost={"captures": 2 * len(p.lna_states),
               "samples": 2 * len(p.lna_states) * n},
     )

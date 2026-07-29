@@ -35,4 +35,5 @@ def verify_gd_estimate(rho_f_hz: np.ndarray, rho: np.ndarray,
         metrics_before={"injected_ps": injected_ps},
         metrics_after={"estimated_ps": est, "error_ps": est - injected_ps},
         passed=abs(est - injected_ps) < tol_ps,
+        spec={"metric": "error_ps", "limit": tol_ps, "sense": "abs_max"},
     )

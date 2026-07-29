@@ -22,6 +22,7 @@ from __future__ import annotations
 import numpy as np
 
 from ..cal.base import CalResult
+from ..cal.deps import recal_steps
 from ..cal.sequence import agc_for_loopback, tx_evm
 from ..cal.tx_iq import measure_tx_rho
 from ..chain.loopback import LoopbackPath
@@ -136,5 +137,16 @@ def temperature_hold_study(tx: TxChain, rx: RxChain, path: LoopbackPath,
                      "tx_evm_db_max": evm_lim},
         "note": "corrections frozen at the calibration values; outside the "
                 "hold range a recalibration (or tracking loop) is required",
+    }
+
+    # the answer to "then what": the minimal re-run when the range is left,
+    # priced with the capture costs the original run actually recorded
+    plan = recal_steps([r.name for r in results])
+    cost = {r.name: r.cost for r in results}
+    samples = sum(int(cost.get(s, {}).get("samples", 0)) for s in plan)
+    expiry["recal_plan"] = {
+        "steps": plan,
+        "capture_samples": samples,
+        "capture_ms": samples / tx.fs * 1e3,
     }
     return {"rows": rows, "expiry": expiry}

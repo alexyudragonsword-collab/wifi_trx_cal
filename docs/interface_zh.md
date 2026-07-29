@@ -87,14 +87,18 @@ Schema(`wifitrx-cal-state-v1`):
     "calibrated_at_c": 25.0,      //   校准温度
     "hold_min_c": -10.0,          //   实测保持范围:全部规格仍达标的温度区间
     "hold_max_c": 55.0,           //   超出范围需重校或依赖跟踪环
-    "criteria": { ... }
+    "criteria": { ... },
+    "recal_plan": {               //   越界后的最小重校子序列(含测量前置步骤,
+      "steps": [ ... ],           //   顺序经依赖校验)及其捕获时间成本
+      "capture_samples": 0, "capture_ms": 0.0
+    }
   }
 }
 ```
 
 **独立检查器**:`python -m wifitrx.handoff inspect cal_state.json`;
-`src/wifitrx/handoff/inspect.py` 只依赖标准库,可直接拷到 JSON 旁边
-`python inspect.py cal_state.json` 运行(无需安装本库)。检查以文件内嵌的
+`src/wifitrx/handoff/inspector.py` 只依赖标准库,可直接拷到 JSON 旁边
+`python inspector.py cal_state.json` 运行(无需安装本库)。检查以文件内嵌的
 spec 为准——旧文件按其校准当时的规格判定,而不是按本库当前的表。
 
 widely-linear 校正定义:`x_c = w1*x + w2*conj(x)`(w1 为 null 时取 1)。

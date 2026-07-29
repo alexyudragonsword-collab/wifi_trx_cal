@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (QFileDialog, QHBoxLayout, QLabel,
                                QPushButton, QScrollArea, QTableWidget,
                                QTableWidgetItem, QVBoxLayout, QWidget)
 
-from wifitrx.handoff.inspect import inspect_cal_state
+from wifitrx.handoff.inspector import inspect_cal_state
 
 # severity -> colour, by role; which finding gets which severity is the
 # inspector's call, never this page's

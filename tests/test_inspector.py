@@ -13,10 +13,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-from wifitrx.handoff.inspect import inspect_cal_state
+from wifitrx.handoff.inspector import inspect_cal_state
 
 INSPECT_PY = (Path(__file__).resolve().parent.parent / "src" / "wifitrx"
-              / "handoff" / "inspect.py")
+              / "handoff" / "inspector.py")
 
 STDLIB_OK = {"json", "sys", "__future__"}
 
@@ -46,13 +46,13 @@ def _doc(**overrides):
 
 
 def test_inspector_imports_stdlib_only():
-    """Premise of the whole design: inspect.py must run without wifitrx."""
+    """Premise of the whole design: inspector.py must run without wifitrx."""
     mods = set()
     for node in ast.walk(ast.parse(INSPECT_PY.read_text())):
         if isinstance(node, ast.Import):
             mods |= {a.name.split(".")[0] for a in node.names}
         elif isinstance(node, ast.ImportFrom):
-            assert node.level == 0, "no relative imports in inspect.py"
+            assert node.level == 0, "no relative imports in inspector.py"
             mods.add((node.module or "").split(".")[0])
     assert mods <= STDLIB_OK, f"non-stdlib imports crept in: {mods - STDLIB_OK}"
 
@@ -118,7 +118,7 @@ def test_runs_standalone_as_a_script(tmp_path):
     """Copy inspect.py + JSON to a bare directory and run with -I
     (isolated: no site-packages, no cwd on sys.path) — the consumer's
     environment."""
-    (tmp_path / "inspect.py").write_text(INSPECT_PY.read_text())
+    (tmp_path / "inspector.py").write_text(INSPECT_PY.read_text())
     good = tmp_path / "good.json"
     good.write_text(json.dumps(_doc()))
     bad_doc = _doc()
@@ -126,9 +126,9 @@ def test_runs_standalone_as_a_script(tmp_path):
     bad = tmp_path / "bad.json"
     bad.write_text(json.dumps(bad_doc))
 
-    r = subprocess.run([sys.executable, "-I", "inspect.py", "good.json"],
+    r = subprocess.run([sys.executable, "-I", "inspector.py", "good.json"],
                        cwd=tmp_path, capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr
-    r = subprocess.run([sys.executable, "-I", "inspect.py", "bad.json"],
+    r = subprocess.run([sys.executable, "-I", "inspector.py", "bad.json"],
                        cwd=tmp_path, capture_output=True, text=True)
     assert r.returncode == 1 and "violates" in r.stdout, r.stdout + r.stderr

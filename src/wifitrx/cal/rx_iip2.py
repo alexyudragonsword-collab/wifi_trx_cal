@@ -113,5 +113,9 @@ def calibrate_rx_iip2(tx: TxChain, rx: RxChain,
         metrics_after={"iip2_dbm": iip2_after},
         passed=iip2_after > iip2_before + 15.0 or iip2_after > 70.0,
         saturated=rx.im2_trim_code in (0, code_max),
+        # floor spec: a self-imposed design gate (WiFi direct-conversion RX
+        # class), looser than the pass criterion above — the step's own
+        # criterion additionally demands improvement or a 70 dBm landing
+        spec={"metric": "iip2_dbm", "limit": 55.0, "sense": "min"},
         cost={"captures": n_captures, "samples": n_captures * n},
     )

@@ -1,0 +1,40 @@
+# One interpreter, two lanes: a fast lane on every push and a scheduled
+# full run.  Deliberately NOT a 5-job OS/Python matrix running everything
+# everywhere — the sibling-project post-mortem priced that pattern: the
+# guard tests (layering, dead knobs, cal ordering) catch the decay classes
+# that matter, and they run in seconds.
+name: ci
+
+on:
+  push:
+  schedule:
+    - cron: "0 18 * * *"   # daily full run (02:00 UTC+8)
+
+jobs:
+  fast:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Qt offscreen system libraries
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libegl1 libgl1 libglib2.0-0 libxkbcommon0
+      - run: pip install -e .[test,gui]
+      - name: fast lane (guards + unit + GUI offscreen)
+        run: QT_QPA_PLATFORM=offscreen python -m pytest tests/ -m "not slow" -q
+
+  full:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Qt offscreen system libraries
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libegl1 libgl1 libglib2.0-0 libxkbcommon0
+      - run: pip install -e .[test,gui]
+      - name: full suite (slow included)
+        run: QT_QPA_PLATFORM=offscreen python -m pytest tests/ -q

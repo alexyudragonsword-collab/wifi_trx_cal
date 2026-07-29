@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import pytest
 
-from wifitrx.cal.deps import STEP_REQUIRES, planned_steps, validate_order
+from wifitrx.cal.deps import (STEP_REQUIRES, TEMP_SENSITIVE, planned_steps,
+                              recal_steps, validate_order)
 from wifitrx.cal.sequence import PROFILES
 
 
@@ -56,3 +57,28 @@ def test_rule_reasons_are_prose_not_stubs():
     for step, reqs in STEP_REQUIRES.items():
         for req, reason in reqs.items():
             assert len(reason) > 40, f"{step}<-{req}: reason is a stub"
+
+
+# ------------------------------------------------- temperature recal plan
+def test_recal_plan_pulls_in_measurement_prerequisites():
+    executed = planned_steps(PROFILES["factory"], with_iip2=True,
+                             with_dpd=True)
+    plan = recal_steps(executed)
+    # every temp-sensitive step that ran is in the plan...
+    assert set(plan) >= {s for s in executed if s in TEMP_SENSITIVE}
+    # ...plus the prerequisites needed to measure them, even though they
+    # are not themselves temperature-sensitive
+    assert "loopback_delay" in plan     # FFT-bin cals need alignment
+    assert "rx_dc_offset" in plan       # LO-leak method needs purged DC
+    # and the shortcut is genuinely shorter than a full recal
+    assert {"rx_iip2", "group_delay", "agc_sweep",
+            "final_loopback_evm"}.isdisjoint(plan)
+    validate_order(plan)  # already called inside; assert it stays true
+
+
+def test_recal_plan_preserves_original_order():
+    executed = planned_steps(PROFILES["poweron"], with_iip2=False,
+                             with_dpd=False)
+    plan = recal_steps(executed)
+    idx = [executed.index(s) for s in plan]
+    assert idx == sorted(idx)

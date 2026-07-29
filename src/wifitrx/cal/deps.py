@@ -81,6 +81,48 @@ def validate_order(names: list[str]) -> None:
         seen.add(name)
 
 
+# steps whose programmed correction drifts with temperature (a modeled
+# tempco exists for the underlying impairment) — the ones a
+# temperature-triggered recalibration must re-run
+TEMP_SENSITIVE: dict[str, str] = {
+    "tx_lpf_corner": "RC tempco moves the corner off the calibrated code",
+    "rx_lpf_corner": "RC tempco moves the corner off the calibrated code",
+    "tx_lo_leak_loopback": "the leak null is amplitude-matched at the "
+                           "calibration temperature; drift in either "
+                           "direction un-nulls it",
+    "tx_iq": "quadrature phase drifts with LO buffer delay tempco",
+    "rx_iq": "quadrature phase drifts with LO buffer delay tempco",
+    "tx_power": "driver gain tempco shifts the code -> dBm table",
+    "dpd": "the PA drive point shifts with driver gain drift (AdaptiveDPD "
+           "tracks this at runtime when enabled; a recal replaces stale "
+           "coefficients)",
+}
+
+
+def recal_steps(executed: list[str]) -> list[str]:
+    """Minimal re-run list after temperature leaves the hold range.
+
+    The temperature-sensitive steps that were in the original run, plus
+    (transitively) the prerequisites needed to measure them — e.g.
+    loopback_delay for the FFT-bin calibrations, rx_dc_offset for the
+    LO-leak method — in the original order, re-validated against
+    STEP_REQUIRES so the shortcut sequence cannot silently break the
+    ordering physics.
+    """
+    want = {s for s in executed if s in TEMP_SENSITIVE}
+    grew = True
+    while grew:
+        grew = False
+        for s in list(want):
+            for req in STEP_REQUIRES.get(s, {}):
+                if req in executed and req not in want:
+                    want.add(req)
+                    grew = True
+    plan = [s for s in executed if s in want]
+    validate_order(plan)
+    return plan
+
+
 def planned_steps(prof: dict, with_iip2: bool, with_dpd: bool) -> list[str]:
     """The step-name plan run_full_cal will execute for these switches.
 

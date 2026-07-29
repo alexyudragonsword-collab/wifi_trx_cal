@@ -4,7 +4,7 @@ This file deliberately imports NOTHING from wifitrx or third-party
 packages (enforced by tests/test_inspector.py): the consumer of a
 cal-state JSON is a comm engineer who does not have this library, so the
 inspector must be copyable next to the JSON and runnable with bare
-Python:  ``python inspect.py cal_state.json``.
+Python:  ``python inspector.py cal_state.json``.
 
 Every check runs against the ``spec`` embedded in each result — the spec
 in force when the part was calibrated — never against this library's
@@ -81,10 +81,15 @@ def inspect_cal_state(doc: dict) -> list[dict]:
 
     expiry = doc.get("expiry")
     if expiry and "hold_min_c" in expiry:
-        add("info", "-", "corrections valid for "
-            f"{expiry.get('hold_min_c')}..{expiry.get('hold_max_c')} degC "
-            f"(calibrated at {expiry.get('calibrated_at_c')} degC); outside "
-            "this range recalibrate or rely on tracking loops")
+        msg = ("corrections valid for "
+               f"{expiry.get('hold_min_c')}..{expiry.get('hold_max_c')} degC "
+               f"(calibrated at {expiry.get('calibrated_at_c')} degC); "
+               "outside this range recalibrate or rely on tracking loops")
+        plan = expiry.get("recal_plan") or {}
+        if plan.get("steps"):
+            msg += ("; recal plan: " + ", ".join(plan["steps"])
+                    + f" (~{plan.get('capture_ms', 0):.2f} ms captures)")
+        add("info", "-", msg)
     elif expiry is None:
         add("info", "-", "no expiry metadata: the file does not state the "
             "conditions under which these corrections stay valid")
@@ -139,7 +144,7 @@ def format_findings(findings: list[dict]) -> str:
 def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if len(argv) != 1:
-        print("usage: python inspect.py cal_state.json", file=sys.stderr)
+        print("usage: python inspector.py cal_state.json", file=sys.stderr)
         return 2
     with open(argv[0], encoding="utf-8") as fh:
         doc = json.load(fh)

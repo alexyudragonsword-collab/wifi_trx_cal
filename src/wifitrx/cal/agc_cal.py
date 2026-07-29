@@ -72,6 +72,10 @@ def calibrate_agc(rx: RxChain, tol_db: float = 2.5,
                            (r["snr_db"] for r in sweep["rows"]
                             if r["p_in_dbm"] >= -50.0), default=float("nan"))},
         passed=worst < tol_db and snr_ok,
+        # partial spec: the landing accuracy alone; the SNR sanity clause is
+        # a stricter internal criterion, which the inspector reports as such
+        spec={"metric": "worst_landing_err_db", "limit": tol_db,
+              "sense": "max"},
         cost={"captures": len(sweep["rows"]),
               "samples": len(sweep["rows"]) * (1 << 13)},
     )

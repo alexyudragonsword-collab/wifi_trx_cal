@@ -4,7 +4,7 @@ Behavior: a real cal-state file renders findings and the step table; a
 file that does not parse is reported as a finding, not raised.
 
 Guard: the page contains no verdict wording and no threshold — those
-belong to ``wifitrx.handoff.inspect`` and must reach the page as data.
+belong to ``wifitrx.handoff.inspector`` and must reach the page as data.
 The guard strips docstrings first, and a self-check proves the stripper
 does not hide real code.
 """
@@ -108,7 +108,7 @@ def test_the_page_decides_no_verdict_and_no_threshold():
                   "no expiry metadata", "abs_max", "-38", "50.0"):
         assert token not in src, (
             f"{token!r} appears in inspector_page.py; verdicts and "
-            "thresholds belong to wifitrx.handoff.inspect and must reach "
+            "thresholds belong to wifitrx.handoff.inspector and must reach "
             "the page as data")
     # ...and the page really does source its verdicts from the inspector
     assert "inspect_cal_state" in src

@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 from ..provenance import write_provenance
-from .inspect import main as inspect_main
+from .inspector import main as inspect_main
 from .regress import run_regression
 from .runner import build_calibrated_trx, run_handoff
 from .waveform_io import load_waveform, save_waveform
