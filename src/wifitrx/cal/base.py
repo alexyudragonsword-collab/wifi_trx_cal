@@ -31,7 +31,7 @@ class CalResult:
             "estimated": _jsonable(self.estimated),
             "metrics_before": _jsonable(self.metrics_before),
             "metrics_after": _jsonable(self.metrics_after),
-            "passed": self.passed,
+            "passed": None if self.passed is None else bool(self.passed),
             "notes": self.notes,
         }
 
@@ -48,7 +48,7 @@ def _jsonable(obj: Any) -> Any:
         if np.iscomplexobj(obj):
             return {"re": obj.real.tolist(), "im": obj.imag.tolist()}
         return obj.tolist()
-    if isinstance(obj, (np.floating, np.integer)):
+    if isinstance(obj, (np.floating, np.integer, np.bool_)):
         return obj.item()
     return obj
 

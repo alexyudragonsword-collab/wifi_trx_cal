@@ -34,7 +34,7 @@ from .wl_fir import design_w2_fir
 
 
 def measure_rx_w2(tx: TxChain, rx: RxChain, path: LoopbackPath,
-                  n: int = 1 << 15, n_tones: int = 12, amp: float = 0.4,
+                  n: int = 1 << 15, n_tones: int = 12, amp: float = 0.04,
                   seed: int = 11) -> tuple[np.ndarray, np.ndarray]:
     """Measured -W2 requirement, i.e. G2rx(-f)/G1rx*(f), on +/- comb freqs."""
     if path.rx_lo_offset_hz != 0.0:

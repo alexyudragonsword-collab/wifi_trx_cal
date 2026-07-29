@@ -50,7 +50,7 @@ def _capture_pair(tx: TxChain, rx: RxChain, path: LoopbackPath,
 
 
 def measure_tx_rho(tx: TxChain, rx: RxChain, path: LoopbackPath,
-                   n: int = 1 << 15, n_tones: int = 12, amp: float = 0.4,
+                   n: int = 1 << 15, n_tones: int = 12, amp: float = 0.04,
                    seed: int = 3) -> tuple[np.ndarray, np.ndarray]:
     """Measured rho(f) = G2tx(f)/G1tx(f) on the +/- comb frequencies."""
     df = path.rx_lo_offset_hz
@@ -82,7 +82,9 @@ def measure_tx_irr(tx: TxChain, n: int = 1 << 14, n_tones: int = 8,
                    seed: int = 5) -> tuple[np.ndarray, np.ndarray]:
     """Direct PA-output IRR measurement (model-only verification probe)."""
     bw = tx.params.bandwidth_hz
-    x, freqs = iq_cal_comb(bw, tx.fs, n, n_tones=n_tones, amp_total=0.4,
+    # low drive: PA IM3 products of a one-sided comb land on image bins and
+    # would masquerade as IQ image (f_i + f_j - f_k < 0 terms)
+    x, freqs = iq_cal_comb(bw, tx.fs, n, n_tones=n_tones, amp_total=0.03,
                            seed=seed, sign=+1)
     y = tx(x)
     return freqs, comb_irr_db(y, freqs, tx.fs)
@@ -99,9 +101,12 @@ def calibrate_tx_iq(tx: TxChain, rx: RxChain, path: LoopbackPath | None = None,
     trace = [float(np.min(irr_before))]
     bw = tx.params.bandwidth_hz
 
+    rho_raw_f = rho_raw_v = None
     for it in range(n_iter):
         rho_f, rho_v = measure_tx_rho(tx, rx, path, n=n, n_tones=n_tones,
                                       seed=seed + it)
+        if rho_raw_f is None:
+            rho_raw_f, rho_raw_v = rho_f, rho_v  # pre-correction imbalance
         w2_new = design_w2_fir(rho_f, rho_v, tx.fs, n_taps=n_taps,
                                band_hz=0.55 * bw)
         if tx.w2 is None:
@@ -118,7 +123,7 @@ def calibrate_tx_iq(tx: TxChain, rx: RxChain, path: LoopbackPath | None = None,
     f_chk, irr_after = measure_tx_irr(tx)
     return CalResult(
         name="tx_iq",
-        estimated={"rho_f_hz": rho_f, "rho": rho_v},
+        estimated={"rho_f_hz": rho_raw_f, "rho": rho_raw_v},
         corrections={"w2_taps": tx.w2},
         trace=trace,
         metrics_before={"irr_min_db": float(np.min(irr_before)),

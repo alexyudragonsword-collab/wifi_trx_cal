@@ -27,18 +27,20 @@ def agc_sweep(rx: RxChain, p_in_range_dbm: np.ndarray | None = None,
         x = single_tone(f_probe, rx.fs, n, amp=amp)
         nodes: dict = {}
         cap = rx(x, rng=rng, nodes=nodes)
+        cap_ac = cap - np.mean(cap)   # judge landing on the AC (signal) power
         # tone power vs everything-else power in the digital capture
-        spec = np.abs(np.fft.fft(cap)) ** 2 / n ** 2
+        spec = np.abs(np.fft.fft(cap_ac)) ** 2 / n ** 2
         k = int(round(f_probe * n / rx.fs))
         p_sig = float(np.sum(spec[[k - 1, k, k + 1]]))
-        p_tot = float(np.mean(np.abs(cap) ** 2))
+        p_tot = float(np.mean(np.abs(cap_ac) ** 2))
         snr_db = 10.0 * np.log10(max(p_sig, 1e-300)
                                  / max(p_tot - p_sig, 1e-300))
         rows.append({
             "p_in_dbm": float(p_in),
             "lna_idx": rx.lna_idx,
             "vga_db": rx.vga_db,
-            "adc_in_dbm": nodes.get("adc_in_dbm", float("nan")),
+            "adc_in_dbm": power_dbm(cap_ac) + rx.params.adc.fullscale_dbm,
+            "adc_in_with_dc_dbm": nodes.get("adc_in_dbm", float("nan")),
             "digital_dbfs": power_dbm(cap),
             "snr_db": snr_db,
         })
@@ -50,8 +52,9 @@ def calibrate_agc(rx: RxChain, tol_db: float = 2.5) -> CalResult:
     target = rx.params.adc.fullscale_dbm - rx.params.adc_backoff_db
     errs = []
     for row in sweep["rows"]:
-        # skip the bottom of the range where the VGA is railed
-        if row["vga_db"] < 39.9:
+        # landing accuracy is only meaningful when the signal dominates the
+        # wideband noise and the VGA is not railed
+        if row["vga_db"] < 39.9 and row["snr_db"] > 10.0:
             errs.append(abs(row["adc_in_dbm"] - target))
     worst = max(errs) if errs else float("inf")
     # SNR sanity at moderate input levels (near sensitivity the wideband

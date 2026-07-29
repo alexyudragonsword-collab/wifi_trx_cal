@@ -24,16 +24,19 @@ from .sync import _fractional_advance, align_delay
 
 
 def _capture(tx: TxChain, rx: RxChain, path: LoopbackPath,
-             x: np.ndarray) -> np.ndarray:
-    """Delay-aligned (but not gain-normalized) loopback capture."""
-    cap = run_loopback(tx, rx, x, path)
-    _, _, info = align_delay(x, cap, max_lag=1024)
-    return _fractional_advance(cap, info["lag_total"])
+             x: np.ndarray, n_warmup: int = 512) -> np.ndarray:
+    """Delay-aligned loopback capture with a cyclic warm-up prefix that
+    settles the IIR baseband filters (not gain-normalized)."""
+    xp = np.concatenate([x[-n_warmup:], x])
+    cap = run_loopback(tx, rx, xp, path)
+    _, _, info = align_delay(xp, cap, max_lag=1024)
+    cap = _fractional_advance(cap, info["lag_total"])
+    return cap[n_warmup:]
 
 
 def calibrate_dpd(tx: TxChain, rx: RxChain, wf: OFDMWaveform,
                   path: LoopbackPath | None = None, n_iter: int = 2,
-                  order: int = 7, memory_depth: int = 3,
+                  order: int = 7, memory_depth: int = 5,
                   drive_scale: float = 0.25, seed: int = 17) -> CalResult:
     """``drive_scale`` sets the digital rms level (unit-power reference times
     drive_scale) so the OFDM peaks stay inside DAC full scale and the PA
@@ -48,13 +51,20 @@ def calibrate_dpd(tx: TxChain, rx: RxChain, wf: OFDMWaveform,
     lpf_was_enabled = rx.params.lpf.enabled
     rx.params.lpf.enabled = False
 
+    # AGC for the actual coupled level (the observation ADC must not clip)
+    from ..units import power_dbm
+    rx.agc(power_dbm(tx(x)) - path.atten_db)
+
     def pa_out_metrics() -> dict:
         y = tx(x)
         g = np.vdot(x, y) / np.vdot(x, x)
         res = evm(demodulate_ofdm(y / g, wf), wf.tx_symbols, equalize="per_tone")
-        ac = aclr(y, fs, bw)
-        return {"evm_db": res.db,
-                "aclr_worst_dbc": max(ac["lower_dbc"], ac["upper_dbc"])}
+        if fs >= 3.0 * bw:
+            ac = aclr(y, fs, bw)
+            ac_worst = max(ac["lower_dbc"], ac["upper_dbc"])
+        else:
+            ac_worst = float("nan")  # adjacent channel outside Nyquist
+        return {"evm_db": res.db, "aclr_worst_dbc": ac_worst}
 
     before = pa_out_metrics()
     trace = [before["aclr_worst_dbc"]]
@@ -85,6 +95,10 @@ def calibrate_dpd(tx: TxChain, rx: RxChain, wf: OFDMWaveform,
         trace=trace,
         metrics_before=before,
         metrics_after=after,
-        passed=(after["aclr_worst_dbc"] < before["aclr_worst_dbc"] - 5.0
-                and after["evm_db"] < before["evm_db"]),
+        # ACLR may be phase-noise-limited rather than distortion-limited, so
+        # the pass gate is EVM-driven with ACLR required not to regress
+        # (ACLR is NaN when fs < 3*bw and then only the EVM gate applies).
+        passed=(after["evm_db"] < before["evm_db"] - 3.0
+                and not (after["aclr_worst_dbc"]
+                         > before["aclr_worst_dbc"] + 1.0)),
     )

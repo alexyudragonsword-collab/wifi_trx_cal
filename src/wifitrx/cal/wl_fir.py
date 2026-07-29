@@ -28,9 +28,11 @@ def design_w2_fir(freqs_hz: np.ndarray, rho: np.ndarray, fs: float,
     if band_hz is None:
         band_hz = 1.1 * float(np.max(np.abs(freqs)))
 
-    # dense target grid across +/- 1.5x band with edge-hold + taper to zero
-    n_grid = 512
-    f_grid = np.linspace(-1.5 * band_hz, 1.5 * band_hz, n_grid)
+    # dense target grid across the FULL Nyquist range: leaving any region
+    # unconstrained lets the LS solution ring there and amplify conj-path
+    # noise; the target rolls off to zero beyond the band via the taper
+    n_grid = 1024
+    f_grid = np.linspace(-fs / 2, fs / 2, n_grid, endpoint=False)
     w2 = np.interp(f_grid, freqs, rho.real, left=rho.real[0], right=rho.real[-1]) \
         + 1j * np.interp(f_grid, freqs, rho.imag, left=rho.imag[0], right=rho.imag[-1])
     taper = np.clip((1.5 * band_hz - np.abs(f_grid)) / (0.5 * band_hz), 0.0, 1.0)
