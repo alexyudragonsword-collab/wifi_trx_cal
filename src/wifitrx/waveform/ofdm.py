@@ -88,17 +88,28 @@ class OFDMWaveform:
         return self.config.sample_rate_hz
 
 
-def generate_ofdm(config: OFDMConfig) -> OFDMWaveform:
-    """Generate an oversampled OFDM burst with known random QAM payload."""
+def generate_ofdm(config: OFDMConfig,
+                  symbols: np.ndarray | None = None) -> OFDMWaveform:
+    """Generate an oversampled OFDM burst with known random QAM payload.
+
+    wifitrx adaptation: ``symbols`` optionally provides the (n_symbols,
+    n_active) constellation points directly (used for preamble/pilot
+    frames); default behavior is unchanged.
+    """
     rng = np.random.default_rng(config.seed)
     nfft = config.fft_size
     os_nfft = nfft * config.oversampling
     cp = config.cp_len * config.oversampling
     tones = config.active_tone_indices()
 
-    labels = rng.integers(0, config.qam_order,
-                          size=(config.n_symbols, config.n_active))
-    tx_symbols = qam_modulate(labels, config.qam_order)
+    if symbols is not None:
+        tx_symbols = np.asarray(symbols, dtype=complex)
+        if tx_symbols.shape != (config.n_symbols, config.n_active):
+            raise ValueError("symbols must be (n_symbols, n_active)")
+    else:
+        labels = rng.integers(0, config.qam_order,
+                              size=(config.n_symbols, config.n_active))
+        tx_symbols = qam_modulate(labels, config.qam_order)
 
     # Zero-padded IFFT implements ideal oversampling.
     freq = np.zeros((config.n_symbols, os_nfft), dtype=complex)
