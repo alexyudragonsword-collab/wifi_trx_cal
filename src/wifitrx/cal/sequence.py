@@ -260,6 +260,10 @@ def run_full_cal(tx: TxChain, rx: RxChain, cfg: OFDMConfig,
                        "capture_time_ms": total_samples / tx.fs * 1e3,
                        "total_captures": total_captures},
         passed=evm_after < evm_before,
+        # the MCS13 TX EVM spec only binds the full (DPD) flow; a no-DPD
+        # run targets lower MCS and carries no embedded spec
+        spec={"metric": "tx_evm_db", "limit": -38.0, "sense": "max"}
+             if with_dpd else {},
         notes="evm_db: composite TX+RX loopback EVM; tx_evm_db: PA-output "
               "EVM at the 802.11be TX spec measurement point (per-tone EQ "
               f"+ CPE removal in both); profile={profile}",

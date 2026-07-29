@@ -112,5 +112,6 @@ def calibrate_rx_iip2(tx: TxChain, rx: RxChain,
         metrics_before={"iip2_dbm": iip2_before},
         metrics_after={"iip2_dbm": iip2_after},
         passed=iip2_after > iip2_before + 15.0 or iip2_after > 70.0,
+        saturated=rx.im2_trim_code in (0, code_max),
         cost={"captures": n_captures, "samples": n_captures * n},
     )

@@ -124,6 +124,9 @@ class RxChain:
             "w2": None if self.w2 is None else
                  [list(np.real(self.w2)), list(np.imag(self.w2))],
             "frac_delay_iq": self.frac_delay_iq,
+            # analog tuning codes are corrections too (see TxChain)
+            "lpf_rc_code": self.params.lpf.rc_code,
+            "im2_trim_code": self.im2_trim_code,
         }
 
     def load_correction_state(self, state: dict) -> None:
@@ -134,3 +137,7 @@ class RxChain:
             setattr(self, name, None if v is None else
                     np.asarray(v[0]) + 1j * np.asarray(v[1]))
         self.frac_delay_iq = float(state.get("frac_delay_iq", 0.0))
+        if "lpf_rc_code" in state:
+            self.params.lpf.rc_code = int(state["lpf_rc_code"])
+        if "im2_trim_code" in state:
+            self.im2_trim_code = int(state["im2_trim_code"])

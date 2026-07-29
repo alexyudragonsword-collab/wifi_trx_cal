@@ -1,9 +1,16 @@
 """802.11be MCS table: modulation, coding rate, required SNR, TX EVM limit.
 
-Required SNR values are AWGN approximations (uncoded-to-coded engineering
-numbers commonly used for budgeting, not simulated capacity limits); TX EVM
-limits follow IEEE 802.11be Draft (Table "Allowed relative constellation
-error"): -38 dB for 4096-QAM (MCS12/13).
+Verification status, per column (state it, so a reader knows what can be
+quoted in a design review and what must be cross-checked first):
+
+- ``tx_evm_limit_db``: REVIEWED against IEEE 802.11be Draft (Table
+  "Allowed relative constellation error"); -38 dB for 4096-QAM (MCS12/13).
+- ``bits_per_symbol`` / ``modulation`` / ``coding_rate``: REVIEWED
+  (standard MCS definitions).
+- ``snr_req_db``: NOT reviewed against a simulated reference — AWGN
+  engineering approximations commonly used for budgeting, not capacity
+  limits.  Cross-check before quoting absolute sensitivity numbers;
+  deltas between MCS rows are more trustworthy than absolute values.
 """
 from __future__ import annotations
 

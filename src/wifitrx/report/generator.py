@@ -137,16 +137,24 @@ def generate_report(results: list[CalResult], out_dir: str | Path,
 
     # ---- summary table
     lines += ["## 校准结果汇总", "",
-              "| 步骤 | 关键指标 | 校准前 | 校准后 | 通过 |",
-              "|---|---|---|---|---|"]
+              "| 步骤 | 关键指标 | 校准前 | 校准后 | 通过 | 触轨 |",
+              "|---|---|---|---|---|---|"]
+    any_sat = False
     for r in results:
         key_b = next(iter(r.metrics_before.items()), ("-", "-"))
         key_a = next(iter(r.metrics_after.items()), ("-", "-"))
         ok = {True: "✅", False: "❌", None: "—"}[
             None if r.passed is None else bool(r.passed)]
+        sat = {True: "⚠️", False: "", None: "—"}[
+            None if r.saturated is None else bool(r.saturated)]
+        any_sat = any_sat or bool(r.saturated)
         lines.append(f"| {r.name} | {key_a[0]} | {_fmt(key_b[1])} | "
-                     f"{_fmt(key_a[1])} | {ok} |")
+                     f"{_fmt(key_a[1])} | {ok} | {sat} |")
     lines.append("")
+    if any_sat:
+        lines += ["> ⚠️ 触轨:该步骤达标,但校准码落在量程端点——"
+                  "温度漂移与老化没有剩余调节余量,量产前应复核该 trim 的"
+                  "设计范围。达标与有余量是两个独立的事实。", ""]
 
     # ---- per-step sections
     for i, r in enumerate(results):
@@ -166,6 +174,14 @@ def generate_report(results: list[CalResult], out_dir: str | Path,
             lines += [f"> {r.notes}", ""]
         for name in _figures_for(r, figdir, f"{i + 1:02d}_{r.name}"):
             lines += [f"![{name}](figs/{name})", ""]
+
+    from ..provenance import provenance, write_provenance
+    prov = provenance()
+    write_provenance(out / "provenance.json")
+    dirty = {True: ",工作区有未提交修改", False: "", None: ""}[prov["git_dirty"]]
+    lines += ["---", f"> 生成信息:commit `{prov['git_commit'] or '未知'}`"
+              f"{dirty};{prov['generated_utc']};numpy {prov['numpy']}。"
+              "详见 provenance.json。", ""]
 
     path = out / "cal_report.md"
     path.write_text("\n".join(lines), encoding="utf-8")

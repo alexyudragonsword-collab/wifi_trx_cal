@@ -65,24 +65,39 @@ Schema(`wifitrx-cal-state-v1`):
     "w2": [[re...],[im...]],      // widely-linear 共轭路复 FIR(镜像校正)
     "gain_code_db": float,        // TX 功率码
     "phase_corr_deg": float,      // MIMO 链间相位对齐(单链为 0)
-    "delay_corr_samples": float   // MIMO 链间时延对齐(单链为 0)
+    "delay_corr_samples": float,  // MIMO 链间时延对齐(单链为 0)
+    "lpf_rc_code": int            // TX LPF RC 调谐码(模拟寄存器)
   },
   "rx": {
     "dc_post": {"0": [re,im], ...},  // 逐 AGC 档数字 DC 消除
     "w1": null, "w2": [[re...],[im...]],
-    "frac_delay_iq": float        // I/Q 分数延迟微调(样本)
+    "frac_delay_iq": float,       // I/Q 分数延迟微调(样本)
+    "lpf_rc_code": int,           // RX LPF RC 调谐码
+    "im2_trim_code": int          // 混频器 IM2 trim 码
   },
-  "results": [ ... ]              // 每步校准的 summary(指标前后对比)
+  "results": [ ... ],             // 每步 summary,含:
+                                  //   passed     是否达标
+                                  //   saturated  校准码是否触轨(达标但
+                                  //              无温度/老化余量,独立事实)
+                                  //   spec       该步当时生效的验收规格
+                                  //              {metric, limit, sense},
+                                  //              随文件走,校验时以此为准
+  "provenance": { ... }           // 生成溯源:git commit、dirty、时间、版本
 }
 ```
+
+**独立检查器**:`python -m wifitrx.handoff inspect cal_state.json`;
+`src/wifitrx/handoff/inspect.py` 只依赖标准库,可直接拷到 JSON 旁边
+`python inspect.py cal_state.json` 运行(无需安装本库)。检查以文件内嵌的
+spec 为准——旧文件按其校准当时的规格判定,而不是按本库当前的表。
 
 widely-linear 校正定义:`x_c = w1*x + w2*conj(x)`(w1 为 null 时取 1)。
 FIR 以中心抽头为群时延参考(等效 `np.convolve(mode="same")`)。
 等价的 2×2 实系数 MIMO 形式:`[I';Q'] = [[Re(w1+w2), -Im(w1-w2)],
 [Im(w1+w2), Re(w1-w2)]] * [I;Q]`(逐抽头)。
 
-注意:模拟域调谐码(`TunableLPF.rc_code`)属于芯片寄存器而非数字校正状态,
-复现时需一并设置(报告 JSON 的 results 中有记录)。
+模拟域调谐码(`lpf_rc_code`、`im2_trim_code`)已随数字校正状态一并序列化:
+仅凭 JSON 即可完整恢复芯片的全部校准编程,无需手工补设。
 
 ## 4. 损伤参数速查(`chain/params.py`)
 

@@ -79,8 +79,11 @@ def test_cal_state_json_roundtrip(tmp_path):
     tx_state, rx_state = load_cal_state(p)
     tx2.load_correction_state(tx_state)
     rx2.load_correction_state(rx_state)
-    # analog tuning codes are part of the chain params, not digital state
-    tx2.params.lpf.rc_code = tx.params.lpf.rc_code
-    rx2.params.lpf.rc_code = rx.params.lpf.rc_code
+    # no manual fix-ups allowed here: the JSON alone must restore the full
+    # correction state, analog tuning codes included — a consumer only has
+    # the file
+    assert tx2.params.lpf.rc_code == tx.params.lpf.rc_code
+    assert rx2.params.lpf.rc_code == rx.params.lpf.rc_code
+    assert rx2.im2_trim_code == rx.im2_trim_code
     evm_loaded = loopback_evm(tx2, rx2, path, cfg)
     assert abs(evm_loaded - evm_cal) < 1.0, (evm_loaded, evm_cal)

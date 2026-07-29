@@ -23,6 +23,17 @@ class CalResult:
     metrics_before: dict = field(default_factory=dict)
     metrics_after: dict = field(default_factory=dict)
     passed: bool | None = None
+    # Independent fact from ``passed``: a trim/tuning code landed on its
+    # range limit.  Met-spec-with-a-railed-trim is a *margin* problem —
+    # failing it would reject a good part, ignoring it hides that there is
+    # no range left for temperature or ageing.
+    saturated: bool | None = None
+    # Acceptance spec in force when this step ran, e.g.
+    # {"metric": "irr_db", "limit": 50.0, "sense": "min"} (sense: "min"
+    # value >= limit, "max" value <= limit, "abs_max" |value| <= limit).
+    # Travels with the result so an external consumer checks the bundle
+    # against the spec it was calibrated to, not a later library's table.
+    spec: dict = field(default_factory=dict)
     notes: str = ""
     # capture cost: {"captures": n, "samples": total_samples} — the raw
     # material for the calibration time budget (time = samples / fs)
@@ -42,6 +53,9 @@ class CalResult:
             "metrics_before": _jsonable(self.metrics_before),
             "metrics_after": _jsonable(self.metrics_after),
             "passed": None if self.passed is None else bool(self.passed),
+            "saturated": None if self.saturated is None
+                         else bool(self.saturated),
+            "spec": _jsonable(self.spec),
             "notes": self.notes,
         }
 
@@ -66,11 +80,13 @@ def _jsonable(obj: Any) -> Any:
 def save_cal_state(path: str | Path, tx_state: dict, rx_state: dict,
                    results: list[CalResult] | None = None) -> None:
     """Persist the full correction state (and optional result summaries)."""
+    from ..provenance import provenance
     doc = {
         "format": "wifitrx-cal-state-v1",
         "tx": tx_state,
         "rx": rx_state,
         "results": [r.summary() for r in (results or [])],
+        "provenance": provenance(),
     }
     Path(path).write_text(json.dumps(doc, indent=2))
 

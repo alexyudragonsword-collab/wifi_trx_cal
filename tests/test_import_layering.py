@@ -23,6 +23,7 @@ SRC = Path(__file__).resolve().parent.parent / "src" / "wifitrx"
 ALLOWED = {
     "units": set(),            # leaf: dB/power conversions only
     "dsp": set(),              # leaf: filters/resampling only
+    "provenance": set(),       # leaf: git/run stamping for artifacts
     "waveform": {"units"},     # OFDM/preamble generation
     "metrics": {"waveform"},   # EVM/PSD need OFDM demod
     "pa": {"units"},           # PA models are self-contained
@@ -30,11 +31,13 @@ ALLOWED = {
     "impairments": {"dsp", "units", "waveform"},
     "circuit_import": {"impairments"},  # CSV -> impairment objects
     "chain": {"dsp", "impairments", "pa", "units"},
-    "cal": {"chain", "dpd", "metrics", "pa", "units", "waveform"},
+    "cal": {"chain", "dpd", "metrics", "pa", "provenance", "units",
+            "waveform"},
     "link": {"cal", "chain", "impairments", "units", "waveform"},
-    "handoff": {"cal", "chain", "metrics", "units", "waveform"},
+    "handoff": {"cal", "chain", "metrics", "provenance", "units",
+                "waveform"},
     "deploy": {"chain"},       # fixed-point export of programmed state
-    "report": {"cal", "metrics"},
+    "report": {"cal", "metrics", "provenance"},
     "plotting": {"metrics"},
     "__init__": set(),         # top-level package init re-exports nothing
 }

@@ -52,6 +52,12 @@ def calibrate_tx_power(tx: TxChain, x_ref: np.ndarray,
         metrics_after=metrics_after,
         passed=monotonic and (target_dbm is None
                               or abs(metrics_after["error_db"]) < 0.5),
+        # np.interp clips silently: a target outside the measured table
+        # lands on an end code and reads as a (wrong-power) success
+        saturated=None if target_dbm is None else
+                  bool(est["code"] <= codes[0] or est["code"] >= codes[-1]),
+        spec={} if target_dbm is None else
+             {"metric": "error_db", "limit": 0.5, "sense": "abs_max"},
         cost={"captures": len(codes) + (1 if target_dbm is not None else 0),
               "samples": (len(codes) + (1 if target_dbm is not None else 0))
                          * np.asarray(x_ref).size},

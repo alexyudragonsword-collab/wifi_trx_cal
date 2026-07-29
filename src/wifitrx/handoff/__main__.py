@@ -1,14 +1,18 @@
-"""CLI:  python -m wifitrx.handoff run|regress ...
+"""CLI:  python -m wifitrx.handoff run|regress|inspect ...
 
 run:      单个波形过链路,输出结果波形 + 指标 JSON
 regress:  目录级批量回归,输出对账单 handoff_report.md
+inspect:  独立检查 cal_state.json(纯标准库,可脱离本库运行)
 """
 from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
+from ..provenance import write_provenance
+from .inspect import main as inspect_main
 from .regress import run_regression
 from .runner import build_calibrated_trx, run_handoff
 from .waveform_io import load_waveform, save_waveform
@@ -39,11 +43,19 @@ def main(argv=None) -> None:
     common(p_reg)
     p_reg.add_argument("--dir", type=Path, required=True)
 
+    p_ins = sub.add_parser("inspect", help="check a cal_state.json "
+                           "(stdlib-only, works without this library)")
+    p_ins.add_argument("state", type=Path)
+
     args = ap.parse_args(argv)
+    if args.cmd == "inspect":
+        sys.exit(inspect_main([str(args.state)]))
     fs = args.fs or args.bw * 4
     tx, rx = build_calibrated_trx(args.bw, fs, seed=args.seed,
                                   cal_state_json=args.cal_state)
     args.out.mkdir(parents=True, exist_ok=True)
+    write_provenance(args.out / "provenance.json",
+                     {"seed": args.seed, "bw_hz": args.bw, "fs_hz": fs})
 
     if args.cmd == "run":
         wave = load_waveform(args.wave)

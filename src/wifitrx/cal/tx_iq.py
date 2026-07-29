@@ -131,6 +131,7 @@ def calibrate_tx_iq(tx: TxChain, rx: RxChain, path: LoopbackPath | None = None,
         metrics_after={"irr_min_db": float(np.min(irr_after)),
                        "irr_db": irr_after},
         passed=float(np.min(irr_after)) > 50.0,
+        spec={"metric": "irr_min_db", "limit": 50.0, "sense": "min"},
         cost={"captures": 2 * n_iter, "samples": 2 * n_iter * n},
     )
 

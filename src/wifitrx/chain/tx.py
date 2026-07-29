@@ -132,6 +132,9 @@ class TxChain:
             "gain_code_db": self.gain_code_db,
             "phase_corr_deg": self.phase_corr_deg,
             "delay_corr_samples": self.delay_corr_samples,
+            # analog tuning codes are corrections too: a chip restored from
+            # JSON alone must not come up with an uncalibrated LPF corner
+            "lpf_rc_code": self.params.lpf.rc_code,
         }
 
     def load_correction_state(self, state: dict) -> None:
@@ -143,3 +146,5 @@ class TxChain:
         self.gain_code_db = float(state.get("gain_code_db", 0.0))
         self.phase_corr_deg = float(state.get("phase_corr_deg", 0.0))
         self.delay_corr_samples = float(state.get("delay_corr_samples", 0.0))
+        if "lpf_rc_code" in state:
+            self.params.lpf.rc_code = int(state["lpf_rc_code"])
