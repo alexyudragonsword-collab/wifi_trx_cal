@@ -24,4 +24,5 @@ numpy/scipy/matplotlib。上游修复需手工同步;每个文件头部有来源
 - `receiver_link_budget:modules/{nf,ip3,snr}_calculator.py, agc_sweep.py` → `src/wifitrx/link/budget.py`, `src/wifitrx/chain/agc.py`
 - `adc_toolbox:vendor/ADCToolbox .../siggen/nonidealities.py` → `src/wifitrx/impairments/converters.py`(重构为 (x,t) 自由函数)
 - `adc_toolbox:app/tiadc_model.py` 的 注入真值→估计→校正→验证 模式 → `src/wifitrx/cal/base.py`
+- `pll_simulator:src/pllsim/fit.py` 的相噪 CSV 读取概念 → `src/wifitrx/circuit_import/pll_pn.py`(自包含实现)
 - `pll_simulator:src/pllsim/core/dtcspurs.py` 的机理性 frac-N 杂散预测 → `src/wifitrx/link/spur_planning.py`(自包含改编:EFM1+DTC 量化+单极点 NTF)

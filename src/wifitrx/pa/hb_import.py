@@ -108,8 +108,13 @@ class WienerHammersteinPA(PAModel):
 
 def _read_csv_columns(path: str) -> dict:
     import csv
+    import io
+    # wifitrx adaptation: tolerate comment lines (#, !, *, ;) anywhere,
+    # including before the header row
     with open(path, newline="", encoding="utf-8") as f:
-        rows = list(csv.DictReader(f))
+        text = "\n".join(line for line in f.read().splitlines()
+                         if line.strip() and line.strip()[0] not in "#!*;")
+    rows = list(csv.DictReader(io.StringIO(text)))
     if not rows:
         raise ValueError(f"{path}: empty CSV")
     cols = {k.strip().lower(): np.array([float(r[k]) for r in rows])

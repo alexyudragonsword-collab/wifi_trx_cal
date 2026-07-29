@@ -98,7 +98,10 @@ def calibrate_dpd(tx: TxChain, rx: RxChain, wf: OFDMWaveform,
         # ACLR may be phase-noise-limited rather than distortion-limited, so
         # the pass gate is EVM-driven with ACLR required not to regress
         # (ACLR is NaN when fs < 3*bw and then only the EVM gate applies).
-        passed=(after["evm_db"] < before["evm_db"] - 3.0
+        # A PA already linear enough (post EVM <= -40 dB, beyond MCS13
+        # needs) passes even without a 3 dB improvement to show.
+        passed=((after["evm_db"] < before["evm_db"] - 3.0
+                 or after["evm_db"] <= -40.0)
                 and not (after["aclr_worst_dbc"]
                          > before["aclr_worst_dbc"] + 1.0)),
     )
