@@ -102,6 +102,73 @@ def calibrate_rx_iq(tx: TxChain, rx: RxChain, path: LoopbackPath | None = None,
         metrics_after={"irr_min_db": float(np.min(irr_after)),
                        "irr_db": irr_after},
         passed=float(np.min(irr_after)) > 50.0,
+        cost={"captures": 2 * n_iter, "samples": 2 * n_iter * n},
+    )
+
+
+def calibrate_rx_iq_per_state(tx: TxChain, rx: RxChain,
+                              path: LoopbackPath | None = None,
+                              anchors: tuple[int, int] | None = None,
+                              n: int = 1 << 15, n_tones: int = 12,
+                              n_taps: int = 31, seed: int = 11) -> CalResult:
+    """Gain-state-dependent RX IQ cal: measure at two anchor LNA states,
+    linearly interpolate the w2 FIR for the states between (production
+    shortcut — two captures instead of one per state).
+
+    The anchors must both see a healthy capture level, so the coupled TX
+    power is fixed and the VGA absorbs the LNA gain difference.
+    """
+    from ..units import power_dbm
+    if path is None:
+        path = LoopbackPath(atten_db=40.0, delay_ns=6.0)
+    p = rx.params
+    n_states = len(p.lna_states)
+    if anchors is None:
+        anchors = (0, n_states - 1)
+    a, b = anchors
+    bw = p.bandwidth_hz
+    saved = (rx.lna_idx, rx.vga_db)
+
+    # fixed coupled level; per-anchor VGA lands the ADC target
+    probe, _ = iq_cal_comb(bw, rx.fs, n, n_tones=n_tones, amp_total=0.04,
+                           seed=seed)
+    p_rx_in = power_dbm(tx(probe)) - path.atten_db
+    target = p.adc.fullscale_dbm - p.adc_backoff_db
+
+    w2_anchor: dict[int, np.ndarray] = {}
+    for idx in (a, b):
+        rx.lna_idx = idx
+        rx.vga_db = float(np.clip(
+            target - (p_rx_in + p.lna_states[idx].gain_db), -10.0, 40.0))
+        w2_f, w2_v = measure_rx_w2(tx, rx, path, n=n, n_tones=n_tones,
+                                   seed=seed + idx)
+        w2_anchor[idx] = design_w2_fir(w2_f, w2_v, rx.fs, n_taps=n_taps,
+                                       band_hz=0.55 * bw)
+
+    for idx in range(n_states):
+        t = 0.0 if b == a else (idx - a) / (b - a)
+        rx.w2_by_state[idx] = (1.0 - t) * w2_anchor[a] + t * w2_anchor[b]
+
+    # verify every state with the probe comb
+    irr_by_state = {}
+    for idx in range(n_states):
+        rx.lna_idx = idx
+        rx.vga_db = float(np.clip(
+            target - (p_rx_in + p.lna_states[idx].gain_db), -10.0, 40.0))
+        _, irr = measure_rx_irr(rx)
+        irr_by_state[idx] = float(np.min(irr))
+    rx.lna_idx, rx.vga_db = saved
+
+    worst = min(irr_by_state.values())
+    return CalResult(
+        name="rx_iq_per_state",
+        estimated={"anchors": anchors},
+        corrections={"w2_by_state": "per-state FIR table on RxChain"},
+        metrics_before={},
+        metrics_after={f"irr_min_state{k}": v for k, v in irr_by_state.items()},
+        passed=worst > 48.0,
+        cost={"captures": 2 * 2, "samples": 2 * 2 * n},
+        notes=f"anchor states {anchors}, linear interpolation between",
     )
 
 

@@ -68,6 +68,7 @@ def calibrate_tx_lo_leak_envdet(tx: TxChain, det: EnvelopeDetector | None = None
         metrics_before={"lo_leak_dbc": before_dbc},
         metrics_after={"lo_leak_dbc": after_dbc},
         passed=after_dbc < -40.0,
+        cost={"captures": 6 * n_iter, "samples": 6 * n_iter * n},
     )
 
 
@@ -111,4 +112,5 @@ def calibrate_tx_lo_leak_loopback(tx: TxChain, rx: RxChain,
         metrics_before={"lo_leak_dbc": before_dbc},
         metrics_after={"lo_leak_dbc": after_dbc},
         passed=after_dbc < -40.0,
+        cost={"captures": 2 * n_iter, "samples": 2 * n_iter * n},
     )

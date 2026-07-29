@@ -52,4 +52,7 @@ def calibrate_tx_power(tx: TxChain, x_ref: np.ndarray,
         metrics_after=metrics_after,
         passed=monotonic and (target_dbm is None
                               or abs(metrics_after["error_db"]) < 0.5),
+        cost={"captures": len(codes) + (1 if target_dbm is not None else 0),
+              "samples": (len(codes) + (1 if target_dbm is not None else 0))
+                         * np.asarray(x_ref).size},
     )

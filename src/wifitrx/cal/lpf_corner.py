@@ -28,9 +28,42 @@ def _rx_tone_ratio_db(rx: RxChain, f_probe: float, f_ref: float, n: int) -> floa
     return 20.0 * np.log10(max(a_probe, 1e-300) / max(a_ref, 1e-300))
 
 
+def _code_search(measure, n_codes: int, start: int, target_db: float,
+                 mode: str) -> tuple[int, list]:
+    """Find the code whose measured ratio is closest to target_db.
+
+    mode="full": exhaustive sweep (factory).  mode="binary": bisection on
+    the monotonic ratio-vs-code curve (power-on fast cal, ~log2 measures).
+    """
+    trace = []
+    if mode == "full":
+        best_code, best_err = start, np.inf
+        for code in range(n_codes):
+            ratio = measure(code)
+            trace.append((code, ratio))
+            if abs(ratio - target_db) < best_err:
+                best_code, best_err = code, abs(ratio - target_db)
+        return best_code, trace
+    lo, hi = 0, n_codes - 1
+    # higher code -> lower corner -> more attenuation -> ratio decreases
+    while hi - lo > 1:
+        mid = (lo + hi) // 2
+        ratio = measure(mid)
+        trace.append((mid, ratio))
+        if ratio > target_db:
+            lo = mid
+        else:
+            hi = mid
+    r_lo = measure(lo)
+    r_hi = measure(hi)
+    trace += [(lo, r_lo), (hi, r_hi)]
+    return (lo if abs(r_lo - target_db) < abs(r_hi - target_db) else hi), trace
+
+
 def calibrate_lpf_corner_rx(rx: RxChain, n: int = 1 << 14,
-                            target_db: float = -3.0) -> CalResult:
-    """Sweep the RC code; pick the one landing the corner ratio on -3 dB."""
+                            target_db: float = -3.0,
+                            search: str = "full") -> CalResult:
+    """Find the RC code landing the corner ratio on -3 dB."""
     p = rx.params
     lpf = p.lpf
     f_probe = lpf.fc_nominal_hz
@@ -39,15 +72,12 @@ def calibrate_lpf_corner_rx(rx: RxChain, n: int = 1 << 14,
     rx.noise_enabled = False
     fc_before = lpf.fc_actual_hz
 
-    trace = []
-    best_code, best_err = lpf.rc_code, np.inf
-    for code in range(2 ** lpf.rc_code_bits):
+    def measure(code: int) -> float:
         lpf.rc_code = code
-        ratio = _rx_tone_ratio_db(rx, f_probe, f_ref, n)
-        trace.append((code, ratio))
-        err = abs(ratio - target_db)
-        if err < best_err:
-            best_code, best_err = code, err
+        return _rx_tone_ratio_db(rx, f_probe, f_ref, n)
+
+    best_code, trace = _code_search(measure, 2 ** lpf.rc_code_bits,
+                                    lpf.rc_code, target_db, search)
     lpf.rc_code = best_code
     rx.noise_enabled = noise_state
 
@@ -62,11 +92,13 @@ def calibrate_lpf_corner_rx(rx: RxChain, n: int = 1 << 14,
         metrics_after={"fc_hz": fc_after,
                        "fc_err_pct": 100 * (fc_after / lpf.fc_nominal_hz - 1)},
         passed=abs(fc_after / lpf.fc_nominal_hz - 1) <= lpf.rc_step,
+        cost={"captures": len(trace), "samples": len(trace) * n},
     )
 
 
 def calibrate_lpf_corner_tx(tx: TxChain, det: EnvelopeDetector | None = None,
-                            n: int = 1 << 14, target_db: float = -3.0) -> CalResult:
+                            n: int = 1 << 14, target_db: float = -3.0,
+                            search: str = "full") -> CalResult:
     """TX LPF corner via the PA-output envelope detector.
 
     A baseband tone at f plus the LO leak beat in the square-law detector
@@ -95,15 +127,12 @@ def calibrate_lpf_corner_tx(tx: TxChain, det: EnvelopeDetector | None = None,
         v = float(np.mean(det.measure(y, tx.fs)))
         return 10.0 * np.log10(max(v - v0, 1e-300))
 
-    trace = []
-    best_code, best_err = lpf.rc_code, np.inf
-    for code in range(2 ** lpf.rc_code_bits):
+    def measure(code: int) -> float:
         lpf.rc_code = code
-        ratio = tone_power_db(f_probe) - tone_power_db(f_ref)
-        trace.append((code, ratio))
-        err = abs(ratio - target_db)
-        if err < best_err:
-            best_code, best_err = code, err
+        return tone_power_db(f_probe) - tone_power_db(f_ref)
+
+    best_code, trace = _code_search(measure, 2 ** lpf.rc_code_bits,
+                                    lpf.rc_code, target_db, search)
     lpf.rc_code = best_code
 
     fc_after = lpf.fc_actual_hz
@@ -117,4 +146,6 @@ def calibrate_lpf_corner_tx(tx: TxChain, det: EnvelopeDetector | None = None,
         metrics_after={"fc_hz": fc_after,
                        "fc_err_pct": 100 * (fc_after / lpf.fc_nominal_hz - 1)},
         passed=abs(fc_after / lpf.fc_nominal_hz - 1) <= lpf.rc_step,
+        cost={"captures": 2 * len(trace) + 1,
+              "samples": (2 * len(trace) + 1) * n},
     )

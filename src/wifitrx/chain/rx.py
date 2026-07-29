@@ -43,6 +43,7 @@ class RxChain:
         self.dc_post: dict[int, complex] = {}   # per-LNA-state digital DC sub
         self.w1: np.ndarray | None = None
         self.w2: np.ndarray | None = None
+        self.w2_by_state: dict[int, np.ndarray] = {}  # overrides w2 per state
         self.frac_delay_iq: float = 0.0         # residual I/Q delay trim [samples]
         self.im2_trim_code: int = 1 << (params.im2.trim_bits - 1)  # analog trim
         self.noise_enabled: bool = True
@@ -87,7 +88,13 @@ class RxChain:
         if p.clock.enabled:
             y = p.clock.apply_cfo(y, self.fs, p.lo.freq_hz)
 
-        y = p.iq.apply(y, self.fs)
+        if p.iq.state_phase_step_deg and self.lna_idx:
+            from dataclasses import replace as _replace
+            iq_eff = _replace(p.iq, phase_deg=p.iq.phase_deg
+                              + p.iq.state_phase_step_deg * self.lna_idx)
+            y = iq_eff.apply(y, self.fs)
+        else:
+            y = p.iq.apply(y, self.fs)
         y = y + p.dc_for_state(self.lna_idx)
         y = p.lpf.apply(y, self.fs)
         y = y * db_to_amp(self.vga_db)
@@ -100,7 +107,8 @@ class RxChain:
 
         # digital back-end corrections
         x = x - self.dc_post.get(self.lna_idx, 0.0 + 0.0j)
-        x = apply_widely_linear(x, self.w1, self.w2)
+        w2 = self.w2_by_state.get(self.lna_idx, self.w2)
+        x = apply_widely_linear(x, self.w1, w2)
         if self.frac_delay_iq != 0.0:
             # trim residual I/Q delay: advance Q rail relative to I
             q = fractional_advance(x.imag.astype(complex), self.frac_delay_iq)

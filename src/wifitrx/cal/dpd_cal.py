@@ -104,4 +104,5 @@ def calibrate_dpd(tx: TxChain, rx: RxChain, wf: OFDMWaveform,
                  or after["evm_db"] <= -40.0)
                 and not (after["aclr_worst_dbc"]
                          > before["aclr_worst_dbc"] + 1.0)),
+        cost={"captures": n_iter, "samples": n_iter * (x.size + 512)},
     )

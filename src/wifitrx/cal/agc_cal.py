@@ -47,8 +47,9 @@ def agc_sweep(rx: RxChain, p_in_range_dbm: np.ndarray | None = None,
     return {"rows": rows}
 
 
-def calibrate_agc(rx: RxChain, tol_db: float = 2.5) -> CalResult:
-    sweep = agc_sweep(rx)
+def calibrate_agc(rx: RxChain, tol_db: float = 2.5,
+                  p_in_range_dbm=None) -> CalResult:
+    sweep = agc_sweep(rx, p_in_range_dbm=p_in_range_dbm)
     target = rx.params.adc.fullscale_dbm - rx.params.adc_backoff_db
     errs = []
     for row in sweep["rows"]:
@@ -71,4 +72,6 @@ def calibrate_agc(rx: RxChain, tol_db: float = 2.5) -> CalResult:
                            (r["snr_db"] for r in sweep["rows"]
                             if r["p_in_dbm"] >= -50.0), default=float("nan"))},
         passed=worst < tol_db and snr_ok,
+        cost={"captures": len(sweep["rows"]),
+              "samples": len(sweep["rows"]) * (1 << 13)},
     )

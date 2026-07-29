@@ -40,4 +40,6 @@ def calibrate_rx_dc(rx: RxChain, n: int = 1 << 14, seed: int = 0) -> CalResult:
         metrics_before={f"dc_dbfs_state{k}": v for k, v in before.items()},
         metrics_after={f"dc_dbfs_state{k}": v for k, v in after.items()},
         passed=worst_after < -50.0,
+        cost={"captures": 2 * len(p.lna_states),
+              "samples": 2 * len(p.lna_states) * n},
     )

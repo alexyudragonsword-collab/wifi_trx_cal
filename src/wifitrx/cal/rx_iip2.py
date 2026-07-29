@@ -49,7 +49,7 @@ def calibrate_rx_iip2(tx: TxChain, rx: RxChain,
                       path: LoopbackPath | None = None,
                       n: int = 1 << 14, f1: float = 17e6, f2: float = 23e6,
                       amp: float = 0.5, n_iter: int = 3,
-                      delta: int = 24) -> CalResult:
+                      delta: int = 24, n_avg: int = 4) -> CalResult:
     p = rx.params
     if not p.im2.enabled:
         return CalResult(name="rx_iip2", passed=None,
@@ -70,6 +70,7 @@ def calibrate_rx_iip2(tx: TxChain, rx: RxChain,
     trace = [(rx.im2_trim_code, iip2_before)]
 
     step = delta
+    n_captures = 0
     for it in range(n_iter):
         c0 = rx.im2_trim_code
         cm = int(np.clip(c0 - step, 0, code_max))
@@ -77,7 +78,9 @@ def calibrate_rx_iip2(tx: TxChain, rx: RxChain,
         powers = {}
         for c in (cm, c0, cp):
             rx.im2_trim_code = c
-            powers[c] = _im2_power(tx, rx, path, f1, f2, n, amp, seed=it)
+            powers[c] = _im2_power(tx, rx, path, f1, f2, n, amp,
+                                   n_avg=n_avg, seed=it)
+            n_captures += n_avg  # phase-randomized coherent average
         p_m, p_0, p_p = powers[cm], powers[c0], powers[cp]
         # stop when the surface is flat vs the residual floor (curvature
         # below measurement significance -> unconstrained extrapolation
@@ -109,4 +112,5 @@ def calibrate_rx_iip2(tx: TxChain, rx: RxChain,
         metrics_before={"iip2_dbm": iip2_before},
         metrics_after={"iip2_dbm": iip2_after},
         passed=iip2_after > iip2_before + 15.0 or iip2_after > 70.0,
+        cost={"captures": n_captures, "samples": n_captures * n},
     )

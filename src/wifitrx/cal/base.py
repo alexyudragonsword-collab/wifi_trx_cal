@@ -24,6 +24,12 @@ class CalResult:
     metrics_after: dict = field(default_factory=dict)
     passed: bool | None = None
     notes: str = ""
+    # capture cost: {"captures": n, "samples": total_samples} — the raw
+    # material for the calibration time budget (time = samples / fs)
+    cost: dict = field(default_factory=dict)
+
+    def capture_time_s(self, fs: float) -> float:
+        return float(self.cost.get("samples", 0)) / fs if fs > 0 else 0.0
 
     def summary(self) -> dict:
         return {

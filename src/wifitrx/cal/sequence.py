@@ -113,44 +113,74 @@ def measure_loopback_delay(tx: TxChain, rx: RxChain, path: LoopbackPath,
         metrics_after={"delay_ns": delay_ns},
         passed=True,
         notes="captures in later cals are aligned with this estimate",
+        cost={"captures": 1, "samples": x.size},
     )
+
+
+# capture-length / iteration knobs per calibration profile
+PROFILES = {
+    # exhaustive: full code sweeps, long captures, 2 IQ iterations
+    "factory": {"lpf_search": "full", "n_iq": 1 << 15, "iq_iters": 2,
+                "iq_tones": 12, "n_scalar": 1 << 14, "envdet_leak": True,
+                "iip2_iters": 3, "iip2_avg": 4, "power_step_db": 1.0,
+                "agc_step_db": 5.0},
+    # power-on fast cal: bisection code search, half-length captures,
+    # single IQ iteration, loopback-only LO-leak
+    "poweron": {"lpf_search": "binary", "n_iq": 1 << 14, "iq_iters": 1,
+                "iq_tones": 8, "n_scalar": 1 << 13, "envdet_leak": False,
+                "iip2_iters": 2, "iip2_avg": 2, "power_step_db": 3.0,
+                "agc_step_db": 10.0},
+}
 
 
 def run_full_cal(tx: TxChain, rx: RxChain, cfg: OFDMConfig,
                  path: LoopbackPath | None = None,
                  with_dpd: bool = True, target_pout_dbm: float | None = None,
-                 final_drive_scale: float = 0.12, seed: int = 0) -> list[CalResult]:
+                 final_drive_scale: float = 0.12, profile: str = "factory",
+                 seed: int = 0) -> list[CalResult]:
     """Execute the canonical sequence; returns the ordered CalResult list.
 
     ``final_drive_scale=0.12`` puts the final EVM check at ~16.5 dB PA
     output backoff (~11.6 dBm average out for the 26 dB-gain / 28 dBm-Psat
     default TX) — a typical 4096-QAM operating point: OFDM PAPR plus the
     EVM headroom the -38 dB MCS13 requirement demands.
+
+    ``profile`` selects the capture-time budget: "factory" (exhaustive)
+    or "poweron" (fast: bisection searches, shorter captures, single IQ
+    iteration — a fraction of the capture time at a small EVM cost).
     """
     if path is None:
         path = LoopbackPath(atten_db=40.0, delay_ns=6.0)
+    prof = PROFILES[profile]
     results: list[CalResult] = []
 
     evm_before = loopback_evm(tx, rx, path, cfg, drive_scale=final_drive_scale,
                               seed=seed)
 
     # 1. LPF corners
-    results.append(calibrate_lpf_corner_tx(tx))
-    results.append(calibrate_lpf_corner_rx(rx))
+    results.append(calibrate_lpf_corner_tx(tx, n=prof["n_scalar"],
+                                           search=prof["lpf_search"]))
+    results.append(calibrate_lpf_corner_rx(rx, n=prof["n_scalar"],
+                                           search=prof["lpf_search"]))
     # 2. RX DC
-    results.append(calibrate_rx_dc(rx))
+    results.append(calibrate_rx_dc(rx, n=prof["n_scalar"]))
     # 3. TX LO leakage
-    results.append(calibrate_tx_lo_leak_envdet(tx))
+    if prof["envdet_leak"]:
+        results.append(calibrate_tx_lo_leak_envdet(tx))
     offset_path = LoopbackPath(atten_db=path.atten_db, delay_ns=path.delay_ns,
                                rx_lo_offset_hz=4.8e6)
-    results.append(calibrate_tx_lo_leak_loopback(tx, rx, offset_path))
+    results.append(calibrate_tx_lo_leak_loopback(tx, rx, offset_path,
+                                                 n=prof["n_scalar"]))
     # 3.5 RX IIP2 — MUST follow TX LO-leak cal: the PA's third-order
     # product tone2 x leak x tone1* lands exactly on the (f2 - f1) IM2
     # measurement bin, and with an uncalibrated carrier leak it buries the
     # IM2 null by ~35 dB.
     if rx.params.im2.enabled:
-        results.append(calibrate_rx_iip2(tx, rx, LoopbackPath(
-            atten_db=path.atten_db - 10.0, delay_ns=path.delay_ns)))
+        results.append(calibrate_rx_iip2(
+            tx, rx, LoopbackPath(atten_db=path.atten_db - 10.0,
+                                 delay_ns=path.delay_ns),
+            n=prof["n_scalar"], n_iter=prof["iip2_iters"],
+            n_avg=prof["iip2_avg"]))
     # 4. loopback delay (AGC set for the coupled level first)
     wf_probe = generate_ofdm(cfg)
     agc_for_loopback(tx, rx, path, wf_probe.x * 0.25)
@@ -161,7 +191,9 @@ def run_full_cal(tx: TxChain, rx: RxChain, cfg: OFDMConfig,
     n_taps = 2 * int(7.5 * tx.fs / tx.params.bandwidth_hz) + 1
     iq_path = LoopbackPath(atten_db=path.atten_db, delay_ns=path.delay_ns,
                            rx_lo_offset_hz=5.1e6)
-    res_txiq = calibrate_tx_iq(tx, rx, iq_path, n_taps=n_taps)
+    res_txiq = calibrate_tx_iq(tx, rx, iq_path, n_taps=n_taps,
+                               n=prof["n_iq"], n_iter=prof["iq_iters"],
+                               n_tones=prof["iq_tones"])
     results.append(res_txiq)
     rho_f = np.asarray(res_txiq.estimated["rho_f_hz"])
     rho_v = np.asarray(res_txiq.estimated["rho"])
@@ -169,29 +201,36 @@ def run_full_cal(tx: TxChain, rx: RxChain, cfg: OFDMConfig,
     results.append(verify_gd_estimate(rho_f, rho_v, inj_gd, tol_ps=80.0))
     # 6. RX IQ
     results.append(calibrate_rx_iq(tx, rx, LoopbackPath(
-        atten_db=path.atten_db, delay_ns=path.delay_ns), n_taps=n_taps))
+        atten_db=path.atten_db, delay_ns=path.delay_ns), n_taps=n_taps,
+        n=prof["n_iq"], n_iter=prof["iq_iters"], n_tones=prof["iq_tones"]))
     # 7. TX power
     wf = generate_ofdm(cfg)
-    results.append(calibrate_tx_power(tx, wf.x * 0.25,
-                                      target_dbm=target_pout_dbm))
+    results.append(calibrate_tx_power(
+        tx, wf.x * 0.25, target_dbm=target_pout_dbm,
+        codes_db=np.arange(-20.0, 6.5, prof["power_step_db"])))
     # 8. DPD (trained at the final operating drive)
     if with_dpd:
         results.append(calibrate_dpd(tx, rx, wf, path,
                                      drive_scale=final_drive_scale))
     # 9. AGC verification
-    results.append(calibrate_agc(rx))
+    results.append(calibrate_agc(
+        rx, p_in_range_dbm=np.arange(-85.0, -5.0, prof["agc_step_db"])))
 
     evm_after = loopback_evm(tx, rx, path, cfg, drive_scale=final_drive_scale,
                              seed=seed)
+    total_samples = sum(r.cost.get("samples", 0) for r in results)
+    total_captures = sum(r.cost.get("captures", 0) for r in results)
     results.append(CalResult(
         name="final_loopback_evm",
         metrics_before={"evm_db": evm_before},
         metrics_after={"evm_db": evm_after,
                        "tx_evm_db": tx_evm(tx, cfg,
-                                           drive_scale=final_drive_scale)},
+                                           drive_scale=final_drive_scale),
+                       "capture_time_ms": total_samples / tx.fs * 1e3,
+                       "total_captures": total_captures},
         passed=evm_after < evm_before,
         notes="evm_db: composite TX+RX loopback EVM; tx_evm_db: PA-output "
               "EVM at the 802.11be TX spec measurement point (per-tone EQ "
-              "+ CPE removal in both)",
+              f"+ CPE removal in both); profile={profile}",
     ))
     return results

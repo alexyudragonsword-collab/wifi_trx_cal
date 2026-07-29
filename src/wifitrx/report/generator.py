@@ -100,12 +100,34 @@ def _figures_for(res: CalResult, figdir: Path, prefix: str) -> list[str]:
 
 
 def generate_report(results: list[CalResult], out_dir: str | Path,
-                    title: str = "WiFi 7 收发器校准报告") -> Path:
+                    title: str = "WiFi 7 收发器校准报告",
+                    fs_hz: float | None = None) -> Path:
     out = Path(out_dir)
     figdir = out / "figs"
     figdir.mkdir(parents=True, exist_ok=True)
 
     lines = [f"# {title}", ""]
+
+    # ---- capture-time budget (when any step reports cost)
+    if any(r.cost for r in results):
+        lines += ["## 校准耗时预算(捕获时间)", "",
+                  "| 步骤 | 捕获次数 | 样本数 | 捕获时间 (ms) |",
+                  "|---|---|---|---|"]
+        tot_c = tot_s = 0
+        for r in results:
+            if not r.cost:
+                continue
+            c = int(r.cost.get("captures", 0))
+            s = int(r.cost.get("samples", 0))
+            tot_c += c
+            tot_s += s
+            t = f"{s / fs_hz * 1e3:.2f}" if fs_hz else "—"
+            lines.append(f"| {r.name} | {c} | {s:,} | {t} |")
+        t_tot = f"{tot_s / fs_hz * 1e3:.2f}" if fs_hz else "—"
+        lines += [f"| **合计** | {tot_c} | {tot_s:,} | {t_tot} |", "",
+                  "> 捕获时间 = 样本数 / fs,不含 DSP 处理时间;"
+                  "上电快速档 (profile='poweron') 用二分码搜索与短捕获压缩此预算。",
+                  ""]
 
     # ---- summary table
     lines += ["## 校准结果汇总", "",

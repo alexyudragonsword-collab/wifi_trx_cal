@@ -95,6 +95,9 @@ class FreqDepIQImbalance:
     rail_gd_ripple_ns: float = 0.0
     ripple_period_hz: float = 160e6
     n_taps: int = 33
+    # additional quadrature phase error per RX front-end gain state index
+    # (front-end load changes shift the LO quadrature slightly per state)
+    state_phase_step_deg: float = 0.0
     enabled: bool = True
 
     def rail_firs(self, fs: float) -> tuple[np.ndarray, np.ndarray]:
