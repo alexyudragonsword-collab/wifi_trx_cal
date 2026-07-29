@@ -23,6 +23,54 @@ from ..units import dbm_to_mw
 
 
 @dataclass
+class Im2Params:
+    """Trimmable second-order distortion of the direct-conversion mixer.
+
+    The IM2 beat coefficient crosses zero at ``trim_best`` (mixer
+    load-mismatch trim DAC); away from it IIP2 degrades toward
+    ``iip2_worst_dbm`` at the code rails.  A residual orthogonal-phase
+    component bounds the achievable IIP2 at ``iip2_peak_dbm`` — the trim
+    cannot null it, which is exactly the hardware behavior.
+    """
+
+    iip2_peak_dbm: float = 75.0
+    iip2_worst_dbm: float = 42.0
+    phase_deg: float = 0.0
+    trim_best: int = 128
+    trim_bits: int = 8
+    enabled: bool = True
+
+    def a2(self, code: int) -> complex:
+        """IM2 coefficient [1/sqrt(mW)] at a trim code."""
+        if not self.enabled:
+            return 0.0 + 0.0j
+        half = float(1 << (self.trim_bits - 1))
+        a_max = 1.0 / np.sqrt(dbm_to_mw(self.iip2_worst_dbm))
+        a_res = 1.0 / np.sqrt(dbm_to_mw(self.iip2_peak_dbm))
+        ph = np.deg2rad(self.phase_deg)
+        main = a_max * (code - self.trim_best) / half * np.exp(1j * ph)
+        resid = a_res * np.exp(1j * (ph + np.pi / 2.0))
+        return complex(main + resid)
+
+    def iip2_eff_dbm(self, code: int) -> float:
+        a = abs(self.a2(code))
+        if a <= 0:
+            return float("inf")
+        return float(-10.0 * np.log10(a ** 2))
+
+    def apply(self, x: np.ndarray, code: int) -> np.ndarray:
+        if not self.enabled:
+            return np.asarray(x, dtype=complex)
+        x = np.asarray(x, dtype=complex)
+        return x + self.a2(code) * (np.abs(x) ** 2)
+
+    def injected(self) -> dict:
+        return {"trim_best": self.trim_best,
+                "iip2_peak_dbm": self.iip2_peak_dbm,
+                "iip2_worst_dbm": self.iip2_worst_dbm}
+
+
+@dataclass
 class MemorylessNonlin:
     iip3_dbm: float | None = None
     iip2_dbm: float | None = None

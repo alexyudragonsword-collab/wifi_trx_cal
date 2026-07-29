@@ -39,6 +39,7 @@ from .dpd_cal import calibrate_dpd
 from .group_delay import verify_gd_estimate
 from .lpf_corner import calibrate_lpf_corner_rx, calibrate_lpf_corner_tx
 from .rx_dc import calibrate_rx_dc
+from .rx_iip2 import calibrate_rx_iip2
 from .rx_iq import calibrate_rx_iq
 from .sync import _fractional_advance, align_delay
 from .tx_iq import calibrate_tx_iq, measure_tx_rho
@@ -143,6 +144,13 @@ def run_full_cal(tx: TxChain, rx: RxChain, cfg: OFDMConfig,
     offset_path = LoopbackPath(atten_db=path.atten_db, delay_ns=path.delay_ns,
                                rx_lo_offset_hz=4.8e6)
     results.append(calibrate_tx_lo_leak_loopback(tx, rx, offset_path))
+    # 3.5 RX IIP2 — MUST follow TX LO-leak cal: the PA's third-order
+    # product tone2 x leak x tone1* lands exactly on the (f2 - f1) IM2
+    # measurement bin, and with an uncalibrated carrier leak it buries the
+    # IM2 null by ~35 dB.
+    if rx.params.im2.enabled:
+        results.append(calibrate_rx_iip2(tx, rx, LoopbackPath(
+            atten_db=path.atten_db - 10.0, delay_ns=path.delay_ns)))
     # 4. loopback delay (AGC set for the coupled level first)
     wf_probe = generate_ofdm(cfg)
     agc_for_loopback(tx, rx, path, wf_probe.x * 0.25)

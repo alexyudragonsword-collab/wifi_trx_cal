@@ -8,6 +8,7 @@
 | 1 | LPF corner(TX、RX) | RC 工艺偏差 ±20% 会畸变通带,污染后续所有频域(FFT-bin)估计;必须最先。TX 用包络检波器(不依赖 RX),RX 用 ADC 读数。 |
 | 2 | RX DC offset(逐 AGC 档) | 环回法测 TX LO 泄漏要读 DC 邻近 bin,必须先把 RX 自身的 DC(LO 自混频,随增益档变化)消掉。 |
 | 3 | TX LO 泄漏 | 先包络检波(完全不依赖 RX)粗校,再经 RX-LO 偏移环回精修(偏移使 TX 载波泄漏与 RX 残余 DC 落在不同 bin)。必须先于 TX IQ:载波泄漏污染近 DC 镜像 bin。 |
+| 3.5 | RX IIP2(mixer IM2 trim) | 双音大信号经环回,搜索 trim 码最小化 (f2−f1) 拍频。**必须在 TX LO 泄漏校准之后**:PA 的三阶产物 tone2×leak×tone1* 恰好落在 (f2−f1) 测量 bin,未校泄漏时把 IM2 零点掩埋 ~35 dB。测量用相位随机化相干平均压制转换器量化杂散。 |
 | 4 | 环回时延对齐 + CFO/SCO | 所有 FFT-bin 校准的捕获对齐前提。共 LO 环回无 CFO;偏移 LO 场景的旋转是确定已知的。 |
 | 5 | TX 频变 IQ → 群时延 | RX-LO 偏移法:TX 音 / TX 镜像 / RX 镜像 三者分 bin,两次单边梳状捕获在同一 bin 取比值,环回与 RX 的线性响应精确抵消——因此可以在 RX IQ 尚未校准时先校 TX。群时延失配从测得 rho(f) 的相位斜率提取。 |
 | 6 | RX 频变 IQ | 经过已校 TX 的单边梳状音(共 LO):W2(−f) = −Y(−f)/conj(Y(+f)),信源完全抵消。依赖第 5 步——TX 残余镜像会被误认为 RX 镜像。 |

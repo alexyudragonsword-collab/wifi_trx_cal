@@ -12,9 +12,10 @@ from dataclasses import dataclass, field, replace
 import numpy as np
 
 from ..impairments.analog_filter import TunableLPF
+from ..impairments.clock import ClockError
 from ..impairments.converters import ADCParams, DACParams
 from ..impairments.iq_imbalance import FreqDepIQImbalance
-from ..impairments.nonlinear import MemorylessNonlin
+from ..impairments.nonlinear import Im2Params, MemorylessNonlin
 from ..impairments.phase_noise import LOModel
 from .agc import DEFAULT_LNA_STATES, LNAState
 
@@ -71,6 +72,7 @@ class RxParams:
     bandwidth_hz: float = 320e6
     lna_states: tuple[LNAState, ...] = DEFAULT_LNA_STATES
     nonlin_enabled: bool = True
+    im2: Im2Params = field(default_factory=lambda: Im2Params(enabled=False))
     iq: FreqDepIQImbalance = field(default_factory=FreqDepIQImbalance)
     # DC offset per LNA state at the baseband node [sqrt(mW) complex]; the
     # dominant physical source (LO self-mixing) changes with front-end gain.
@@ -79,6 +81,9 @@ class RxParams:
     adc: ADCParams = field(default_factory=ADCParams)
     adc_backoff_db: float = 12.0          # AGC target below ADC full scale
     lo: LOModel = field(default_factory=LOModel)
+    # RX crystal error vs the transmitter's reference (OTA scenario);
+    # disabled by default — in self-loopback both sides share the crystal
+    clock: ClockError = field(default_factory=lambda: ClockError(enabled=False))
     seed: int = 0
 
     def nonlin_for_state(self, idx: int) -> MemorylessNonlin:
@@ -98,6 +103,12 @@ class RxParams:
         )
         return replace(
             self,
+            im2=replace(
+                self.im2,
+                trim_best=int(rng.integers(30, 226)),
+                phase_deg=float(rng.uniform(0.0, 360.0)),
+                enabled=True,
+            ),
             iq=replace(
                 self.iq,
                 gain_db=float(rng.uniform(-0.5, 0.5)),
@@ -118,4 +129,6 @@ class RxParams:
             "dc_offset": self.dc_offset,
             "lpf": self.lpf.injected(),
             "lo": self.lo.injected(),
+            "im2": self.im2.injected(),
+            "clock": self.clock.injected(),
         }

@@ -59,7 +59,9 @@ python examples/run_link_budget.py --bw 320e6
 - `docs/cal_order_zh.md` — 校准顺序依据
 - `PROVENANCE.md` — 拷贝代码来源
 
-## 模型给出的两条设计洞察
+## 模型给出的设计洞察
 
 1. **4096-QAM 必须配低相噪综合器**:IPN ≈ −38 dBc 的 LO 单独就吃掉整个 −38 dB EVM 预算;需 −43 dBc 量级(0.4° rms)。
 2. **320 MHz 模式 TX 基带滤波器必须比信道宽**(≥1.3×BW/2),否则 DPD 预校正频谱被滤除,PA 残余 EVM 卡在 −39 dB 附近。
+3. **IIP2 校准必须排在 TX LO 泄漏校准之后**:PA 三阶产物 tone2×leak×tone1* 与 IM2 拍频同 bin,未校载波泄漏时零点被掩埋 ~35 dB;测量还需相位随机化相干平均以压制 ADC/DAC 量化杂散。
+4. **DPD 温漂跟踪的遗忘因子必须按"块"激进设置**(~0.4/块):每个观测块含数千样本,统计噪声极小,而保守遗忘会让漂移前的陈旧数据主导 RLS 协方差,跟踪落后 oracle 10 dB 以上。

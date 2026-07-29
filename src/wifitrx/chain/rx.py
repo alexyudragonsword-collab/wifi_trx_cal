@@ -44,6 +44,7 @@ class RxChain:
         self.w1: np.ndarray | None = None
         self.w2: np.ndarray | None = None
         self.frac_delay_iq: float = 0.0         # residual I/Q delay trim [samples]
+        self.im2_trim_code: int = 1 << (params.im2.trim_bits - 1)  # analog trim
         self.noise_enabled: bool = True
 
     # ------------------------------------------------------------ AGC
@@ -74,6 +75,8 @@ class RxChain:
             y = y + thermal_noise(y.size, self.fs, st.nf_db, rng)
         y = p.nonlin_for_state(self.lna_idx).apply(y)
         y = y * db_to_amp(st.gain_db)
+        if p.im2.enabled:
+            y = p.im2.apply(y, self.im2_trim_code)  # mixer IM2 at this node
         if nodes is not None:
             nodes["lna_out_dbm"] = power_dbm(y)
 
@@ -81,6 +84,8 @@ class RxChain:
             phi_lo = self.lo_phase(y.size)
         if phi_lo is not None and p.lo.enabled:
             y = y * np.exp(-1j * phi_lo)
+        if p.clock.enabled:
+            y = p.clock.apply_cfo(y, self.fs, p.lo.freq_hz)
 
         y = p.iq.apply(y, self.fs)
         y = y + p.dc_for_state(self.lna_idx)
@@ -89,6 +94,8 @@ class RxChain:
         if nodes is not None:
             nodes["adc_in_dbm"] = power_dbm(y)
 
+        if p.clock.enabled:
+            y = p.clock.apply_sco(y, self.fs)
         x = p.adc.apply(y, self.fs)
 
         # digital back-end corrections
