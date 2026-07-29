@@ -92,3 +92,11 @@ class EnvelopeDetector:
             v_fs = 10.0 ** (self.fullscale_dbm / 10.0)
             v = quantize_clip(v - v_fs / 2.0, self.adc_bits, v_fs / 2.0) + v_fs / 2.0
         return v
+
+    def response(self, f_hz: float, fs: float) -> complex:
+        """Known detector LPF response (calibrated observation path)."""
+        wn = min(self.lpf_bw_hz / (fs / 2.0), 0.99)
+        b, a = sig.butter(3, wn)
+        _, h = sig.freqz(b, a, worN=[2 * np.pi * abs(f_hz) / fs])
+        h0 = complex(h[0])
+        return h0 if f_hz >= 0 else np.conj(h0)
