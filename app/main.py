@@ -121,7 +121,13 @@ class MainWindow(QMainWindow):
     def _rebuild_form(self) -> None:
         spec: AnalysisSpec = self.combo.currentData()
         self.desc.setText(spec.description)
-        form = QFormLayout()
+        # one persistent QFormLayout, cleared and refilled per analysis —
+        # widget replacement + deferred deletion leaves stale rows visible
+        if self.form_holder.layout() is None:
+            self.form_holder.setLayout(QFormLayout())
+        form: QFormLayout = self.form_holder.layout()
+        while form.rowCount():
+            form.removeRow(0)
         self.widgets = {}
         for p in spec.params:
             w = _widget_for(p)
@@ -129,13 +135,6 @@ class MainWindow(QMainWindow):
                 w.setToolTip(p.tooltip)
             self.widgets[p.name] = w
             form.addRow(p.label, w)
-        holder = QWidget()
-        holder.setLayout(form)
-        old = self.form_holder
-        parent_layout = old.parentWidget().layout()
-        parent_layout.replaceWidget(old, holder)
-        old.deleteLater()
-        self.form_holder = holder
 
     # ------------------------------------------------------------ run
     def _run(self) -> None:

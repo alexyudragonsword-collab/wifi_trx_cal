@@ -77,18 +77,25 @@ def run_full_cal(p: dict) -> AnalysisResult:
     ax = fig.add_subplot(111)
     names, befores, afters = [], [], []
     for r in results:
-        kb = next(iter(r.metrics_before.values()), None)
-        ka = next(iter(r.metrics_after.values()), None)
-        if isinstance(kb, (int, float)) and isinstance(ka, (int, float)):
-            names.append(r.name)
-            befores.append(kb)
-            afters.append(ka)
+        for key in r.metrics_after:
+            kb = r.metrics_before.get(key)
+            ka = r.metrics_after.get(key)
+            # keep only dB-scale scalars: a mixed-unit bar chart (Hz next
+            # to dB) is unreadable
+            if (isinstance(kb, (int, float)) and isinstance(ka, (int, float))
+                    and abs(kb) < 200 and abs(ka) < 200
+                    and ("db" in key or "dbc" in key or "dbfs" in key)):
+                names.append(f"{r.name}\n{key}")
+                befores.append(float(kb))
+                afters.append(float(ka))
+                break
     xpos = np.arange(len(names))
     ax.bar(xpos - 0.2, befores, 0.4, label="before")
     ax.bar(xpos + 0.2, afters, 0.4, label="after")
     ax.set_xticks(xpos)
-    ax.set_xticklabels(names, rotation=40, ha="right", fontsize=7)
-    ax.set_title("Per-step first metric, before vs after")
+    ax.set_xticklabels(names, rotation=40, ha="right", fontsize=6)
+    ax.set_ylabel("dB")
+    ax.set_title("Per-step dB metrics, before vs after calibration")
     ax.legend()
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
