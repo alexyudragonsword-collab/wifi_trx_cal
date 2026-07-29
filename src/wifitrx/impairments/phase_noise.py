@@ -167,3 +167,49 @@ def rms_jitter_fs(f: np.ndarray, s_phi: np.ndarray, f0: float,
                   f1: float = 1e3, f2: float = 100e6) -> float:
     """RMS jitter [fs]."""
     return 1e15 * rms_jitter_s(f, s_phi, f0, f1, f2)
+
+
+# ------------------------------------------------------------------ LO model
+# Default WiFi 7 fractional-N synthesizer closed-loop profile (offset, dBc/Hz):
+# in-band plateau, mild loop peaking near 200 kHz, VCO roll-off, far-out floor.
+DEFAULT_WIFI7_LO_PROFILE = TabulatedPhase(
+    "wifi7_lo",
+    f_pts=(1e4, 1e5, 2e5, 1e6, 1e7, 1e8),
+    l_dbc_pts=(-98.0, -98.0, -96.0, -110.0, -132.0, -150.0),
+)
+
+
+@dataclass
+class LOModel:
+    """Local oscillator: carrier frequency + phase-noise profile + spurs.
+
+    ``phase(n, fs, rng)`` returns the time-domain phase deviation phi[n]
+    [rad] at the baseband simulation rate; apply as ``x * exp(1j*phi)``.
+    TX and RX may share one LOModel instance (correlated phase noise in
+    loopback, the on-chip reality) or use independent instances/seeds.
+    """
+
+    freq_hz: float = 6.0e9
+    profile: NoiseSource = field(default_factory=lambda: DEFAULT_WIFI7_LO_PROFILE)
+    spur_offsets_hz: tuple = ()      # discrete spurs (e.g. fractional-N)
+    spur_dbc: tuple = ()
+    enabled: bool = True
+
+    def phase(self, n: int, fs: float, rng: np.random.Generator) -> np.ndarray:
+        if not self.enabled:
+            return np.zeros(n)
+        phi = synth_from_psd(self.profile.psd, fs, n, rng)
+        t = np.arange(n) / fs
+        for f_off, dbc in zip(self.spur_offsets_hz, self.spur_dbc):
+            # narrowband FM spur: L_spur dBc <-> phase amplitude 2*10^(dbc/20)
+            beta = 2.0 * 10.0 ** (dbc / 20.0)
+            phi = phi + beta * np.sin(2 * np.pi * f_off * t + rng.uniform(0, 2 * np.pi))
+        return phi
+
+    def ipn_dbc(self, f1: float = 1e4, f2: float = 1e8) -> float:
+        f = np.logspace(np.log10(f1), np.log10(f2), 600)
+        return ipn_dbc(f, self.profile.psd(f), f1, f2)
+
+    def injected(self) -> dict:
+        return {"freq_hz": self.freq_hz, "ipn_dbc": self.ipn_dbc(),
+                "spur_offsets_hz": self.spur_offsets_hz, "spur_dbc": self.spur_dbc}
