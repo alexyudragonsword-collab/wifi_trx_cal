@@ -55,6 +55,9 @@ class TxChain:
         self.w2: np.ndarray | None = None
         self.dpd = None                          # callable x -> x
         self.gain_code_db: float = 0.0           # TX power control (digital+VGA)
+        # inter-chain alignment (MIMO): digital pre-rotation and delay trim
+        self.phase_corr_deg: float = 0.0
+        self.delay_corr_samples: float = 0.0
 
     # ------------------------------------------------------------ pieces
     def _lo_leak(self) -> complex:
@@ -84,6 +87,12 @@ class TxChain:
         x = apply_widely_linear(x, self.w1, self.w2)
         x = x + self.dc_pre
         x = x * db_to_amp(self.gain_code_db)
+        if self.phase_corr_deg:
+            x = x * np.exp(-1j * np.deg2rad(self.phase_corr_deg))
+        if self.delay_corr_samples:
+            f = np.fft.fftfreq(x.size)
+            x = np.fft.ifft(np.fft.fft(x)
+                            * np.exp(2j * np.pi * f * self.delay_corr_samples))
 
         y = p.dac.apply(x, self.fs)
         if nodes is not None:
@@ -120,6 +129,8 @@ class TxChain:
             "w2": None if self.w2 is None else
                  [list(np.real(self.w2)), list(np.imag(self.w2))],
             "gain_code_db": self.gain_code_db,
+            "phase_corr_deg": self.phase_corr_deg,
+            "delay_corr_samples": self.delay_corr_samples,
         }
 
     def load_correction_state(self, state: dict) -> None:
@@ -129,3 +140,5 @@ class TxChain:
             setattr(self, name, None if v is None else
                     np.asarray(v[0]) + 1j * np.asarray(v[1]))
         self.gain_code_db = float(state.get("gain_code_db", 0.0))
+        self.phase_corr_deg = float(state.get("phase_corr_deg", 0.0))
+        self.delay_corr_samples = float(state.get("delay_corr_samples", 0.0))

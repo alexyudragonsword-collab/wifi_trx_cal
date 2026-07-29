@@ -17,6 +17,7 @@ numpy/scipy/matplotlib。上游修复需手工同步;每个文件头部有来源
 | `src/wifitrx/impairments/phase_noise.py` | `pll_simulator:src/pllsim/core/{colored,noise,jitter}.py` | 合并;删除电路级噪声源与 FreqResponse 预算部分 |
 | `src/wifitrx/pa/hb_import.py` | `PA_DPD:src/padpd/pa/hb_import.py` | LUT 表下限以外改为线性小信号外推(原为输出钳位) |
 | `src/wifitrx/pa/drift.py` | `PA_DPD:src/padpd/pa/drift.py` | 无 |
+| `src/wifitrx/deploy/fixed_point.py` | `PA_DPD:src/padpd/deploy/fixed_point.py` | 无 |
 
 概念/结构参考(未逐行拷贝):
 

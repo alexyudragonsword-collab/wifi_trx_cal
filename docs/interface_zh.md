@@ -63,7 +63,9 @@ Schema(`wifitrx-cal-state-v1`):
     "dc_pre":  [re, im],          // TX LO 泄漏数字预消除(DC)
     "w1": null | [[re...],[im...]],  // widely-linear 直通 FIR(通常 null=1)
     "w2": [[re...],[im...]],      // widely-linear 共轭路复 FIR(镜像校正)
-    "gain_code_db": float         // TX 功率码
+    "gain_code_db": float,        // TX 功率码
+    "phase_corr_deg": float,      // MIMO 链间相位对齐(单链为 0)
+    "delay_corr_samples": float   // MIMO 链间时延对齐(单链为 0)
   },
   "rx": {
     "dc_post": {"0": [re,im], ...},  // 逐 AGC 档数字 DC 消除
