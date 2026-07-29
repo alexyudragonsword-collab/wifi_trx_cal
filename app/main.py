@@ -14,15 +14,24 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
-from PySide6.QtCore import QThread, Signal
-from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox,
-                               QDoubleSpinBox, QFormLayout, QHBoxLayout,
-                               QLabel, QMainWindow, QPlainTextEdit,
-                               QPushButton, QSpinBox, QSplitter,
-                               QTableWidget, QTableWidgetItem, QVBoxLayout,
-                               QWidget)
+try:
+    from PySide6.QtCore import QThread, Signal
+    from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox,
+                                   QDoubleSpinBox, QFormLayout, QHBoxLayout,
+                                   QLabel, QMainWindow, QPlainTextEdit,
+                                   QPushButton, QSpinBox, QSplitter,
+                                   QTableWidget, QTableWidgetItem, QTabWidget,
+                                   QVBoxLayout, QWidget)
+except ImportError as exc:  # pragma: no cover - environment-dependent
+    raise ImportError(
+        "the workbench needs PySide6, which is an optional extra:\n"
+        "    pip install 'wifitrx[gui]'\n"
+        "the library, CLI and the stdlib-only cal-state inspector all work "
+        "without it") from exc
 
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+
+from inspector_page import InspectorPage
 from specs import ALL_ANALYSES, AnalysisResult, AnalysisSpec, ParamSpec
 
 
@@ -114,7 +123,15 @@ class MainWindow(QMainWindow):
         split.addWidget(left)
         split.addWidget(right)
         split.setSizes([320, 780])
-        self.setCentralWidget(split)
+
+        # two audiences, one window: a developer runs analyses, a cal-state
+        # recipient opens a JSON and reads the verdict — neither should
+        # scroll past the other's page
+        self.tabs = QTabWidget()
+        self.tabs.addTab(split, "Analyses")
+        self.inspector = InspectorPage()
+        self.tabs.addTab(self.inspector, "Cal-state inspector")
+        self.setCentralWidget(self.tabs)
         self._rebuild_form()
 
     # ------------------------------------------------------------ form
