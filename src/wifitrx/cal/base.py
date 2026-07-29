@@ -27,6 +27,9 @@ class CalResult:
     # capture cost: {"captures": n, "samples": total_samples} — the raw
     # material for the calibration time budget (time = samples / fs)
     cost: dict = field(default_factory=dict)
+    # bulky raw data for report figures (waveforms, symbol arrays);
+    # deliberately NOT serialized by summary()
+    artifacts: dict = field(default_factory=dict)
 
     def capture_time_s(self, fs: float) -> float:
         return float(self.cost.get("samples", 0)) / fs if fs > 0 else 0.0

@@ -73,8 +73,46 @@ def run_full_cal(p: dict) -> AnalysisResult:
     by = {r.name: r for r in results}
     final = by["final_loopback_evm"]
 
-    fig = new_figure()
-    ax = fig.add_subplot(111)
+    from wifitrx.metrics.spectrum import psd
+
+    fig = new_figure(figsize=(9.5, 7))
+    ax_cb = fig.add_subplot(2, 2, 1)
+    ax_ca = fig.add_subplot(2, 2, 2)
+    ax_psd = fig.add_subplot(2, 2, 3)
+    ax_bar = fig.add_subplot(2, 2, 4)
+
+    # constellation before/after (equalized loopback symbols)
+    sb = final.artifacts.get("snapshot_before")
+    sa = final.artifacts.get("snapshot_after")
+    for ax, snap, title in ((ax_cb, sb, "constellation BEFORE"),
+                            (ax_ca, sa, "constellation AFTER")):
+        pts = np.ravel(snap["syms_eq"])
+        if pts.size > 6000:
+            idx = np.random.default_rng(0).choice(pts.size, 6000,
+                                                  replace=False)
+            pts = pts[idx]
+        ax.plot(pts.real, pts.imag, ".", ms=1.0, alpha=0.5)
+        ax.set_title(f"{title}  (EVM {snap['evm_db']:.1f} dB)", fontsize=9)
+        ax.set_aspect("equal")
+        ax.set_xlim(-1.55, 1.55)
+        ax.set_ylim(-1.55, 1.55)
+        ax.grid(True, alpha=0.25)
+
+    # PA-output PSD overlay (re-referenced to each curve's in-band median:
+    # peak normalization would let the pre-cal LO-leak spike shift the
+    # whole curve and fake the shoulder comparison)
+    for snap, label in ((sb, "before"), (sa, "after")):
+        f, p = psd(snap["pa_out"], snap["fs"])
+        inband = np.abs(f) < 0.4 * snap["bandwidth_hz"]
+        ax_psd.plot(f / 1e6, p - np.median(p[inband]), lw=0.8, label=label)
+    ax_psd.set_xlabel("Frequency [MHz]")
+    ax_psd.set_ylabel("PSD [dB rel. in-band]")
+    ax_psd.set_title("PA output spectrum", fontsize=9)
+    ax_psd.set_ylim(-80, 25)
+    ax_psd.legend(fontsize=8)
+    ax_psd.grid(True, alpha=0.3)
+
+    # per-step dB metrics
     names, befores, afters = [], [], []
     for r in results:
         for key in r.metrics_after:
@@ -90,14 +128,14 @@ def run_full_cal(p: dict) -> AnalysisResult:
                 afters.append(float(ka))
                 break
     xpos = np.arange(len(names))
-    ax.bar(xpos - 0.2, befores, 0.4, label="before")
-    ax.bar(xpos + 0.2, afters, 0.4, label="after")
-    ax.set_xticks(xpos)
-    ax.set_xticklabels(names, rotation=40, ha="right", fontsize=6)
-    ax.set_ylabel("dB")
-    ax.set_title("Per-step dB metrics, before vs after calibration")
-    ax.legend()
-    ax.grid(True, alpha=0.3)
+    ax_bar.bar(xpos - 0.2, befores, 0.4, label="before")
+    ax_bar.bar(xpos + 0.2, afters, 0.4, label="after")
+    ax_bar.set_xticks(xpos)
+    ax_bar.set_xticklabels(names, rotation=40, ha="right", fontsize=5)
+    ax_bar.set_ylabel("dB")
+    ax_bar.set_title("Per-step dB metrics", fontsize=9)
+    ax_bar.legend(fontsize=8)
+    ax_bar.grid(True, alpha=0.3)
     fig.tight_layout()
 
     metrics = {"loopback_evm_db": final.metrics_after["evm_db"],

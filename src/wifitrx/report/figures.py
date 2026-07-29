@@ -61,6 +61,66 @@ def fig_power_table(table, title: str):
     return fig
 
 
+def _plot_constellation(ax, syms, evm_db, title, max_pts=6000):
+    pts = np.ravel(syms)
+    if pts.size > max_pts:
+        idx = np.random.default_rng(0).choice(pts.size, max_pts, replace=False)
+        pts = pts[idx]
+    ax.plot(pts.real, pts.imag, ".", ms=1.2, alpha=0.5)
+    ax.set_title(f"{title}  (EVM {evm_db:.1f} dB)", fontsize=9)
+    ax.set_aspect("equal")
+    ax.grid(True, alpha=0.25)
+    lim = 1.55
+    ax.set_xlim(-lim, lim)
+    ax.set_ylim(-lim, lim)
+
+
+def fig_constellation_compare(snap_before: dict, snap_after: dict):
+    """Equalized RX constellation before vs after the full calibration."""
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 4))
+    _plot_constellation(ax1, snap_before["syms_eq"], snap_before["evm_db"],
+                        "before calibration")
+    _plot_constellation(ax2, snap_after["syms_eq"], snap_after["evm_db"],
+                        "after calibration")
+    fig.suptitle("Loopback constellation (per-tone EQ + CPE removed)")
+    fig.tight_layout()
+    return fig
+
+
+def fig_psd_compare(snap_before: dict, snap_after: dict):
+    """PA-output PSD before vs after calibration, with the WiFi mask."""
+    from ..metrics.spectrum import check_mask, default_wifi_mask, psd
+
+    fs = snap_before["fs"]
+    bw = snap_before["bandwidth_hz"]
+    fig, ax = plt.subplots(figsize=(8, 4))
+    for snap, label, color in ((snap_before, "before calibration", "tab:blue"),
+                               (snap_after, "after calibration", "tab:orange")):
+        f, p = psd(snap["pa_out"], fs)
+        # padpd psd() is peak-normalized; before cal the peak is the LO-leak
+        # spike, which would shift the whole curve down and fake the
+        # adjacent-channel comparison.  Re-reference each curve to its
+        # in-band median so shoulders compare and the leak spike shows
+        # above 0 dB.
+        inband = np.abs(f) < 0.4 * bw
+        p = p - np.median(p[inband])
+        ax.plot(f / 1e6, p, lw=0.9, label=label, color=color)
+    try:
+        mask = default_wifi_mask(bw)
+        _, _, mask_db = check_mask(f, p, mask)
+        ax.plot(f / 1e6, mask_db, "k--", lw=1.0, label="spectral mask")
+    except Exception:
+        pass
+    ax.set_xlabel("Frequency [MHz]")
+    ax.set_ylabel("PSD [dB]")
+    ax.set_title("PA output spectrum")
+    ax.set_ylim(-90, 5)
+    ax.legend(fontsize=8)
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    return fig
+
+
 def fig_agc_sweep(rows, target_dbm: float, title: str):
     p_in = [r["p_in_dbm"] for r in rows]
     landed = [r["adc_in_dbm"] for r in rows]

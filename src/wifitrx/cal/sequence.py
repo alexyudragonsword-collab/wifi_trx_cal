@@ -86,18 +86,40 @@ def tx_evm(tx: TxChain, cfg: OFDMConfig, drive_scale: float = 0.15,
     return evm(syms, wf.tx_symbols, equalize="per_tone").db
 
 
-def loopback_evm(tx: TxChain, rx: RxChain, path: LoopbackPath,
-                 cfg: OFDMConfig, drive_scale: float = 0.25,
-                 seed: int = 0) -> float:
-    """End-to-end loopback EVM (per-tone EQ + CPE removal, modem-style)."""
+def _equalize_per_tone(syms: np.ndarray, ref: np.ndarray) -> np.ndarray:
+    """Apply the modem-style per-tone LS equalizer (for constellation plots;
+    the EVM metric does its own equalization internally)."""
+    g = (np.sum(np.conj(ref) * syms, axis=0)
+         / np.maximum(np.sum(np.abs(ref) ** 2, axis=0), 1e-30))
+    return syms / np.where(np.abs(g) > 1e-12, g, 1.0)
+
+
+def loopback_snapshot(tx: TxChain, rx: RxChain, path: LoopbackPath,
+                      cfg: OFDMConfig, drive_scale: float = 0.25,
+                      seed: int = 0) -> dict:
+    """Loopback EVM plus the raw material for before/after figures:
+    equalized constellation symbols and the PA-output waveform."""
     wf = generate_ofdm(cfg)
     x = wf.x * drive_scale
     agc_for_loopback(tx, rx, path, x)
+    y_pa = tx(x)
     cap = capture_aligned(tx, rx, path, x, seed=seed)
     g = np.vdot(x, cap) / np.vdot(x, x)
     syms = demodulate_ofdm(cap / g / drive_scale, wf)
     syms = correct_cpe(syms, wf.tx_symbols)
-    return evm(syms, wf.tx_symbols, equalize="per_tone").db
+    evm_db = evm(syms, wf.tx_symbols, equalize="per_tone").db
+    return {"evm_db": evm_db,
+            "syms_eq": _equalize_per_tone(syms, wf.tx_symbols),
+            "ref_syms": wf.tx_symbols,
+            "pa_out": y_pa, "fs": tx.fs,
+            "bandwidth_hz": cfg.bandwidth_hz}
+
+
+def loopback_evm(tx: TxChain, rx: RxChain, path: LoopbackPath,
+                 cfg: OFDMConfig, drive_scale: float = 0.25,
+                 seed: int = 0) -> float:
+    """End-to-end loopback EVM (per-tone EQ + CPE removal, modem-style)."""
+    return loopback_snapshot(tx, rx, path, cfg, drive_scale, seed)["evm_db"]
 
 
 def measure_loopback_delay(tx: TxChain, rx: RxChain, path: LoopbackPath,
@@ -154,8 +176,9 @@ def run_full_cal(tx: TxChain, rx: RxChain, cfg: OFDMConfig,
     prof = PROFILES[profile]
     results: list[CalResult] = []
 
-    evm_before = loopback_evm(tx, rx, path, cfg, drive_scale=final_drive_scale,
-                              seed=seed)
+    snap_before = loopback_snapshot(tx, rx, path, cfg,
+                                    drive_scale=final_drive_scale, seed=seed)
+    evm_before = snap_before["evm_db"]
 
     # 1. LPF corners
     results.append(calibrate_lpf_corner_tx(tx, n=prof["n_scalar"],
@@ -216,8 +239,9 @@ def run_full_cal(tx: TxChain, rx: RxChain, cfg: OFDMConfig,
     results.append(calibrate_agc(
         rx, p_in_range_dbm=np.arange(-85.0, -5.0, prof["agc_step_db"])))
 
-    evm_after = loopback_evm(tx, rx, path, cfg, drive_scale=final_drive_scale,
-                             seed=seed)
+    snap_after = loopback_snapshot(tx, rx, path, cfg,
+                                   drive_scale=final_drive_scale, seed=seed)
+    evm_after = snap_after["evm_db"]
     total_samples = sum(r.cost.get("samples", 0) for r in results)
     total_captures = sum(r.cost.get("captures", 0) for r in results)
     results.append(CalResult(
@@ -232,5 +256,7 @@ def run_full_cal(tx: TxChain, rx: RxChain, cfg: OFDMConfig,
         notes="evm_db: composite TX+RX loopback EVM; tx_evm_db: PA-output "
               "EVM at the 802.11be TX spec measurement point (per-tone EQ "
               f"+ CPE removal in both); profile={profile}",
+        artifacts={"snapshot_before": snap_before,
+                   "snapshot_after": snap_after},
     ))
     return results

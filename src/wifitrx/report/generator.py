@@ -96,6 +96,12 @@ def _figures_for(res: CalResult, figdir: Path, prefix: str) -> list[str]:
         save(figures.fig_agc_sweep(res.trace,
                                    res.estimated.get("target_adc_dbm", 0.0),
                                    "AGC sweep"), "sweep")
+    elif res.name == "final_loopback_evm" and res.artifacts:
+        sb = res.artifacts.get("snapshot_before")
+        sa = res.artifacts.get("snapshot_after")
+        if sb and sa:
+            save(figures.fig_constellation_compare(sb, sa), "constellation")
+            save(figures.fig_psd_compare(sb, sa), "psd")
     return paths
 
 
