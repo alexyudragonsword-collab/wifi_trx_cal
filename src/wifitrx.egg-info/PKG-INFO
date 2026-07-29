@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: wifitrx
+Version: 0.1.0
+Summary: WiFi 7 direct-conversion IQ transceiver behavioral model and calibration suite (320 MHz)
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: numpy>=1.23
+Requires-Dist: scipy>=1.9
+Requires-Dist: matplotlib>=3.6
+Provides-Extra: test
+Requires-Dist: pytest>=7; extra == "test"
