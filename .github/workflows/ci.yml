@@ -21,7 +21,7 @@ jobs:
           python-version: "3.11"
       - name: Qt offscreen system libraries
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libegl1 libgl1 libglib2.0-0 libxkbcommon0
-      - run: pip install -e .[test,gui]
+      - run: pip install -e .[test,gui,docs]
       - name: fast lane (guards + unit + GUI offscreen)
         run: QT_QPA_PLATFORM=offscreen python -m pytest tests/ -m "not slow" -q
 
@@ -35,6 +35,6 @@ jobs:
           python-version: "3.11"
       - name: Qt offscreen system libraries
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libegl1 libgl1 libglib2.0-0 libxkbcommon0
-      - run: pip install -e .[test,gui]
+      - run: pip install -e .[test,gui,docs]
       - name: full suite (slow included)
         run: QT_QPA_PLATFORM=offscreen python -m pytest tests/ -q

@@ -17,6 +17,7 @@ dependencies = [
 [project.optional-dependencies]
 test = ["pytest>=7"]
 gui = ["PySide6>=6.6"]
+docs = ["schemdraw>=0.20"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
