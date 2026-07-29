@@ -126,8 +126,9 @@ class FreqDepIQImbalance:
             return np.asarray(x, dtype=complex)
         x = np.asarray(x, dtype=complex)
         h_i, h_q = self.rail_firs(fs)
-        i_f = np.convolve(x.real, h_i, mode="same") if h_i.size > 1 else x.real
-        q_f = np.convolve(x.imag, h_q, mode="same") if h_q.size > 1 else x.imag
+        from ..dsp import conv_same
+        i_f = conv_same(x.real, h_i) if h_i.size > 1 else x.real
+        q_f = conv_same(x.imag, h_q) if h_q.size > 1 else x.imag
         a, b = self._combiner()
         return a * i_f + b * q_f
 

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..dsp import conv_same
 from ..pa.reference_pa import ReferencePA
 from ..pa.saleh import SalehPA
 from ..pa.scaled import ScaledPA
@@ -31,9 +32,9 @@ def apply_widely_linear(x: np.ndarray, w1: np.ndarray | None,
     x = np.asarray(x, dtype=complex)
     if w1 is None and w2 is None:
         return x
-    y = np.convolve(x, np.atleast_1d(w1), mode="same") if w1 is not None else x
+    y = conv_same(x, w1) if w1 is not None else x
     if w2 is not None:
-        y = y + np.convolve(np.conj(x), np.atleast_1d(w2), mode="same")
+        y = y + conv_same(np.conj(x), w2)
     return y
 
 

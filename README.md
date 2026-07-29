@@ -22,6 +22,17 @@ python examples/run_external_waveform.py --iq your_wave.npy --bw 320e6 --fs 1.28
 
 # 链路预算 / MCS 灵敏度 / EVM 预算
 python examples/run_link_budget.py --bw 320e6
+
+# 第二期:PA 温漂跟踪 DPD / 阻塞与脏信道 / MIMO 2x2 / Monte-Carlo 良率
+python examples/run_pa_drift_tracking.py
+python examples/run_blocker_study.py
+python examples/run_mimo_2x2.py
+python examples/run_yield.py --runs 20
+
+# GUI 工作台 (pip install -e .[gui])
+python app/main.py
+
+# CI: scripts/ci_fast.sh (快速门禁) / scripts/ci_nightly.sh (全量+示例)
 ```
 
 ## 模型覆盖的损伤
