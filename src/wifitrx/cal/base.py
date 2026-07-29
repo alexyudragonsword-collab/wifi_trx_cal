@@ -38,6 +38,7 @@ class CalResult:
         return {
             "name": self.name,
             "estimated": _jsonable(self.estimated),
+            "corrections": _jsonable(self.corrections),
             "metrics_before": _jsonable(self.metrics_before),
             "metrics_after": _jsonable(self.metrics_after),
             "passed": None if self.passed is None else bool(self.passed),

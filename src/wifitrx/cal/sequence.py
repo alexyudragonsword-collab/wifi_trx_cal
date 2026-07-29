@@ -35,6 +35,7 @@ from ..metrics.cpe import correct_cpe
 from ..waveform.ofdm import OFDMConfig, demodulate_ofdm, generate_ofdm
 from .agc_cal import calibrate_agc
 from .base import CalResult
+from .deps import planned_steps, validate_order
 from .dpd_cal import calibrate_dpd
 from .group_delay import verify_gd_estimate
 from .lpf_corner import calibrate_lpf_corner_rx, calibrate_lpf_corner_tx
@@ -174,6 +175,12 @@ def run_full_cal(tx: TxChain, rx: RxChain, cfg: OFDMConfig,
     if path is None:
         path = LoopbackPath(atten_db=40.0, delay_ns=6.0)
     prof = PROFILES[profile]
+    # Validate the ordering constraints on the *plan*, before the first
+    # capture: a mis-ordered calibration converges on a wrong answer
+    # instead of failing, so runtime is too late to notice.
+    plan = planned_steps(prof, with_iip2=rx.params.im2.enabled,
+                         with_dpd=with_dpd)
+    validate_order(plan)
     results: list[CalResult] = []
 
     snap_before = loopback_snapshot(tx, rx, path, cfg,
@@ -259,4 +266,9 @@ def run_full_cal(tx: TxChain, rx: RxChain, cfg: OFDMConfig,
         artifacts={"snapshot_before": snap_before,
                    "snapshot_after": snap_after},
     ))
+    # The validated plan is only worth anything if it matches what actually
+    # ran — this assert is what keeps planned_steps from drifting away from
+    # the call sequence above.
+    executed = [r.name for r in results]
+    assert executed == plan, f"executed {executed} != planned {plan}"
     return results

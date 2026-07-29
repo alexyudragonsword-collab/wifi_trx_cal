@@ -201,6 +201,12 @@ class LOModel:
     def phase(self, n: int, fs: float, rng: np.random.Generator) -> np.ndarray:
         if not self.enabled:
             return np.zeros(n)
+        # synth + ipn_dbc below assume S_phi in rad^2/Hz; a NoiseSource
+        # carrying e.g. a V^2/Hz supply-noise PSD must not be silently
+        # synthesized as phase.
+        if self.profile.unit != "rad^2/Hz":
+            raise ValueError(
+                f"LOModel needs a rad^2/Hz profile, got {self.profile.unit!r}")
         phi = synth_from_psd(self.profile.psd, fs, n, rng)
         t = np.arange(n) / fs
         for f_off, dbc in zip(self.spur_offsets_hz, self.spur_dbc):
