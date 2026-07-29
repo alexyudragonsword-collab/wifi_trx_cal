@@ -36,6 +36,79 @@ def _fit_phase(freqs: np.ndarray, ratio: np.ndarray) -> tuple[float, float]:
     return intercept_deg, tau_s
 
 
+def measure_coupling_matrix(mimo: MimoTrx, path: LoopbackPath | None = None,
+                            n: int = 1 << 14, f_probe: float = 23e6,
+                            amp: float = 0.05, seed: int = 31) -> np.ndarray:
+    """Measured port-coupling matrix (diag-normalized).
+
+    Chain i transmits alone; every antenna port j is observed through the
+    common reference RX_0, so the RX response cancels in the ratio
+    C[j,i] = port_j / port_i.  Run AFTER mimo_align (the TX chains are
+    then phase/delay matched, so C describes the coupling itself).
+    """
+    from ..waveform.stimuli import single_tone
+    if path is None:
+        path = LoopbackPath(atten_db=40.0, delay_ns=6.0)
+    n_ch = mimo.params.n_chains
+    tone = single_tone(f_probe, mimo.fs, n, amp=amp)
+    mimo.rxs[0].agc(power_dbm(mimo.txs[0](tone)) - path.atten_db)
+    c = np.zeros((n_ch, n_ch), dtype=complex)
+    for i in range(n_ch):
+        x_mat = np.zeros((n_ch, n), dtype=complex)
+        x_mat[i] = tone
+        refs = {}
+        for j in range(n_ch):
+            cap = mimo.port_capture(j, x_mat, path, seed=seed)
+            refs[j] = bin_value(cap, f_probe, mimo.fs)
+        for j in range(n_ch):
+            c[j, i] = refs[j] / refs[i]
+    return c
+
+
+def calibrate_mimo_decouple(mimo: MimoTrx, path: LoopbackPath | None = None,
+                            n: int = 1 << 14, seed: int = 31) -> CalResult:
+    """Digital decoupling precoder W = C^-1 from the measured coupling."""
+    c_meas = measure_coupling_matrix(mimo, path, n=n, seed=seed)
+    before_xtalk = _worst_crosstalk_db(mimo, path, n, seed)
+    mimo.precoder = np.linalg.inv(c_meas)
+    after_xtalk = _worst_crosstalk_db(mimo, path, n, seed + 1)
+    return CalResult(
+        name="mimo_decouple",
+        estimated={"coupling_matrix": c_meas},
+        corrections={"precoder": mimo.precoder},
+        metrics_before={"worst_crosstalk_db": before_xtalk},
+        metrics_after={"worst_crosstalk_db": after_xtalk},
+        passed=after_xtalk < -45.0,
+        cost={"captures": 2 * mimo.params.n_chains ** 2,
+              "samples": 2 * mimo.params.n_chains ** 2 * n},
+    )
+
+
+def _worst_crosstalk_db(mimo: MimoTrx, path: LoopbackPath | None,
+                        n: int, seed: int) -> float:
+    """Worst port-to-port leakage with one stream active at a time."""
+    from ..waveform.stimuli import single_tone
+    n_ch = mimo.params.n_chains
+    tone = single_tone(23e6, mimo.fs, n, amp=0.05)
+    worst = -np.inf
+    for i in range(n_ch):
+        x_mat = np.zeros((n_ch, n), dtype=complex)
+        x_mat[i] = tone
+        own = None
+        for j in range(n_ch):
+            cap = mimo.port_capture(j, x_mat, path, seed=seed)
+            v = abs(bin_value(cap, 23e6, mimo.fs))
+            if j == i:
+                own = v
+        for j in range(n_ch):
+            if j == i:
+                continue
+            cap = mimo.port_capture(j, x_mat, path, seed=seed)
+            v = abs(bin_value(cap, 23e6, mimo.fs))
+            worst = max(worst, 20 * np.log10(v / own))
+    return float(worst)
+
+
 def calibrate_mimo_align(mimo: MimoTrx, path: LoopbackPath | None = None,
                          n: int = 1 << 14, n_tones: int = 8,
                          amp: float = 0.04, seed: int = 21) -> CalResult:
