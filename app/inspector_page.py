@@ -70,10 +70,12 @@ def fixed_table(rows: list[dict], columns: list[str]) -> QTableWidget:
     for r, row in enumerate(rows):
         for c, key in enumerate(columns):
             item = QTableWidgetItem(_fmt(row.get(key, "")))
-            # canonical scoped-enum spellings only: the legacy shortcuts
-            # (Qt.AlignRight, QTableWidget.EditTriggers()) go through
-            # shiboken's forgiving attribute lookup, which is exactly the
-            # kind of dynamic path a Nuitka-compiled build can miss
+            # No zero-arg flag constructions here: under Nuitka
+            # compilation QTableWidget.EditTriggers() raises
+            # "EnumType.__call__() missing 1 required positional
+            # argument" while working interpreted (proven by a compiled
+            # A/B probe) — it aborted this function mid-render and left
+            # the Windows exe showing findings but no tables.
             item.setTextAlignment(Qt.AlignmentFlag.AlignRight
                                   | Qt.AlignmentFlag.AlignVCenter)
             item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
