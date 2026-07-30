@@ -36,21 +36,31 @@ class OFDMConfig:
     oversampling: int = 4
     cp_fraction: float = 1 / 16  # 0.8 us GI over 12.8 us symbol
     window_fraction: float = 1 / 32  # raised-cosine edge, 0.4 us default
+    # 78.125 kHz = 802.11ax/be numerology (12.8 us symbol); legacy
+    # 802.11a/n/ac uses 312.5 kHz (3.2 us symbol, cp_fraction 1/4 for the
+    # 0.8 us long GI, 1/8 for the 0.4 us short GI)
+    subcarrier_spacing_hz: float = SUBCARRIER_SPACING_HZ
     seed: int | None = 0
 
     @property
     def fft_size(self) -> int:
-        n = self.bandwidth_hz / SUBCARRIER_SPACING_HZ
+        n = self.bandwidth_hz / self.subcarrier_spacing_hz
         if abs(n - round(n)) > 1e-9:
-            raise ValueError("bandwidth must be a multiple of 78.125 kHz")
+            raise ValueError(
+                "bandwidth must be a multiple of the subcarrier spacing")
         return int(round(n))
 
     @property
     def n_active(self) -> int:
-        if self.bandwidth_hz in _ACTIVE_TONES:
+        # the per-bandwidth table is 802.11ax/be numerology; legacy
+        # spacings size occupancy from the FFT instead (11a/n/ac 20 MHz:
+        # 52 of 64 tones -> 0.41 per side)
+        if (self.subcarrier_spacing_hz == SUBCARRIER_SPACING_HZ
+                and self.bandwidth_hz in _ACTIVE_TONES):
             return _ACTIVE_TONES[self.bandwidth_hz]
-        # Fallback for non-standard bandwidths: ~94% occupancy, even count.
-        return 2 * int(0.47 * self.fft_size)
+        frac = 0.47 if self.subcarrier_spacing_hz == SUBCARRIER_SPACING_HZ \
+            else 0.41
+        return 2 * int(frac * self.fft_size)
 
     @property
     def cp_len(self) -> int:

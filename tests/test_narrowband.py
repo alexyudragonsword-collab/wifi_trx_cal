@@ -62,3 +62,71 @@ def test_20mhz_full_cal_reaches_spec():
     # the 3x corner policy lands ~-41
     assert r.metrics["tx_evm_db"] <= -40.0, r.metrics
     assert r.metrics["loopback_evm_db"] <= -37.0, r.metrics
+
+
+# --------------------------------------------------- legacy 11ac numerology
+def _lpf_only_evm(cfg, ratio):
+    from wifitrx.cal.sequence import tx_evm
+    from wifitrx.chain import TxChain, TxParams
+    from wifitrx.impairments.analog_filter import TunableLPF
+    from wifitrx.impairments.converters import DACParams
+    from wifitrx.impairments.iq_imbalance import FreqDepIQImbalance
+    from wifitrx.impairments.phase_noise import LOModel
+    bw = cfg.bandwidth_hz
+    p = TxParams(bandwidth_hz=bw, dac=DACParams(enabled=False),
+                 lpf=TunableLPF(fc_nominal_hz=bw / 2 * ratio),
+                 iq=FreqDepIQImbalance(enabled=False), lo_leak_dbm=None,
+                 lo=LOModel(enabled=False), pa_enabled=False)
+    return tx_evm(TxChain(p, cfg.sample_rate_hz), cfg, drive_scale=0.12)
+
+
+def test_wifi5_numerology_properties():
+    from wifitrx.waveform import OFDMConfig
+    cfg = OFDMConfig(bandwidth_hz=20e6, subcarrier_spacing_hz=312.5e3,
+                     cp_fraction=1 / 4, n_symbols=4)
+    assert cfg.fft_size == 64
+    assert cfg.n_active == 52          # 11a/n/ac 20 MHz occupancy
+    assert cfg.cp_len == 16            # 0.8 us long GI at 20 MHz
+    assert OFDMConfig(bandwidth_hz=20e6, subcarrier_spacing_hz=312.5e3,
+                      cp_fraction=1 / 8, n_symbols=4).cp_len == 8
+    # 11ax table untouched by the numerology parameter
+    assert OFDMConfig(bandwidth_hz=20e6, n_symbols=4).n_active == 242
+
+
+def test_wifi5_lpf_floor_beats_wifi7_at_same_corner():
+    """Counterintuitive but measured: at the same corner the legacy
+    numerology suffers LESS from the LPF — its 52-tone occupancy stops at
+    0.81×BW/2 (away from the dispersive corner region) and its window is
+    proportionally shorter, leaving more absolute GI margin; both beat
+    the 4× shorter symbol's larger relative ISI cost."""
+    from wifitrx.waveform import OFDMConfig
+    bw = 20e6
+    ax = OFDMConfig(bandwidth_hz=bw, qam_order=1024, n_symbols=6,
+                    oversampling=4)
+    ac = OFDMConfig(bandwidth_hz=bw, qam_order=256, n_symbols=12,
+                    oversampling=4, subcarrier_spacing_hz=312.5e3,
+                    cp_fraction=1 / 4)
+    evm_ax = _lpf_only_evm(ax, 1.3)
+    evm_ac = _lpf_only_evm(ac, 1.3)
+    assert evm_ac < evm_ax - 3.0, (evm_ac, evm_ax)
+
+
+@pytest.mark.slow
+def test_wifi5_20mhz_full_cal():
+    """802.11ac 20 MHz long-GI end to end under the 3x corner policy."""
+    from specs import _chains
+    from wifitrx.cal.sequence import run_full_cal
+    from wifitrx.chain import LoopbackPath
+    from wifitrx.waveform import OFDMConfig
+
+    cfg = OFDMConfig(bandwidth_hz=20e6, qam_order=256, n_symbols=24,
+                     oversampling=4, subcarrier_spacing_hz=312.5e3,
+                     cp_fraction=1 / 4)
+    tx, rx = _chains(20e6, 5, cfg.sample_rate_hz)
+    res = run_full_cal(tx, rx, cfg, LoopbackPath(atten_db=40.0, delay_ns=6.0),
+                       with_dpd=True)
+    final = {r.name: r for r in res}["final_loopback_evm"]
+    for r in res:
+        assert r.passed in (True, None), (r.name, r.metrics_after)
+    # 11ac MCS9 (256-QAM 5/6) needs -32 dB; we land ~-44
+    assert final.metrics_after["tx_evm_db"] <= -40.0, final.metrics_after
