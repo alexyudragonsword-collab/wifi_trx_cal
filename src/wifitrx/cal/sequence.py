@@ -112,19 +112,24 @@ def loopback_snapshot(tx: TxChain, rx: RxChain, path: LoopbackPath,
                       cfg: OFDMConfig, drive_scale: float = 0.25,
                       seed: int = 0) -> dict:
     """Loopback EVM plus the raw material for before/after figures:
-    equalized constellation symbols and the PA-output waveform."""
-    wf = generate_ofdm(cfg)
+    equalized constellation symbols and the PA-output waveform.
+
+    Transmits one extra padding symbol and scores interior symbols only,
+    like ``tx_evm`` (the burst's final symbol is edge-contaminated once
+    delay compensation advances its FFT window past the burst end)."""
+    wf = generate_ofdm(replace(cfg, n_symbols=cfg.n_symbols + 1))
     x = wf.x * drive_scale
     agc_for_loopback(tx, rx, path, x)
     y_pa = tx(x)
     cap = capture_aligned(tx, rx, path, x, seed=seed)
     g = np.vdot(x, cap) / np.vdot(x, x)
-    syms = demodulate_ofdm(cap / g / drive_scale, wf)
-    syms = correct_cpe(syms, wf.tx_symbols)
-    evm_db = evm(syms, wf.tx_symbols, equalize="per_tone").db
+    syms = demodulate_ofdm(cap / g / drive_scale, wf)[: cfg.n_symbols]
+    ref = wf.tx_symbols[: cfg.n_symbols]
+    syms = correct_cpe(syms, ref)
+    evm_db = evm(syms, ref, equalize="per_tone").db
     return {"evm_db": evm_db,
-            "syms_eq": _equalize_per_tone(syms, wf.tx_symbols),
-            "ref_syms": wf.tx_symbols,
+            "syms_eq": _equalize_per_tone(syms, ref),
+            "ref_syms": ref,
             "pa_out": y_pa, "fs": tx.fs,
             "bandwidth_hz": cfg.bandwidth_hz}
 

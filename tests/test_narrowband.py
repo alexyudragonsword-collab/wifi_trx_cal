@@ -17,12 +17,15 @@ Found via an anomalous GUI run: 20 MHz calibrated to only −32 dB while
    advances the final symbol's FFT window a few samples past the burst
    end, where the truncated window ramp-down makes the continuation
    unrepresentative — >8 dB of bias on deep floors at small n_symbols.
-   ``tx_evm`` now transmits one padding symbol and scores interior
-   symbols only (lab practice).
-4. ``recommended_lpf_corner_hz`` still relaxes narrow modes to 3×: the
-   true TX LPF-only floor improves −55 → −76 dB (1.3× → 3×) and the
-   relaxed RX corner buys ~10 dB of loopback EVM — real margin, though
-   not the cliff the artifact once suggested.
+   ``tx_evm``/``loopback_snapshot`` now transmit one padding symbol and
+   score interior symbols only (lab practice).
+4. With artifact-free meters the corner ratios are UNIFORM across
+   modes (1.3× TX / 1.12× RX): the true 20 MHz single-LPF floors are
+   −55 / −50 dB — 12+ dB below the ~−42 dB the calibrated chain
+   reaches, meeting even 4096-QAM's −38 dB.  A briefly-adopted 3×
+   narrow-mode policy was reverted: it bought only unconsumed margin
+   while collapsing analog adjacent-channel rejection (~25 → ~0 dB at
+   +20 MHz) onto the ADC's dynamic range.
 """
 from __future__ import annotations
 
@@ -37,13 +40,16 @@ from wifitrx.chain.params import recommended_lpf_corner_hz  # noqa: E402
 from wifitrx.waveform.stimuli import scaled_probe  # noqa: E402
 
 
-def test_corner_policy_flips_with_mode():
-    # wide: DPD-bandwidth tight corner (insight #2)
+def test_corner_policy_uniform_across_modes():
+    # TX: DPD-bandwidth corner (insight #2); RX: channel selection.
+    # The ratio does NOT relax for narrow modes — a 3x narrow policy
+    # was measured to trade analog adjacent-channel rejection for EVM
+    # margin nothing consumes (see module docstring, point 4).
     assert recommended_lpf_corner_hz(320e6, "tx") == pytest.approx(208e6)
     assert recommended_lpf_corner_hz(80e6, "tx") == pytest.approx(52e6)
-    # narrow: relaxed corner (insight #5) — MORE than the wide ratio
-    assert recommended_lpf_corner_hz(20e6, "tx") == pytest.approx(30e6)
-    assert recommended_lpf_corner_hz(40e6, "rx") == pytest.approx(60e6)
+    assert recommended_lpf_corner_hz(20e6, "tx") == pytest.approx(13e6)
+    assert recommended_lpf_corner_hz(20e6, "rx") == pytest.approx(11.2e6)
+    assert recommended_lpf_corner_hz(40e6, "rx") == pytest.approx(22.4e6)
 
 
 def test_probes_stay_inside_the_channel():
@@ -71,10 +77,11 @@ def test_20mhz_full_cal_reaches_spec():
         assert res.passed in (True, None), (res.name, res.metrics_after)
     assert by["rx_iip2"].metrics_after["iip2_dbm"] > 60.0
     assert by["agc_sweep"].metrics_after["worst_landing_err_db"] < 2.5
-    # 1024-QAM needs ~-35 dB TX EVM; with in-channel probes and the
-    # delay-compensation fix this configuration lands ~-43/-53
-    assert r.metrics["tx_evm_db"] <= -41.0, r.metrics
-    assert r.metrics["loopback_evm_db"] <= -48.0, r.metrics
+    # 1024-QAM needs ~-35 dB TX EVM; with in-channel probes and
+    # artifact-free meters this configuration lands ~-41.7/-44.2 at
+    # the uniform 1.3x/1.12x corners
+    assert r.metrics["tx_evm_db"] <= -40.0, r.metrics
+    assert r.metrics["loopback_evm_db"] <= -42.0, r.metrics
 
 
 # --------------------------------------------------- legacy 11ac numerology
@@ -151,7 +158,7 @@ def test_compensate_delay_needs_guard_and_matches_roll():
 
 @pytest.mark.slow
 def test_wifi5_20mhz_full_cal():
-    """802.11ac 20 MHz long-GI end to end under the 3x corner policy."""
+    """802.11ac 20 MHz long-GI end to end at the uniform corner ratios."""
     from specs import _chains
     from wifitrx.cal.sequence import run_full_cal
     from wifitrx.chain import LoopbackPath
@@ -166,5 +173,5 @@ def test_wifi5_20mhz_full_cal():
     final = {r.name: r for r in res}["final_loopback_evm"]
     for r in res:
         assert r.passed in (True, None), (r.name, r.metrics_after)
-    # 11ac MCS9 (256-QAM 5/6) needs -32 dB; we land ~-44/-56 (tx/loopback)
+    # 11ac MCS9 (256-QAM 5/6) needs -32 dB; we land ~-42.6/-44.7
     assert final.metrics_after["tx_evm_db"] <= -40.0, final.metrics_after

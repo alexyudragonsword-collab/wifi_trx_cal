@@ -21,25 +21,24 @@ from .agc import DEFAULT_LNA_STATES, LNAState
 
 
 def recommended_lpf_corner_hz(bandwidth_hz: float, role: str = "tx") -> float:
-    """Per-mode channel-select corner (design insights #2 and #5).
+    """Channel-select corner, uniform across modes (insights #2 and #5).
 
-    Wide modes (>= 80 MHz) need a corner >= 1.3x BW/2 on TX so the DPD
-    pre-distortion spectrum survives (insight #2).  Narrow modes relax
-    the ratio: with fs >> BW anti-aliasing costs nothing, and a wider
-    corner shortens the filter ringing relative to the fixed 0.8 us
-    guard interval, lowering the residual ISI floor (insight #5;
-    measured TX LPF-only floor at 20 MHz, 5th order: 1.3x -55 /
-    2.0x -66 / 3x -76 dB, and the relaxed RX corner is worth ~10 dB of
-    loopback EVM end to end).  This is margin, not a cliff: an early
-    "-33 dB floor at 1.3x" reading was a measurement artifact of the
-    test-receiver model's circular delay compensation (fixed in
-    cal.sync.compensate_delay plus interior-symbol scoring in tx_evm),
-    not the filter.
+    TX needs >= 1.3x BW/2 so the DPD pre-distortion spectrum survives
+    (insight #2); RX runs 1.12x for channel selection.  The same ratios
+    hold at every bandwidth: the measured single-LPF ISI floor at
+    20 MHz (5th order, artifact-free meter) is -55 dB at 1.3x and
+    -50 dB at 1.12x — 12+ dB below the ~-42 dB the calibrated chain
+    actually reaches, meeting even 4096-QAM's -38 dB with margin.
+
+    Narrow modes must NOT relax the ratio (a briefly-adopted 3x policy
+    is documented in insight #5/#6 history): relaxing 20 MHz RX to 3x
+    would buy only ~1.5 dB of TX EVM and ~11 dB of loopback-observation
+    floor — margin nothing consumes — while collapsing the analog
+    adjacent-channel rejection from ~25 dB to ~0 dB and dumping the
+    blocker onto ADC dynamic range.  The EVM metric does not price
+    blockers; the corner spec must.
     """
-    if bandwidth_hz >= 80e6:
-        ratio = 1.3 if role == "tx" else 1.12
-    else:
-        ratio = 3.0
+    ratio = 1.3 if role == "tx" else 1.12
     return bandwidth_hz / 2 * ratio
 
 
