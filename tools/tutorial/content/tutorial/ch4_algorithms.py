@@ -230,14 +230,21 @@ CHAPTER = Chapter(
                   "amplitude is ~linear in the trim code, so IM2 "
                   "<em>power</em> is a parabola in the code — three-point "
                   "fit plus a trust-region iteration finds the null."),
-                T("<b>两个必须知道的陷阱</b>(都是被真实调试逼出来的):"
+                T("<b>三个必须知道的陷阱</b>(都是被真实调试逼出来的):"
                   "① 必须排在 TX LO 泄漏校准<em>之后</em>——PA 三阶积 "
                   "$f_2\\times leak \\times f_1^*$ 恰好落在 $f_2-f_1$ 测量 "
                   "bin 上,未校的载波泄漏能把 IM2 null 埋掉 ~35 dB;"
                   "② 量化器杂散会污染弱 IM2 读数,用<em>相位随机化相干平均</em>"
                   "(每次捕获给双音一个随机公共相位,IM2 bin 相干、杂散非相干)"
-                  "压掉。",
-                  "<b>Two traps you must know</b> (both earned in real "
+                  "压掉;③ 相位随机化救不了 <em>TX 侧的偶阶失真</em>——DAC "
+                  "对双音的二阶积同样落在 $f_2-f_1$ 且与音对相位差相干,这个"
+                  "随信道透传的背景与 trim 码无关,会把 null 填平甚至推歪"
+                  "(320 MHz 下整个码域只剩 ~1 dB 起伏)。解法是<em>双电平"
+                  "分离</em>:每个码在两个相差 6 dB 的耦合衰减下各测一次,"
+                  "线性信道(音与 TX 背景一起)按音调 bin 复比值 $g$ 归一化后"
+                  "相减 $beat_{lo}-g\\,beat_{hi}$,只留下本地混频器 IM2——"
+                  "真实硅片上激励源自身 IP2 不可信时用的同一招。",
+                  "<b>Three traps you must know</b> (all earned in real "
                   "debugging): ① it must run <em>after</em> the TX LO-leak "
                   "cal — the PA's third-order product "
                   "$f_2\\times leak \\times f_1^*$ lands exactly on the "
@@ -246,7 +253,21 @@ CHAPTER = Chapter(
                   "pollute weak IM2 readings — suppressed by "
                   "<em>phase-randomized coherent averaging</em> (each "
                   "capture gives the tone pair a random common phase: the "
-                  "IM2 bin adds coherently, the spurs don't)."),
+                  "IM2 bin adds coherently, the spurs don't); ③ phase "
+                  "randomization cannot save you from <em>TX-side "
+                  "even-order distortion</em> — the DAC's second-order "
+                  "product of the tone pair lands on the same $f_2-f_1$ "
+                  "bin, coherent with the tone phase difference. That "
+                  "transmitted, code-independent background flattens or "
+                  "tilts the null (at 320 MHz the whole code range showed "
+                  "~1 dB of ripple). The cure is <em>two-level "
+                  "separation</em>: measure each code at two coupler "
+                  "attenuations 6 dB apart and subtract after normalizing "
+                  "by the complex tone-bin ratio $g$ "
+                  "($beat_{lo}-g\\,beat_{hi}$) — the linear channel (tones "
+                  "and TX background alike) cancels, leaving only the "
+                  "local mixer IM2. The same trick real silicon uses when "
+                  "the cal source's own IP2 cannot be trusted."),
                 Fig(id="fig-iip2", build=figures.iip2_trace,
                     caption=T("trim 码搜索轨迹(有效 IIP2)",
                               "Trim-code search trace (effective IIP2)")),

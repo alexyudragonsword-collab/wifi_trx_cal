@@ -11,14 +11,22 @@ CHAPTER = Chapter(
             body=(
                 T("<b>① 4096-QAM 必须配低相噪综合器。</b>IPN ≈ −38 dBc 的 LO "
                   "单独就吃掉整个 −38 dB EVM 预算——CPE 去除救不了子载波间"
-                  "相噪;需要 −43 dBc 量级(≈0.4° rms)。这是给 PLL 组的"
-                  "硬指标,不是仿真参数偏好。",
+                  "相噪;需要 −43 dBc 量级。模型默认剖面按 PLL 组的抖动"
+                  "指标锚定:120 fs rms(10 kHz–100 MHz 积分,6 GHz 载频,"
+                  "IPN −46.9 dBc,0.26° rms)。积分下限取 10 kHz 是 CPE "
+                  "给的松绑——更近端的 frac-N 噪声被逐符号公共相位去除"
+                  "赦免。这是给 PLL 组的硬指标,不是仿真参数偏好。",
                   "<b>① 4096-QAM demands a low-phase-noise synthesizer.</b> "
                   "An LO at IPN ≈ −38 dBc alone consumes the entire −38 dB "
                   "EVM budget — CPE removal does not rescue "
-                  "inter-subcarrier phase noise; a −43 dBc class "
-                  "(≈0.4° rms) is required. A hard requirement for the PLL "
-                  "team, not a simulation preference."),
+                  "inter-subcarrier phase noise; a −43 dBc class is "
+                  "required. The default profile is anchored to the PLL "
+                  "team's jitter target: 120 fs rms (integrated "
+                  "10 kHz–100 MHz at the 6 GHz carrier; IPN −46.9 dBc, "
+                  "0.26° rms). The 10 kHz lower integration bound is "
+                  "CPE's gift — closer-in fractional-N noise is absolved "
+                  "by per-symbol common-phase removal. A hard requirement "
+                  "for the PLL team, not a simulation preference."),
                 T("<b>② 320 MHz 模式的 TX 基带 LPF 必须比信道宽"
                   "(≥1.3×BW/2)。</b>DPD 预失真频谱比信号宽;corner 贴着"
                   "信道边沿会把校正剥掉,PA 残余 EVM 卡在 −39 dB 附近,"

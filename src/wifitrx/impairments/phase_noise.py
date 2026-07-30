@@ -172,13 +172,14 @@ def rms_jitter_fs(f: np.ndarray, s_phi: np.ndarray, f0: float,
 # ------------------------------------------------------------------ LO model
 # Default WiFi 7 fractional-N synthesizer closed-loop profile (offset, dBc/Hz):
 # in-band plateau, mild loop peaking near 200 kHz, VCO roll-off, far-out
-# floor.  Integrated phase noise ~ -43 dBc (10 kHz - 100 MHz, ~0.4 deg rms):
+# floor.  Anchored to the PLL team's jitter target: 120 fs rms integrated
+# 10 kHz - 100 MHz at the 6 GHz carrier (IPN -46.9 dBc, 0.26 deg rms) —
 # the low-IPN synthesizer class that 4096-QAM (MCS12/13, TX EVM <= -38 dB)
-# genuinely requires — a -38 dBc LO alone eats the whole EVM budget.
+# genuinely requires; a -38 dBc LO alone eats the whole EVM budget.
 DEFAULT_WIFI7_LO_PROFILE = TabulatedPhase(
     "wifi7_lo",
     f_pts=(1e4, 1e5, 2e5, 1e6, 1e7, 1e8),
-    l_dbc_pts=(-102.0, -102.0, -100.0, -114.0, -136.0, -152.0),
+    l_dbc_pts=(-104.1, -104.1, -102.1, -116.1, -138.1, -154.1),
 )
 
 
