@@ -24,14 +24,16 @@ def recommended_lpf_corner_hz(bandwidth_hz: float, role: str = "tx") -> float:
     """Per-mode channel-select corner (design insights #2 and #5).
 
     Wide modes (>= 80 MHz) need a corner >= 1.3x BW/2 on TX so the DPD
-    pre-distortion spectrum survives (insight #2).  Narrow modes must
-    RELAX the ratio instead: the WiFi guard interval is fixed in absolute
-    time (0.8 us) while the filter impulse response scales as 1/BW, so a
-    1.3x corner at 20 MHz rings ~1 us past the usable GI margin and
-    floors EVM near -33 dB — ISI that no per-tone equalizer can remove.
-    With fs >> BW in narrow modes, anti-aliasing costs nothing, so 3x is
-    free (insight #5, found by the 20 MHz GUI run; measured LPF-only
-    floor: 1.3x -33.3 / 2.5x -41.5 / 3x -47.2 dB).
+    pre-distortion spectrum survives (insight #2).  Narrow modes relax
+    the ratio: with fs >> BW anti-aliasing costs nothing, and a wider
+    corner shortens the filter ringing relative to the fixed 0.8 us
+    guard interval, lowering the residual ISI floor (insight #5;
+    measured TX LPF-only floor at 20 MHz, 5th order: 1.3x -53 /
+    2.0x -62 / 3x -69 dB, and the relaxed RX corner is worth ~10 dB of
+    loopback EVM end to end).  This is margin, not a cliff: an early
+    "-33 dB floor at 1.3x" reading was a measurement artifact of the
+    test-receiver model's circular delay compensation (fixed in
+    cal.sync.compensate_delay), not the filter.
     """
     if bandwidth_hz >= 80e6:
         ratio = 1.3 if role == "tx" else 1.12

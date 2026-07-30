@@ -7,7 +7,7 @@ CHAPTER = Chapter(
     id="ch7", title=T("7 设计洞察", "7 Design insights"),
     sections=(
         Section(
-            id="insights", title=T("7.1 模型换来的四条电路结论", "7.1 Four circuit conclusions the model paid for"),
+            id="insights", title=T("7.1 模型换来的电路结论", "7.1 Circuit conclusions the model paid for"),
             body=(
                 T("<b>① 4096-QAM 必须配低相噪综合器。</b>IPN ≈ −38 dBc 的 LO "
                   "单独就吃掉整个 −38 dB EVM 预算——CPE 去除救不了子载波间"
@@ -46,25 +46,51 @@ CHAPTER = Chapter(
                   "forget=0.995 means almost never forgetting — 20 dB of "
                   "lag after PA drift; block-level forget=0.4 is the same "
                   "physical time constant correctly rescaled."),
-                T("<b>⑤ 窄带模式的 LPF corner 比例必须放宽。</b>WiFi 保护间隔"
-                  "固定 0.8 µs 不随带宽变,滤波器冲激响应却随 1/BW 拉长:"
-                  "20 MHz 模式沿用 320 MHz 的 1.3×BW/2 紧 corner,振铃 ~1 µs "
-                  "吃穿 GI 余量,产生逐音均衡救不了的 ISI,EVM 钉死在 −33 dB "
-                  "附近;而窄带下 fs≫BW,抗混叠毫无压力,corner 放到 3× 是"
-                  "免费的。同理,校准激励频率必须随带宽缩放——23 MHz 探测音"
-                  "在 20 MHz 信道里是带外音,会让 IIP2 trim 在噪声上乱走。"
-                  "此条由 20 MHz GUI 运行的异常直接换来。",
-                  "<b>⑤ Narrow modes must relax the LPF corner ratio.</b> "
-                  "The WiFi guard interval is fixed at 0.8 µs regardless "
-                  "of bandwidth, but the filter impulse response scales as "
-                  "1/BW: reusing 320 MHz's tight 1.3×BW/2 corner at "
-                  "20 MHz rings ~1 µs past the usable GI margin, creating "
-                  "ISI no per-tone equalizer can remove and pinning EVM "
-                  "near −33 dB — while with fs≫BW anti-aliasing costs "
-                  "nothing, so 3× is free. Likewise calibration probe "
-                  "frequencies must scale with bandwidth — a 23 MHz tone "
-                  "is out-of-channel at 20 MHz and sends the IIP2 trim "
-                  "walking on noise. Paid for directly by an anomalous "
-                  "20 MHz GUI run."),
+                T("<b>⑤ 窄带模式:校准激励随带宽缩放,corner 放宽是免费"
+                  "余量。</b>23 MHz 探测音在 20 MHz 信道里是带外音——IIP2 "
+                  "trim 在噪声上乱走、AGC 扫描读不到 SNR,这是窄带校准失败"
+                  "的真正功能性原因,激励频率必须随带宽缩放。corner 方面,"
+                  "窄带下 fs≫BW、抗混叠零成本,放到 3×BW/2 把 TX LPF 单项"
+                  "地板从 −53 压到 −69 dB、环回 EVM 提升 ~10 dB——实打实的"
+                  "余量,但不是悬崖。此条由 20 MHz GUI 运行的异常直接换来。",
+                  "<b>⑤ Narrow modes: scale calibration probes with "
+                  "bandwidth; a relaxed corner is free margin.</b> A "
+                  "23 MHz probe tone is out-of-channel at 20 MHz — the "
+                  "IIP2 trim walks on noise and the AGC sweep reads no "
+                  "SNR at all; that is the real functional failure of "
+                  "narrow-mode calibration, so probe frequencies must "
+                  "scale with bandwidth. As for the corner: with fs≫BW "
+                  "anti-aliasing costs nothing, and relaxing to 3×BW/2 "
+                  "deepens the TX LPF-only floor from −53 to −69 dB and "
+                  "buys ~10 dB of loopback EVM — real margin, though not "
+                  "a cliff. Paid for directly by an anomalous 20 MHz GUI "
+                  "run."),
+                T("<b>⑥ 先校准测量仪器,再给电路定规格。</b>最初诊断出的"
+                  "\"1.3× corner 在 20 MHz 把 EVM 钉死在 −33 dB\"是测量"
+                  "伪影:测试接收机模型的时延补偿用循环 FFT 移位整体前移"
+                  "捕获,把 warm-up 样本卷进最后一个符号的 FFT 窗。误差"
+                  "正比于滤波器群时延(所以跟着 corner 变!)、反比于 FFT "
+                  "长度(所以 320 MHz 看不见、20 MHz 最重),完美伪装成"
+                  "物理 ISI 地板;换一个符号数,数字就漂移——这正是暴露"
+                  "它的线索。修复(guard 尾垫 + 整数切片 + 仅小数 FFT "
+                  "移位)后真实地板在 1.3× 即有 −53 dB。任何随测量配置"
+                  "漂移的\"物理结论\"都要先怀疑测量本身。",
+                  "<b>⑥ Calibrate the measuring instrument before "
+                  "spec'ing the circuit.</b> The originally diagnosed "
+                  "\"−33 dB EVM floor at a 1.3× corner\" was a "
+                  "measurement artifact: the test-receiver model's delay "
+                  "compensation circularly advanced the whole capture, "
+                  "wrapping warm-up samples into the last symbol's FFT "
+                  "window. The error scales with filter group delay (so "
+                  "it tracked the corner!) and inversely with FFT size "
+                  "(so 320 MHz never saw it and 20 MHz was hit hardest) "
+                  "— a perfect impostor of a physical ISI floor. Its "
+                  "numbers drifted with the symbol count, which is the "
+                  "clue that exposed it. After the fix (cyclic guard "
+                  "tail + integer slicing + fractional-only FFT "
+                  "advance), the true floor at 1.3× is already −53 dB. "
+                  "Any \"physical\" conclusion that drifts with the "
+                  "measurement configuration indicts the measurement "
+                  "first."),
             )),
     ))

@@ -20,16 +20,16 @@ from ..metrics.cpe import correct_cpe
 from ..pa.gmp import GMPModel
 from ..waveform.ofdm import OFDMWaveform, demodulate_ofdm
 from .base import CalResult
-from .sync import _fractional_advance, align_delay
+from .sync import align_delay, compensate_delay
 
 
 def _tx_evm_now(tx: TxChain, wf: OFDMWaveform, drive_scale: float,
-                n_warmup: int = 512) -> float:
+                n_warmup: int = 512, n_guard: int = 64) -> float:
     x = wf.x * drive_scale
-    xp = np.concatenate([x[-n_warmup:], x])
+    xp = np.concatenate([x[-n_warmup:], x, x[:n_guard]])
     y = tx(xp)
-    _, _, info = align_delay(xp, y, max_lag=256)
-    y = _fractional_advance(y, info["lag_total"])[n_warmup:]
+    _, _, info = align_delay(xp, y, max_lag=n_guard // 2)
+    y = compensate_delay(y, info["lag_total"], n_warmup, len(x))
     g = np.vdot(x, y) / np.vdot(x, x)
     syms = demodulate_ofdm(y / g / drive_scale, wf)
     syms = correct_cpe(syms, wf.tx_symbols)
@@ -44,10 +44,10 @@ def _observation_fn(tx: TxChain, rx: RxChain, path: LoopbackPath,
         saved = tx.dpd
         tx.dpd = None
         try:
-            up = np.concatenate([u[-n_warmup:], u])
+            up = np.concatenate([u[-n_warmup:], u, u[:64]])
             cap = run_loopback(tx, rx, up, path)
-            _, _, info = align_delay(up, cap, max_lag=1024)
-            cap = _fractional_advance(cap, info["lag_total"])[n_warmup:]
+            _, _, info = align_delay(up, cap, max_lag=32)
+            cap = compensate_delay(cap, info["lag_total"], n_warmup, len(u))
         finally:
             tx.dpd = saved
         return cap

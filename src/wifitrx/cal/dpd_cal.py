@@ -20,18 +20,19 @@ from ..metrics import aclr, evm
 from ..pa.gmp import GMPModel
 from ..waveform.ofdm import OFDMWaveform, demodulate_ofdm
 from .base import CalResult
-from .sync import _fractional_advance, align_delay
+from .sync import align_delay, compensate_delay
 
 
 def _capture(tx: TxChain, rx: RxChain, path: LoopbackPath,
-             x: np.ndarray, n_warmup: int = 512) -> np.ndarray:
+             x: np.ndarray, n_warmup: int = 512,
+             n_guard: int = 64) -> np.ndarray:
     """Delay-aligned loopback capture with a cyclic warm-up prefix that
-    settles the IIR baseband filters (not gain-normalized)."""
-    xp = np.concatenate([x[-n_warmup:], x])
+    settles the IIR baseband filters and a cyclic guard tail that keeps
+    delay compensation inside the frame (not gain-normalized)."""
+    xp = np.concatenate([x[-n_warmup:], x, x[:n_guard]])
     cap = run_loopback(tx, rx, xp, path)
-    _, _, info = align_delay(xp, cap, max_lag=1024)
-    cap = _fractional_advance(cap, info["lag_total"])
-    return cap[n_warmup:]
+    _, _, info = align_delay(xp, cap, max_lag=n_guard // 2)
+    return compensate_delay(cap, info["lag_total"], n_warmup, len(x))
 
 
 def calibrate_dpd(tx: TxChain, rx: RxChain, wf: OFDMWaveform,

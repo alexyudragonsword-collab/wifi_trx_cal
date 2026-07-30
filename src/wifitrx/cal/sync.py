@@ -25,6 +25,32 @@ def _fractional_advance(y: np.ndarray, frac: float) -> np.ndarray:
     return np.fft.ifft(np.fft.fft(y) * np.exp(2j * np.pi * freq * frac))
 
 
+def compensate_delay(y: np.ndarray, delay: float, start: int,
+                     length: int) -> np.ndarray:
+    """Extract ``length`` samples of ``y`` beginning at ``start`` with the
+    (possibly fractional) bulk ``delay`` removed: integer part by slicing,
+    fractional part by an FFT phase ramp on the slice.
+
+    ``y`` must extend at least ``round(delay)`` samples past
+    ``start + length`` — captures need a cyclic guard tail after the
+    payload.  Advancing the *whole* capture circularly and keeping its
+    tail instead wraps unrelated samples into the last OFDM symbol's FFT
+    window; the resulting error scales with the filter group delay and
+    1/fft_size, and at 20 MHz it floors measured EVM in the -30s dB while
+    masquerading as an analog ISI floor.
+    """
+    k = int(round(delay))
+    seg = y[start + k: start + k + length]
+    if len(seg) < length:
+        raise ValueError(
+            "capture ends %d samples too early for delay compensation; "
+            "append a cyclic guard tail" % (length - len(seg)))
+    frac = delay - k
+    if abs(frac) < 1e-9:
+        return seg.copy()
+    return _fractional_advance(seg, frac)
+
+
 def align_delay(x: np.ndarray, y: np.ndarray, max_lag: int = 4096):
     """Estimate and remove the bulk delay of ``y`` relative to ``x``.
 

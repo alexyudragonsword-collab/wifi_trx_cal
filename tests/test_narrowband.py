@@ -1,15 +1,22 @@
 """Narrow-mode (20 MHz) regressions.
 
 Found via an anomalous GUI run: 20 MHz calibrated to only −32 dB while
-320 MHz reached −44 dB.  Two independent causes, both pinned here:
+320 MHz reached −44 dB.  Root causes, all pinned here:
 
-1. The GI is fixed in absolute time while the LPF impulse response
-   scales as 1/BW — a wide-mode 1.3×BW/2 corner rings past the GI at
-   20 MHz and floors EVM near −33 dB (ISI, uncorrectable by per-tone
-   EQ).  ``recommended_lpf_corner_hz`` relaxes narrow modes to 3×.
-2. Fixed-Hz calibration probes (17/23 MHz) sit OUTSIDE a 20 MHz
+1. Fixed-Hz calibration probes (17/23 MHz) sit OUTSIDE a 20 MHz
    channel: the IIP2 trim walked on noise (got WORSE), the AGC sweep
    read no SNR at all.  ``scaled_probe`` scales them with bandwidth.
+2. The test-receiver model itself: circularly advancing a capture by
+   the full (integer+fractional) delay and keeping the tail wraps
+   warm-up samples into the last OFDM symbol's FFT window.  The error
+   grows with filter group delay and 1/fft_size, so it hit 20 MHz
+   hardest and *tracked the LPF corner*, masquerading as a −33 dB
+   analog ISI floor.  ``compensate_delay`` (integer slice + cyclic
+   guard tail + fractional-only FFT advance) fixes every capture path.
+3. ``recommended_lpf_corner_hz`` still relaxes narrow modes to 3×: the
+   true TX LPF-only floor improves −53 → −69 dB (1.3× → 3×) and the
+   relaxed RX corner buys ~10 dB of loopback EVM — real margin, though
+   not the cliff the artifact once suggested.
 """
 from __future__ import annotations
 
@@ -58,10 +65,10 @@ def test_20mhz_full_cal_reaches_spec():
         assert res.passed in (True, None), (res.name, res.metrics_after)
     assert by["rx_iip2"].metrics_after["iip2_dbm"] > 60.0
     assert by["agc_sweep"].metrics_after["worst_landing_err_db"] < 2.5
-    # 1024-QAM needs ~-35 dB TX EVM; the old floor was -32.6,
-    # the 3x corner policy lands ~-41
-    assert r.metrics["tx_evm_db"] <= -40.0, r.metrics
-    assert r.metrics["loopback_evm_db"] <= -37.0, r.metrics
+    # 1024-QAM needs ~-35 dB TX EVM; with in-channel probes and the
+    # delay-compensation fix this configuration lands ~-43/-53
+    assert r.metrics["tx_evm_db"] <= -41.0, r.metrics
+    assert r.metrics["loopback_evm_db"] <= -48.0, r.metrics
 
 
 # --------------------------------------------------- legacy 11ac numerology
@@ -93,12 +100,13 @@ def test_wifi5_numerology_properties():
     assert OFDMConfig(bandwidth_hz=20e6, n_symbols=4).n_active == 242
 
 
-def test_wifi5_lpf_floor_beats_wifi7_at_same_corner():
-    """Counterintuitive but measured: at the same corner the legacy
-    numerology suffers LESS from the LPF — its 52-tone occupancy stops at
-    0.81×BW/2 (away from the dispersive corner region) and its window is
-    proportionally shorter, leaving more absolute GI margin; both beat
-    the 4× shorter symbol's larger relative ISI cost."""
+def test_lpf_floor_numerology_insensitive_and_deep():
+    """With delay compensation fixed, the true LPF-only floor at a 1.3x
+    corner is around -50 dB for BOTH numerologies (within a few dB of
+    each other) — deep below any EVM budget.  Pre-fix this measurement
+    read -33 (11ax) / -48 (11ac, n-dependent): the gap and the shallow
+    floor were both artifacts of circular delay compensation wrapping
+    warm-up samples into the last symbol (see module docstring)."""
     from wifitrx.waveform import OFDMConfig
     bw = 20e6
     ax = OFDMConfig(bandwidth_hz=bw, qam_order=1024, n_symbols=6,
@@ -108,7 +116,26 @@ def test_wifi5_lpf_floor_beats_wifi7_at_same_corner():
                     cp_fraction=1 / 4)
     evm_ax = _lpf_only_evm(ax, 1.3)
     evm_ac = _lpf_only_evm(ac, 1.3)
-    assert evm_ac < evm_ax - 3.0, (evm_ac, evm_ax)
+    assert evm_ax < -45.0, evm_ax
+    assert evm_ac < -45.0, evm_ac
+    assert abs(evm_ac - evm_ax) < 5.0, (evm_ac, evm_ax)
+
+
+def test_compensate_delay_needs_guard_and_matches_roll():
+    """The capture helper contract: integer part by slicing (needs a
+    guard tail), fractional part via FFT — never a circular shift of
+    the kept frame."""
+    import numpy as np
+    from wifitrx.cal.sync import compensate_delay
+
+    rng = np.random.default_rng(0)
+    y = rng.normal(size=256) + 1j * rng.normal(size=256)
+    # pure integer delay: exact slice, no FFT applied
+    out = compensate_delay(y, 3.0, start=10, length=100)
+    assert np.allclose(out, y[13:113])
+    # runs off the end -> explicit error instead of silent wrap
+    with pytest.raises(ValueError, match="guard tail"):
+        compensate_delay(y, 5.0, start=0, length=len(y))
 
 
 @pytest.mark.slow
@@ -128,5 +155,5 @@ def test_wifi5_20mhz_full_cal():
     final = {r.name: r for r in res}["final_loopback_evm"]
     for r in res:
         assert r.passed in (True, None), (r.name, r.metrics_after)
-    # 11ac MCS9 (256-QAM 5/6) needs -32 dB; we land ~-44
+    # 11ac MCS9 (256-QAM 5/6) needs -32 dB; we land ~-44/-56 (tx/loopback)
     assert final.metrics_after["tx_evm_db"] <= -40.0, final.metrics_after

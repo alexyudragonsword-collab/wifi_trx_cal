@@ -116,17 +116,21 @@ CHAPTER = Chapter(
                   "startup transient are real, and chapter 4's capture "
                   "alignment pays for them."),
                 T("corner 的选取随模式而变:宽带模式为 DPD 带宽收紧"
-                  "(≥1.3×BW/2,洞察②),窄带模式必须反向放宽(3×,"
-                  "洞察⑤)——WiFi GI 固定 0.8 µs 而滤波器振铃随 1/BW 拉长,"
-                  "紧 corner 在 20 MHz 会造出逐音均衡救不了的 −33 dB ISI "
-                  "地板。库里 <code>recommended_lpf_corner_hz()</code> 封装了"
-                  "这条策略。",
+                  "(≥1.3×BW/2,洞察②),窄带模式放宽到 3×——fs≫BW 时"
+                  "抗混叠零成本,而更宽的 corner 缩短振铃相对固定 0.8 µs "
+                  "GI 的占比,把 20 MHz 的 TX LPF 单项 ISI 地板从 −53 "
+                  "压到 −69 dB(洞察⑤;测这个地板本身还揪出过一个时延"
+                  "补偿伪影,见洞察⑥)。库里 "
+                  "<code>recommended_lpf_corner_hz()</code> 封装了这条"
+                  "策略。",
                   "The corner choice flips with mode: wide modes tighten "
                   "it for DPD bandwidth (≥1.3×BW/2, insight ②), narrow "
-                  "modes must relax it (3×, insight ⑤) — the WiFi GI "
-                  "is fixed at 0.8 µs while filter ringing scales as "
-                  "1/BW, so a tight corner at 20 MHz builds a −33 dB ISI "
-                  "floor no per-tone equalizer can remove. "
+                  "modes relax it to 3× — with fs≫BW anti-aliasing costs "
+                  "nothing, and a wider corner shrinks the ringing "
+                  "relative to the fixed 0.8 µs GI, deepening the 20 MHz "
+                  "TX LPF-only ISI floor from −53 to −69 dB (insight ⑤; "
+                  "measuring that floor also flushed out a delay-"
+                  "compensation artifact, see insight ⑥). "
                   "<code>recommended_lpf_corner_hz()</code> encodes the "
                   "policy."),
             )),

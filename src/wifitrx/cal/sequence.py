@@ -42,7 +42,7 @@ from .lpf_corner import calibrate_lpf_corner_rx, calibrate_lpf_corner_tx
 from .rx_dc import calibrate_rx_dc
 from .rx_iip2 import calibrate_rx_iip2
 from .rx_iq import calibrate_rx_iq
-from .sync import _fractional_advance, align_delay
+from .sync import align_delay, compensate_delay
 from .tx_iq import calibrate_tx_iq, measure_tx_rho
 from .tx_lo_leak import (calibrate_tx_lo_leak_envdet,
                          calibrate_tx_lo_leak_loopback)
@@ -58,29 +58,31 @@ def agc_for_loopback(tx: TxChain, rx: RxChain, path: LoopbackPath,
 
 def capture_aligned(tx: TxChain, rx: RxChain, path: LoopbackPath,
                     x: np.ndarray, n_warmup: int = 512,
-                    seed: int = 0) -> np.ndarray:
+                    n_guard: int = 64, seed: int = 0) -> np.ndarray:
     """Loopback capture with a cyclic warm-up prefix (settles the IIR
     baseband filters — their startup transient otherwise corrupts the
-    first OFDM symbol), delay-aligned and trimmed back to len(x)."""
-    xp = np.concatenate([x[-n_warmup:], x])
+    first OFDM symbol) and a cyclic guard tail (delay compensation must
+    not run off the end of the frame), delay-aligned and trimmed back to
+    len(x)."""
+    xp = np.concatenate([x[-n_warmup:], x, x[:n_guard]])
     cap = run_loopback(tx, rx, xp, path, seed=seed)
-    _, _, info = align_delay(xp, cap, max_lag=1024)
-    cap = _fractional_advance(cap, info["lag_total"])
-    return cap[n_warmup:]
+    _, _, info = align_delay(xp, cap, max_lag=n_guard // 2)
+    return compensate_delay(cap, info["lag_total"], n_warmup, len(x))
 
 
 def tx_evm(tx: TxChain, cfg: OFDMConfig, drive_scale: float = 0.15,
-           n_warmup: int = 512, seed: int = 0) -> float:
+           n_warmup: int = 512, n_guard: int = 64, seed: int = 0) -> float:
     """TX EVM at the PA output (the 802.11be TX spec measurement point):
     per-tone EQ + CPE removal, as a standard-compliant test receiver does.
-    A cyclic warm-up prefix settles the TX baseband filter and the capture
+    A cyclic warm-up prefix settles the TX baseband filter, a cyclic
+    guard tail keeps delay compensation inside the frame, and the capture
     is delay-aligned before demodulation."""
     wf = generate_ofdm(cfg)
     x = wf.x * drive_scale
-    xp = np.concatenate([x[-n_warmup:], x])
+    xp = np.concatenate([x[-n_warmup:], x, x[:n_guard]])
     y = tx(xp)
-    _, _, info = align_delay(xp, y, max_lag=256)
-    y = _fractional_advance(y, info["lag_total"])[n_warmup:]
+    _, _, info = align_delay(xp, y, max_lag=n_guard // 2)
+    y = compensate_delay(y, info["lag_total"], n_warmup, len(x))
     g = np.vdot(x, y) / np.vdot(x, x)
     syms = demodulate_ofdm(y / g / drive_scale, wf)
     syms = correct_cpe(syms, wf.tx_symbols)
