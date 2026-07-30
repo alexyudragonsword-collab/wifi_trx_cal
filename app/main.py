@@ -114,9 +114,17 @@ class MainWindow(QMainWindow):
         self.run_btn = QPushButton("Run")
         self.run_btn.clicked.connect(self._run)
         lv.addWidget(self.run_btn)
+        # enabled after a run that produced cal-state material; saving
+        # also loads the file into the inspector tab — the only way a
+        # frozen exe can produce and then inspect the deliverable
+        self.save_btn = QPushButton("Save cal-state JSON…")
+        self.save_btn.setEnabled(False)
+        self.save_btn.clicked.connect(self._save_cal_state)
+        lv.addWidget(self.save_btn)
         self.status = QLabel("")
         lv.addWidget(self.status)
         lv.addStretch(1)
+        self._cal_state: dict | None = None
 
         right = QWidget()
         rv = QVBoxLayout(right)
@@ -179,6 +187,8 @@ class MainWindow(QMainWindow):
     def _on_done(self, result: AnalysisResult) -> None:
         self.run_btn.setEnabled(True)
         self.status.setText("done")
+        self._cal_state = result.cal_state
+        self.save_btn.setEnabled(result.cal_state is not None)
         self.table.setRowCount(0)
         for k, v in result.metrics.items():
             row = self.table.rowCount()
@@ -199,6 +209,27 @@ class MainWindow(QMainWindow):
         self.run_btn.setEnabled(True)
         self.status.setText("failed")
         self.text.setPlainText(tb)
+
+    def _save_cal_state(self, path=None) -> None:
+        """Serialize the last run's correction state and open it in the
+        inspector tab.  ``path`` is settable for tests; interactively a
+        save dialog asks."""
+        if self._cal_state is None:
+            return
+        if not path:  # pragma: no cover - native dialog
+            from PySide6.QtWidgets import QFileDialog
+            path, _ = QFileDialog.getSaveFileName(
+                self, "Save cal-state JSON", "cal_state.json",
+                "JSON files (*.json)")
+            if not path:
+                return
+        from wifitrx.cal.base import save_cal_state
+        save_cal_state(path, self._cal_state["tx_state"],
+                       self._cal_state["rx_state"],
+                       self._cal_state["results"])
+        self.status.setText(f"saved {path}")
+        self.inspector.load(Path(path))
+        self.tabs.setCurrentWidget(self.inspector)
 
 
 def main() -> None:

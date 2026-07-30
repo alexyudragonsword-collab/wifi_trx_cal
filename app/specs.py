@@ -33,6 +33,11 @@ class AnalysisResult:
     metrics: dict
     figure: Figure | None = None
     text: str = ""
+    # optional cal-state material: {"tx_state","rx_state","results"} —
+    # when present the main window offers "Save cal-state JSON…" so a
+    # frozen exe (no examples/, no CLI) can still produce the deliverable
+    # and feed the inspector tab
+    cal_state: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -142,7 +147,10 @@ def run_full_cal(p: dict) -> AnalysisResult:
                "tx_evm_db": final.metrics_after["tx_evm_db"],
                "steps_passed": sum(1 for r in results if r.passed),
                "steps_total": len(results)}
-    return AnalysisResult(metrics=metrics, figure=fig)
+    return AnalysisResult(metrics=metrics, figure=fig,
+                          cal_state={"tx_state": tx.correction_state(),
+                                     "rx_state": rx.correction_state(),
+                                     "results": results})
 
 
 def run_drift_tracking(p: dict) -> AnalysisResult:

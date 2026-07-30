@@ -89,6 +89,32 @@ def test_missing_file_is_a_finding_not_an_exception(qapp, tmp_path):
     assert any("absent.json" in t for t in _labels(page))
 
 
+def test_run_save_inspect_roundtrip(qapp, tmp_path):
+    """The frozen-exe user journey: run a calibration in the Analyses tab,
+    save the cal-state JSON, and the inspector tab renders the report —
+    the exe has no examples/ or CLI, so this is the only produce path."""
+    from main import MainWindow
+    from specs import ALL_ANALYSES
+
+    win = MainWindow()
+    spec = next(s for s in ALL_ANALYSES if s.key == "full_cal")
+    result = spec.run({"bw_mhz": 80, "qam": 256, "seed": 5,
+                       "with_dpd": False})
+    assert result.cal_state is not None
+    win._on_done(result)
+    assert win.save_btn.isEnabled()
+
+    out = tmp_path / "cal_state.json"
+    win._save_cal_state(str(out))
+    assert out.exists()
+    # the inspector tab took over and rendered the per-step table
+    assert win.tabs.currentWidget() is win.inspector
+    from PySide6.QtWidgets import QTableWidget
+    tables = win.inspector.findChildren(QTableWidget)
+    step_table = next(t for t in tables if t.columnCount() == 7)
+    assert step_table.rowCount() >= 10
+
+
 # ------------------------------------------------- the decides-nothing guard
 def _stripped_source() -> str:
     tree = ast.parse((APP / "inspector_page.py").read_text())
