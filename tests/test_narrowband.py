@@ -13,8 +13,14 @@ Found via an anomalous GUI run: 20 MHz calibrated to only −32 dB while
    hardest and *tracked the LPF corner*, masquerading as a −33 dB
    analog ISI floor.  ``compensate_delay`` (integer slice + cyclic
    guard tail + fractional-only FFT advance) fixes every capture path.
-3. ``recommended_lpf_corner_hz`` still relaxes narrow modes to 3×: the
-   true TX LPF-only floor improves −53 → −69 dB (1.3× → 3×) and the
+3. A second-order edge effect remained even then: delay compensation
+   advances the final symbol's FFT window a few samples past the burst
+   end, where the truncated window ramp-down makes the continuation
+   unrepresentative — >8 dB of bias on deep floors at small n_symbols.
+   ``tx_evm`` now transmits one padding symbol and scores interior
+   symbols only (lab practice).
+4. ``recommended_lpf_corner_hz`` still relaxes narrow modes to 3×: the
+   true TX LPF-only floor improves −55 → −76 dB (1.3× → 3×) and the
    relaxed RX corner buys ~10 dB of loopback EVM — real margin, though
    not the cliff the artifact once suggested.
 """
@@ -119,6 +125,11 @@ def test_lpf_floor_numerology_insensitive_and_deep():
     assert evm_ax < -45.0, evm_ax
     assert evm_ac < -45.0, evm_ac
     assert abs(evm_ac - evm_ax) < 5.0, (evm_ac, evm_ax)
+    # the meter must not depend on the burst length: pre-fix this moved
+    # by 8+ dB with n_symbols (the clue that exposed both artifacts)
+    ax12 = OFDMConfig(bandwidth_hz=bw, qam_order=1024, n_symbols=12,
+                      oversampling=4)
+    assert abs(_lpf_only_evm(ax12, 1.3) - evm_ax) < 2.0
 
 
 def test_compensate_delay_needs_guard_and_matches_roll():

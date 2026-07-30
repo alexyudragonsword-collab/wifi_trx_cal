@@ -51,7 +51,7 @@ CHAPTER = Chapter(
                   "trim 在噪声上乱走、AGC 扫描读不到 SNR,这是窄带校准失败"
                   "的真正功能性原因,激励频率必须随带宽缩放。corner 方面,"
                   "窄带下 fs≫BW、抗混叠零成本,放到 3×BW/2 把 TX LPF 单项"
-                  "地板从 −53 压到 −69 dB、环回 EVM 提升 ~10 dB——实打实的"
+                  "地板从 −55 压到 −76 dB、环回 EVM 提升 ~10 dB——实打实的"
                   "余量,但不是悬崖。此条由 20 MHz GUI 运行的异常直接换来。",
                   "<b>⑤ Narrow modes: scale calibration probes with "
                   "bandwidth; a relaxed corner is free margin.</b> A "
@@ -61,7 +61,7 @@ CHAPTER = Chapter(
                   "narrow-mode calibration, so probe frequencies must "
                   "scale with bandwidth. As for the corner: with fs≫BW "
                   "anti-aliasing costs nothing, and relaxing to 3×BW/2 "
-                  "deepens the TX LPF-only floor from −53 to −69 dB and "
+                  "deepens the TX LPF-only floor from −55 to −76 dB and "
                   "buys ~10 dB of loopback EVM — real margin, though not "
                   "a cliff. Paid for directly by an anomalous 20 MHz GUI "
                   "run."),
@@ -72,9 +72,12 @@ CHAPTER = Chapter(
                   "正比于滤波器群时延(所以跟着 corner 变!)、反比于 FFT "
                   "长度(所以 320 MHz 看不见、20 MHz 最重),完美伪装成"
                   "物理 ISI 地板;换一个符号数,数字就漂移——这正是暴露"
-                  "它的线索。修复(guard 尾垫 + 整数切片 + 仅小数 FFT "
-                  "移位)后真实地板在 1.3× 即有 −53 dB。任何随测量配置"
-                  "漂移的\"物理结论\"都要先怀疑测量本身。",
+                  "它的线索。修复后还剩第二层:时延补偿把最后一个符号的 "
+                  "FFT 窗推出 burst 末尾几个采样,截断的 ramp-down 让延续"
+                  "内容失真,在深地板上仍值 >8 dB——现在多发一个 padding "
+                  "符号、只对内部符号打分(实验室标准做法)。全部修完后"
+                  "真实地板在 1.3× 即有 −55 dB。任何随测量配置漂移的"
+                  "\"物理结论\"都要先怀疑测量本身。",
                   "<b>⑥ Calibrate the measuring instrument before "
                   "spec'ing the circuit.</b> The originally diagnosed "
                   "\"−33 dB EVM floor at a 1.3× corner\" was a "
@@ -86,11 +89,16 @@ CHAPTER = Chapter(
                   "(so 320 MHz never saw it and 20 MHz was hit hardest) "
                   "— a perfect impostor of a physical ISI floor. Its "
                   "numbers drifted with the symbol count, which is the "
-                  "clue that exposed it. After the fix (cyclic guard "
-                  "tail + integer slicing + fractional-only FFT "
-                  "advance), the true floor at 1.3× is already −53 dB. "
-                  "Any \"physical\" conclusion that drifts with the "
-                  "measurement configuration indicts the measurement "
-                  "first."),
+                  "clue that exposed it. A second layer remained after "
+                  "the fix: delay compensation pushes the final symbol's "
+                  "FFT window a few samples past the burst end, where "
+                  "the truncated ramp-down misrepresents the "
+                  "continuation — still worth >8 dB on deep floors; the "
+                  "EVM meter now transmits one padding symbol and "
+                  "scores interior symbols only (lab practice). With "
+                  "both fixed, the true floor at 1.3× is already "
+                  "−55 dB. Any \"physical\" conclusion that drifts with "
+                  "the measurement configuration indicts the "
+                  "measurement first."),
             )),
     ))

@@ -118,8 +118,8 @@ CHAPTER = Chapter(
                 T("corner 的选取随模式而变:宽带模式为 DPD 带宽收紧"
                   "(≥1.3×BW/2,洞察②),窄带模式放宽到 3×——fs≫BW 时"
                   "抗混叠零成本,而更宽的 corner 缩短振铃相对固定 0.8 µs "
-                  "GI 的占比,把 20 MHz 的 TX LPF 单项 ISI 地板从 −53 "
-                  "压到 −69 dB(洞察⑤;测这个地板本身还揪出过一个时延"
+                  "GI 的占比,把 20 MHz 的 TX LPF 单项 ISI 地板从 −55 "
+                  "压到 −76 dB(洞察⑤;测这个地板本身还揪出过两层时延"
                   "补偿伪影,见洞察⑥)。库里 "
                   "<code>recommended_lpf_corner_hz()</code> 封装了这条"
                   "策略。",
@@ -128,9 +128,9 @@ CHAPTER = Chapter(
                   "modes relax it to 3× — with fs≫BW anti-aliasing costs "
                   "nothing, and a wider corner shrinks the ringing "
                   "relative to the fixed 0.8 µs GI, deepening the 20 MHz "
-                  "TX LPF-only ISI floor from −53 to −69 dB (insight ⑤; "
-                  "measuring that floor also flushed out a delay-"
-                  "compensation artifact, see insight ⑥). "
+                  "TX LPF-only ISI floor from −55 to −76 dB (insight ⑤; "
+                  "measuring that floor also flushed out two layers of "
+                  "delay-compensation artifact, see insight ⑥). "
                   "<code>recommended_lpf_corner_hz()</code> encodes the "
                   "policy."),
             )),

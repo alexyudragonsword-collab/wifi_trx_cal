@@ -31,9 +31,13 @@ def _tx_evm_now(tx: TxChain, wf: OFDMWaveform, drive_scale: float,
     _, _, info = align_delay(xp, y, max_lag=n_guard // 2)
     y = compensate_delay(y, info["lag_total"], n_warmup, len(x))
     g = np.vdot(x, y) / np.vdot(x, x)
-    syms = demodulate_ofdm(y / g / drive_scale, wf)
-    syms = correct_cpe(syms, wf.tx_symbols)
-    return evm(syms, wf.tx_symbols, equalize="per_tone").db
+    # score interior symbols only: the burst's final symbol is
+    # edge-contaminated once delay compensation advances its FFT window
+    # past the burst end (see cal.sequence.tx_evm)
+    syms = demodulate_ofdm(y / g / drive_scale, wf)[:-1]
+    ref = wf.tx_symbols[:-1]
+    syms = correct_cpe(syms, ref)
+    return evm(syms, ref, equalize="per_tone").db
 
 
 def _observation_fn(tx: TxChain, rx: RxChain, path: LoopbackPath,

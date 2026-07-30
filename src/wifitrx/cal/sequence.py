@@ -24,6 +24,8 @@ it being uncalibrated):
 """
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 
 from ..chain.loopback import LoopbackPath, run_loopback
@@ -76,17 +78,26 @@ def tx_evm(tx: TxChain, cfg: OFDMConfig, drive_scale: float = 0.15,
     per-tone EQ + CPE removal, as a standard-compliant test receiver does.
     A cyclic warm-up prefix settles the TX baseband filter, a cyclic
     guard tail keeps delay compensation inside the frame, and the capture
-    is delay-aligned before demodulation."""
-    wf = generate_ofdm(cfg)
+    is delay-aligned before demodulation.
+
+    One extra padding symbol is transmitted and excluded from the score
+    (lab practice: measure interior symbols).  The burst's final symbol
+    is edge-contaminated by construction: delay compensation advances
+    its FFT window a few samples past the burst end, where the truncated
+    window ramp-down makes the continuation unrepresentative — worth
+    >8 dB of bias on deep (<-55 dB) floors at small n_symbols."""
+    cfg_pad = replace(cfg, n_symbols=cfg.n_symbols + 1)
+    wf = generate_ofdm(cfg_pad)
     x = wf.x * drive_scale
     xp = np.concatenate([x[-n_warmup:], x, x[:n_guard]])
     y = tx(xp)
     _, _, info = align_delay(xp, y, max_lag=n_guard // 2)
     y = compensate_delay(y, info["lag_total"], n_warmup, len(x))
     g = np.vdot(x, y) / np.vdot(x, x)
-    syms = demodulate_ofdm(y / g / drive_scale, wf)
-    syms = correct_cpe(syms, wf.tx_symbols)
-    return evm(syms, wf.tx_symbols, equalize="per_tone").db
+    syms = demodulate_ofdm(y / g / drive_scale, wf)[: cfg.n_symbols]
+    ref = wf.tx_symbols[: cfg.n_symbols]
+    syms = correct_cpe(syms, ref)
+    return evm(syms, ref, equalize="per_tone").db
 
 
 def _equalize_per_tone(syms: np.ndarray, ref: np.ndarray) -> np.ndarray:
