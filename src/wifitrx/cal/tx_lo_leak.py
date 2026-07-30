@@ -23,7 +23,7 @@ from ..chain.loopback import EnvelopeDetector, LoopbackPath, run_loopback
 from ..chain.rx import RxChain
 from ..chain.tx import TxChain
 from ..metrics.irr import lo_leak_dbc
-from ..waveform.stimuli import bin_value, single_tone
+from ..waveform.stimuli import scaled_probe, bin_value, single_tone
 from .base import CalResult
 
 
@@ -35,10 +35,12 @@ def _beat_power(tx: TxChain, det: EnvelopeDetector, x: np.ndarray,
 
 
 def calibrate_tx_lo_leak_envdet(tx: TxChain, det: EnvelopeDetector | None = None,
-                                n: int = 1 << 13, f0: float = 11e6,
+                                n: int = 1 << 13, f0: float | None = None,
                                 n_iter: int = 3, delta: float = 0.02) -> CalResult:
     if det is None:
         det = EnvelopeDetector(enabled_adc=False)
+    if f0 is None:
+        f0 = scaled_probe(11e6, tx.params.bandwidth_hz)
     x = single_tone(f0, tx.fs, n, amp=0.25)
     before_dbc = lo_leak_dbc(tx(x), tx.fs)
     trace = []
@@ -75,7 +77,7 @@ def calibrate_tx_lo_leak_envdet(tx: TxChain, det: EnvelopeDetector | None = None
 
 def calibrate_tx_lo_leak_loopback(tx: TxChain, rx: RxChain,
                                   path: LoopbackPath | None = None,
-                                  n: int = 1 << 14, f_probe: float = 23e6,
+                                  n: int = 1 << 14, f_probe: float | None = None,
                                   n_iter: int = 2) -> CalResult:
     """Loopback DC-bin method with RX-LO offset (run after RX DC cal).
 
@@ -85,6 +87,8 @@ def calibrate_tx_lo_leak_loopback(tx: TxChain, rx: RxChain,
     if path is None:
         path = LoopbackPath(atten_db=40.0, delay_ns=6.0, rx_lo_offset_hz=4.8e6)
     f_leak = -path.rx_lo_offset_hz
+    if f_probe is None:
+        f_probe = scaled_probe(23e6, tx.params.bandwidth_hz)
     x = single_tone(f_probe, tx.fs, n, amp=0.25)
     before_dbc = lo_leak_dbc(tx(x), tx.fs)
     trace = []

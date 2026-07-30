@@ -10,13 +10,15 @@ import numpy as np
 
 from ..chain.rx import RxChain
 from ..units import power_dbm
-from ..waveform.stimuli import single_tone
+from ..waveform.stimuli import scaled_probe, single_tone
 from .base import CalResult
 
 
 def agc_sweep(rx: RxChain, p_in_range_dbm: np.ndarray | None = None,
-              n: int = 1 << 13, f_probe: float = 23e6,
+              n: int = 1 << 13, f_probe: float | None = None,
               seed: int = 0) -> dict:
+    if f_probe is None:
+        f_probe = scaled_probe(23e6, rx.params.bandwidth_hz)
     if p_in_range_dbm is None:
         p_in_range_dbm = np.arange(-85.0, -5.0, 5.0)
     rng = np.random.default_rng(seed)

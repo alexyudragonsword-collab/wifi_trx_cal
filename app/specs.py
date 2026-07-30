@@ -59,8 +59,9 @@ def _chains(bw: float, seed: int, fs: float):
     rng = np.random.default_rng(seed)
     txp = TxParams(bandwidth_hz=bw).randomize(rng)
     rxp = RxParams(bandwidth_hz=bw).randomize(rng)
-    txp.lpf.fc_nominal_hz = bw / 2 * 1.3
-    rxp.lpf.fc_nominal_hz = bw / 2 * 1.12
+    from wifitrx.chain.params import recommended_lpf_corner_hz
+    txp.lpf.fc_nominal_hz = recommended_lpf_corner_hz(bw, "tx")
+    rxp.lpf.fc_nominal_hz = recommended_lpf_corner_hz(bw, "rx")
     return TxChain(txp, fs), RxChain(rxp, fs)
 
 

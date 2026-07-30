@@ -16,7 +16,8 @@ from ..chain.loopback import LoopbackPath, run_loopback
 from ..chain.rx import RxChain
 from ..chain.tx import TxChain
 from ..units import power_dbm
-from ..waveform.stimuli import bin_value, grid_freq, single_tone
+from ..waveform.stimuli import (bin_value, grid_freq, scaled_probe,
+                                single_tone)
 from .base import CalResult
 
 
@@ -47,7 +48,8 @@ def _im2_power(tx: TxChain, rx: RxChain, path: LoopbackPath,
 
 def calibrate_rx_iip2(tx: TxChain, rx: RxChain,
                       path: LoopbackPath | None = None,
-                      n: int = 1 << 14, f1: float = 17e6, f2: float = 23e6,
+                      n: int = 1 << 14, f1: float | None = None,
+                      f2: float | None = None,
                       amp: float = 0.5, n_iter: int = 3,
                       delta: int = 24, n_avg: int = 4) -> CalResult:
     p = rx.params
@@ -57,6 +59,10 @@ def calibrate_rx_iip2(tx: TxChain, rx: RxChain,
     if path is None:
         path = LoopbackPath(atten_db=30.0, delay_ns=6.0)
     fs = rx.fs
+    if f1 is None:
+        f1 = scaled_probe(17e6, rx.params.bandwidth_hz)
+    if f2 is None:
+        f2 = scaled_probe(23e6, rx.params.bandwidth_hz)
     f1 = grid_freq(f1, fs, n)
     f2 = grid_freq(f2, fs, n)
     x_probe = (single_tone(f1, fs, n, amp=amp / np.sqrt(2))

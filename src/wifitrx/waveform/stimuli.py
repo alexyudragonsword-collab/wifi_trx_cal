@@ -8,6 +8,20 @@ from __future__ import annotations
 import numpy as np
 
 
+def scaled_probe(f_ref_hz: float, bandwidth_hz: float,
+                 bw_ref_hz: float = 80e6) -> float:
+    """Scale a probe frequency proven at ``bw_ref_hz`` down with bandwidth.
+
+    Calibration stimuli must live inside the channel: a probe frequency
+    that was chosen for wide modes (e.g. 23 MHz) sits OUTSIDE a 20 MHz
+    channel and beyond its LPF corner, so the measurement runs on a tone
+    attenuated by ~25 dB — the IIP2 trim then walks on noise and the AGC
+    sweep reads no SNR at all.  Wide modes keep the proven value; narrow
+    modes scale it proportionally.
+    """
+    return f_ref_hz * min(1.0, bandwidth_hz / bw_ref_hz)
+
+
 def grid_freq(f_target: float, fs: float, n: int) -> float:
     """Snap a frequency onto the length-n FFT grid."""
     return round(f_target * n / fs) * fs / n
