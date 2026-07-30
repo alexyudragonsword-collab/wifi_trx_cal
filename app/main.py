@@ -239,6 +239,26 @@ def main() -> None:
         app.setWindowIcon(icon)
     win = MainWindow()
     win.show()
+
+    # frozen-build diagnostics: a windowed exe has no console, so these
+    # env hooks let a build be exercised without interaction —
+    #   WIFITRX_INSPECT=<json>  auto-load into the inspector tab
+    #   WIFITRX_SHOT=<png>      screenshot the window ~2 s later and exit
+    import os
+    inspect_file = os.environ.get("WIFITRX_INSPECT")
+    if inspect_file:
+        win.tabs.setCurrentWidget(win.inspector)
+        win.inspector.load(Path(inspect_file))
+    shot = os.environ.get("WIFITRX_SHOT")
+    if shot:
+        from PySide6.QtCore import QTimer
+
+        def _grab() -> None:
+            win.resize(1400, 900)
+            win.grab().save(shot)
+            app.quit()
+
+        QTimer.singleShot(2000, _grab)
     sys.exit(app.exec())
 
 

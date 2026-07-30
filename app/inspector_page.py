@@ -146,13 +146,20 @@ class InspectorPage(QWidget):
         self._clear()
         try:
             doc = json.loads(Path(path).read_text(encoding="utf-8"))
-        except (OSError, ValueError) as exc:
+            self._render(doc)
+        except Exception:
+            # ANY failure renders as a finding: in a windowed exe there is
+            # no console, so a swallowed traceback would just look like a
+            # half-drawn page ("displays wrong") with nothing to report
+            import html
+            import traceback
+            self._clear()
+            tb = html.escape(traceback.format_exc())
             self.body_layout.addWidget(findings_view([{
                 "severity": "error", "step": Path(path).name,
-                "message": str(exc)}]))
+                "message": f"failed to render this file:<br>"
+                           f"<pre style='font-size:11px'>{tb}</pre>"}]))
             self.body_layout.addStretch(1)
-            return
-        self._render(doc)
 
     def _clear(self) -> None:
         while self.body_layout.count():
