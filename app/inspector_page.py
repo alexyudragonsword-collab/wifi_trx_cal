@@ -66,12 +66,17 @@ def fixed_table(rows: list[dict], columns: list[str]) -> QTableWidget:
     view = QTableWidget(len(rows), len(columns))
     view.setHorizontalHeaderLabels(columns)
     view.verticalHeader().setVisible(False)
-    view.setEditTriggers(QTableWidget.EditTriggers())
     view.setAlternatingRowColors(True)
     for r, row in enumerate(rows):
         for c, key in enumerate(columns):
             item = QTableWidgetItem(_fmt(row.get(key, "")))
-            item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            # canonical scoped-enum spellings only: the legacy shortcuts
+            # (Qt.AlignRight, QTableWidget.EditTriggers()) go through
+            # shiboken's forgiving attribute lookup, which is exactly the
+            # kind of dynamic path a Nuitka-compiled build can miss
+            item.setTextAlignment(Qt.AlignmentFlag.AlignRight
+                                  | Qt.AlignmentFlag.AlignVCenter)
+            item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             view.setItem(r, c, item)
     view.resizeColumnsToContents()
     view.resizeRowsToContents()
