@@ -50,7 +50,7 @@ CHAPTER = Chapter(
                   "固定 0.8 µs 不随带宽变,滤波器冲激响应却随 1/BW 拉长:"
                   "20 MHz 模式沿用 320 MHz 的 1.3×BW/2 紧 corner,振铃 ~1 µs "
                   "吃穿 GI 余量,产生逐音均衡救不了的 ISI,EVM 钉死在 −33 dB "
-                  "附近;而窄带下 fs≫BW,抗混叠毫无压力,corner 放到 2.5× 是"
+                  "附近;而窄带下 fs≫BW,抗混叠毫无压力,corner 放到 3× 是"
                   "免费的。同理,校准激励频率必须随带宽缩放——23 MHz 探测音"
                   "在 20 MHz 信道里是带外音,会让 IIP2 trim 在噪声上乱走。"
                   "此条由 20 MHz GUI 运行的异常直接换来。",
@@ -61,7 +61,7 @@ CHAPTER = Chapter(
                   "20 MHz rings ~1 µs past the usable GI margin, creating "
                   "ISI no per-tone equalizer can remove and pinning EVM "
                   "near −33 dB — while with fs≫BW anti-aliasing costs "
-                  "nothing, so 2.5× is free. Likewise calibration probe "
+                  "nothing, so 3× is free. Likewise calibration probe "
                   "frequencies must scale with bandwidth — a 23 MHz tone "
                   "is out-of-channel at 20 MHz and sends the IIP2 trim "
                   "walking on noise. Paid for directly by an anomalous "

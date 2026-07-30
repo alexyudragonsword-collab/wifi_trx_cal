@@ -6,7 +6,7 @@ Found via an anomalous GUI run: 20 MHz calibrated to only −32 dB while
 1. The GI is fixed in absolute time while the LPF impulse response
    scales as 1/BW — a wide-mode 1.3×BW/2 corner rings past the GI at
    20 MHz and floors EVM near −33 dB (ISI, uncorrectable by per-tone
-   EQ).  ``recommended_lpf_corner_hz`` relaxes narrow modes to 2.5×.
+   EQ).  ``recommended_lpf_corner_hz`` relaxes narrow modes to 3×.
 2. Fixed-Hz calibration probes (17/23 MHz) sit OUTSIDE a 20 MHz
    channel: the IIP2 trim walked on noise (got WORSE), the AGC sweep
    read no SNR at all.  ``scaled_probe`` scales them with bandwidth.
@@ -29,8 +29,8 @@ def test_corner_policy_flips_with_mode():
     assert recommended_lpf_corner_hz(320e6, "tx") == pytest.approx(208e6)
     assert recommended_lpf_corner_hz(80e6, "tx") == pytest.approx(52e6)
     # narrow: relaxed corner (insight #5) — MORE than the wide ratio
-    assert recommended_lpf_corner_hz(20e6, "tx") == pytest.approx(25e6)
-    assert recommended_lpf_corner_hz(40e6, "rx") == pytest.approx(50e6)
+    assert recommended_lpf_corner_hz(20e6, "tx") == pytest.approx(30e6)
+    assert recommended_lpf_corner_hz(40e6, "rx") == pytest.approx(60e6)
 
 
 def test_probes_stay_inside_the_channel():
@@ -58,6 +58,7 @@ def test_20mhz_full_cal_reaches_spec():
         assert res.passed in (True, None), (res.name, res.metrics_after)
     assert by["rx_iip2"].metrics_after["iip2_dbm"] > 60.0
     assert by["agc_sweep"].metrics_after["worst_landing_err_db"] < 2.5
-    # 1024-QAM needs ~-35 dB TX EVM; the old floor was -32.6
-    assert r.metrics["tx_evm_db"] <= -37.0, r.metrics
-    assert r.metrics["loopback_evm_db"] <= -34.0, r.metrics
+    # 1024-QAM needs ~-35 dB TX EVM; the old floor was -32.6,
+    # the 3x corner policy lands ~-41
+    assert r.metrics["tx_evm_db"] <= -40.0, r.metrics
+    assert r.metrics["loopback_evm_db"] <= -37.0, r.metrics

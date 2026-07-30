@@ -116,14 +116,14 @@ CHAPTER = Chapter(
                   "startup transient are real, and chapter 4's capture "
                   "alignment pays for them."),
                 T("corner 的选取随模式而变:宽带模式为 DPD 带宽收紧"
-                  "(≥1.3×BW/2,洞察②),窄带模式必须反向放宽(~2.5×,"
+                  "(≥1.3×BW/2,洞察②),窄带模式必须反向放宽(3×,"
                   "洞察⑤)——WiFi GI 固定 0.8 µs 而滤波器振铃随 1/BW 拉长,"
                   "紧 corner 在 20 MHz 会造出逐音均衡救不了的 −33 dB ISI "
                   "地板。库里 <code>recommended_lpf_corner_hz()</code> 封装了"
                   "这条策略。",
                   "The corner choice flips with mode: wide modes tighten "
                   "it for DPD bandwidth (≥1.3×BW/2, insight ②), narrow "
-                  "modes must relax it (~2.5×, insight ⑤) — the WiFi GI "
+                  "modes must relax it (3×, insight ⑤) — the WiFi GI "
                   "is fixed at 0.8 µs while filter ringing scales as "
                   "1/BW, so a tight corner at 20 MHz builds a −33 dB ISI "
                   "floor no per-tone equalizer can remove. "

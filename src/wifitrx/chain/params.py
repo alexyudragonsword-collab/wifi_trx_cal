@@ -29,13 +29,14 @@ def recommended_lpf_corner_hz(bandwidth_hz: float, role: str = "tx") -> float:
     time (0.8 us) while the filter impulse response scales as 1/BW, so a
     1.3x corner at 20 MHz rings ~1 us past the usable GI margin and
     floors EVM near -33 dB — ISI that no per-tone equalizer can remove.
-    With fs >> BW in narrow modes, anti-aliasing costs nothing, so 2.5x
-    is free (insight #5, found by the 20 MHz GUI run).
+    With fs >> BW in narrow modes, anti-aliasing costs nothing, so 3x is
+    free (insight #5, found by the 20 MHz GUI run; measured LPF-only
+    floor: 1.3x -33.3 / 2.5x -41.5 / 3x -47.2 dB).
     """
     if bandwidth_hz >= 80e6:
         ratio = 1.3 if role == "tx" else 1.12
     else:
-        ratio = 2.5
+        ratio = 3.0
     return bandwidth_hz / 2 * ratio
 
 
