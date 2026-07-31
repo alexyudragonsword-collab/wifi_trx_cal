@@ -249,6 +249,59 @@ def run_full_cal_steps(p: dict) -> AnalysisResult:
                                      "results": results})
 
 
+def run_rx_evm_sweep(p: dict) -> AnalysisResult:
+    """RX-mode EVM vs RF input power, uncalibrated vs calibrated, with
+    the measured/analytic sensitivity crossings for a few MCS.  This is
+    the receive-direction complement of tx_evm: an ideal transmitted
+    waveform into the impaired RX (independent LO — phase noise counts
+    in full, unlike the loopback view)."""
+    from wifitrx.cal.sequence import run_full_cal as _run
+    from wifitrx.link.mcs import mcs
+    from wifitrx.link.sensitivity import (measured_rx_evm_db,
+                                          sensitivity_study)
+
+    cfg, tx, rx, path = _cal_setup(p)
+    p_in = np.arange(-92.0, -23.0, 4.0)
+    evm_uncal = [measured_rx_evm_db(rx, cfg, float(pi)) for pi in p_in]
+    # RX corrections come from the standard sequence; DPD is TX-side
+    # only and irrelevant here, so skip it for speed
+    results = _run(tx, rx, cfg, path, with_dpd=False)
+    evm_cal = [measured_rx_evm_db(rx, cfg, float(pi)) for pi in p_in]
+    mcs_rows = sensitivity_study(rx, cfg, (7, 9, 11, 13))
+
+    fig = new_figure(figsize=(9.5, 6))
+    ax = fig.add_subplot(1, 1, 1)
+    ax.plot(p_in, evm_uncal, "o-", label="RX EVM, uncalibrated")
+    ax.plot(p_in, evm_cal, "s-", label="RX EVM, calibrated")
+    for row in mcs_rows:
+        ax.axhline(-row["snr_req_db"], ls="--", lw=0.7, color="gray")
+        ax.axvline(row["measured_dbm"], ls=":", lw=0.7, color="tab:green")
+        ax.annotate(f"MCS{row['mcs']} ({row['modulation']})",
+                    (p_in[-1], -row["snr_req_db"]), fontsize=7,
+                    ha="right", va="bottom", color="gray")
+    ax.set_xlabel("RF input power [dBm]")
+    ax.set_ylabel("EVM [dB]")
+    ax.set_title("RX EVM vs input power (dashed: MCS SNR requirement, "
+                 "dotted: measured sensitivity)", fontsize=10)
+    ax.set_ylim(-60, 5)
+    ax.legend(fontsize=9)
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+
+    text = "sensitivity, measured vs analytic (Friis):\n" + "\n".join(
+        f"  MCS{r['mcs']:2d} {r['modulation']:>9s}: "
+        f"{r['measured_dbm']:7.1f} dBm  (analytic {r['analytic_dbm']:7.1f}, "
+        f"delta {r['delta_db']:+.1f} dB)" for r in mcs_rows)
+    metrics = {"rx_evm_floor_db": float(min(evm_cal)),
+               "rx_evm_floor_uncal_db": float(min(evm_uncal))}
+    for r in mcs_rows:
+        metrics[f"sens_mcs{r['mcs']}_dbm"] = round(r["measured_dbm"], 1)
+    return AnalysisResult(metrics=metrics, figure=fig, text=text,
+                          cal_state={"tx_state": tx.correction_state(),
+                                     "rx_state": rx.correction_state(),
+                                     "results": results})
+
+
 def run_drift_tracking(p: dict) -> AnalysisResult:
     from wifitrx.cal.dpd_tracking import track_dpd
     from wifitrx.chain import RxChain, RxParams, TxChain, TxParams
@@ -388,6 +441,19 @@ ALL_ANALYSES: tuple[AnalysisSpec, ...] = (
             ParamSpec("with_dpd", "Run DPD", "bool", False),
         ),
         run=run_full_cal_steps),
+    AnalysisSpec(
+        key="rx_evm_sweep", title="RX EVM vs input power",
+        description="Receive-direction EVM (ideal TX waveform into the "
+                    "impaired RX), uncalibrated vs calibrated, with "
+                    "measured sensitivity crossings per MCS",
+        params=(
+            ParamSpec("bw_mhz", "Bandwidth [MHz]", "choice", 80,
+                      choices=(20, 40, 80, 160, 320)),
+            ParamSpec("qam", "QAM order", "choice", 1024,
+                      choices=(256, 1024, 4096)),
+            ParamSpec("seed", "Process seed", "int", 5, minimum=0),
+        ),
+        run=run_rx_evm_sweep),
     AnalysisSpec(
         key="drift_tracking", title="PA drift tracking DPD",
         description="RLS DPD vs frozen DPD over a thermal ramp",

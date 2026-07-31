@@ -14,6 +14,7 @@ FAST_PARAMS = {
     "full_cal": {"bw_mhz": 80, "qam": 256, "seed": 5, "with_dpd": False},
     "full_cal_steps": {"bw_mhz": 80, "qam": 256, "seed": 5,
                        "with_dpd": False},
+    "rx_evm_sweep": {"bw_mhz": 80, "qam": 256, "seed": 5},
     "drift_tracking": {"bw_mhz": 80, "n_states": 3},
     "blocker_desense": {"bw_mhz": 160, "offset_mhz": 200.0,
                         "p_sig_dbm": -60.0},
