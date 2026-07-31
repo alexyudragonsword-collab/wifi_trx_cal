@@ -112,6 +112,36 @@ def tx_evm(tx: TxChain, cfg: OFDMConfig, drive_scale: float = 0.15,
                        n_warmup=n_warmup, n_guard=n_guard)["evm_db"]
 
 
+def rx_snapshot(rx: RxChain, cfg: OFDMConfig, p_in_dbm: float,
+                n_warmup: int = 512, n_guard: int = 64,
+                seed: int = 0) -> dict:
+    """Receive-direction counterpart of ``tx_snapshot``: an ideal
+    transmitted waveform at ``p_in_dbm`` RF input into the (impaired,
+    possibly calibrated) RX chain, AGC engaged.  The LO here is
+    independent of the transmitter's — phase noise counts in full,
+    unlike the loopback view where the shared synthesizer cancels it.
+    Same capture conventions: cyclic warm-up prefix and guard tail,
+    integer-slice + fractional delay compensation, one padding symbol
+    transmitted and excluded from the score, per-tone EQ + CPE."""
+    wf = generate_ofdm(replace(cfg, n_symbols=cfg.n_symbols + 1))
+    amp = 10.0 ** ((p_in_dbm - power_dbm(wf.x)) / 20.0)
+    x = wf.x * amp
+    rx.agc(p_in_dbm)
+    xp = np.concatenate([x[-n_warmup:], x, x[:n_guard]])
+    y = rx(xp, rng=np.random.default_rng(seed))
+    _, _, info = align_delay(xp, y, max_lag=n_guard // 2)
+    y = compensate_delay(y, info["lag_total"], n_warmup, len(x))
+    g = np.vdot(x, y) / np.vdot(x, x)
+    syms = demodulate_ofdm(y / g / amp, wf)[: cfg.n_symbols]
+    ref = wf.tx_symbols[: cfg.n_symbols]
+    syms = correct_cpe(syms, ref)
+    return {"evm_db": evm(syms, ref, equalize="per_tone").db,
+            "syms_eq": _equalize_per_tone(syms, ref),
+            "ref_syms": ref,
+            "p_in_dbm": p_in_dbm,
+            "bandwidth_hz": cfg.bandwidth_hz}
+
+
 def _equalize_per_tone(syms: np.ndarray, ref: np.ndarray) -> np.ndarray:
     """Apply the modem-style per-tone LS equalizer (for constellation plots;
     the EVM metric does its own equalization internally)."""
@@ -293,6 +323,10 @@ def run_full_cal(tx: TxChain, rx: RxChain, cfg: OFDMConfig,
                                    drive_scale=final_drive_scale, seed=seed)
     evm_after = snap_after["evm_db"]
     snap_tx = tx_snapshot(tx, cfg, drive_scale=final_drive_scale)
+    # RX-direction EVM at the level the loopback actually delivers, so
+    # the three views (loopback / TX / RX) share one operating point
+    snap_rx = rx_snapshot(rx, cfg,
+                          power_dbm(snap_after["pa_out"]) - path.atten_db)
     total_samples = sum(r.cost.get("samples", 0) for r in results)
     total_captures = sum(r.cost.get("captures", 0) for r in results)
     _emit(CalResult(
@@ -300,6 +334,7 @@ def run_full_cal(tx: TxChain, rx: RxChain, cfg: OFDMConfig,
         metrics_before={"evm_db": evm_before},
         metrics_after={"evm_db": evm_after,
                        "tx_evm_db": snap_tx["evm_db"],
+                       "rx_evm_db": snap_rx["evm_db"],
                        "capture_time_ms": total_samples / tx.fs * 1e3,
                        "total_captures": total_captures},
         passed=evm_after < evm_before,
@@ -307,12 +342,15 @@ def run_full_cal(tx: TxChain, rx: RxChain, cfg: OFDMConfig,
         # run targets lower MCS and carries no embedded spec
         spec={"metric": "tx_evm_db", "limit": -38.0, "sense": "max"}
              if with_dpd else {},
-        notes="evm_db: composite TX+RX loopback EVM; tx_evm_db: PA-output "
-              "EVM at the 802.11be TX spec measurement point (per-tone EQ "
-              f"+ CPE removal in both); profile={profile}",
+        notes="evm_db: composite TX+RX loopback EVM (shared LO — phase "
+              "noise cancels); tx_evm_db: PA-output EVM at the 802.11be "
+              "TX spec measurement point; rx_evm_db: ideal waveform into "
+              "the RX at the loopback's coupled level (independent LO); "
+              f"per-tone EQ + CPE removal in all three; profile={profile}",
         artifacts={"snapshot_before": snap_before,
                    "snapshot_after": snap_after,
-                   "snapshot_tx": snap_tx},
+                   "snapshot_tx": snap_tx,
+                   "snapshot_rx": snap_rx},
     ))
     # The validated plan is only worth anything if it matches what actually
     # ran — this assert is what keeps planned_steps from drifting away from

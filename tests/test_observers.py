@@ -16,7 +16,8 @@ import numpy as np
 import pytest
 
 from wifitrx.cal.sequence import (loopback_evm, loopback_snapshot,
-                                  measure_loopback_delay, tx_evm)
+                                  measure_loopback_delay, rx_snapshot,
+                                  tx_evm)
 from wifitrx.chain import LoopbackPath, RxChain, RxParams, TxChain, TxParams
 from wifitrx.waveform import OFDMConfig
 
@@ -52,6 +53,7 @@ READERS = {
     "loopback_evm": lambda tx, rx, path: loopback_evm(
         tx, rx, path, CFG, drive_scale=0.1),
     "tx_evm": lambda tx, rx, path: tx_evm(tx, CFG, drive_scale=0.1),
+    "rx_snapshot": lambda tx, rx, path: rx_snapshot(rx, CFG, -40.0),
     "measure_loopback_delay": lambda tx, rx, path: measure_loopback_delay(
         tx, rx, path, CFG),
 }

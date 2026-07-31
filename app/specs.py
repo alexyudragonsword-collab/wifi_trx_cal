@@ -69,26 +69,29 @@ def _chains(bw: float, seed: int, fs: float):
     return TxChain(txp, fs), RxChain(rxp, fs)
 
 
-def _five_panel(results, sb, sa, st, sa_title="loopback AFTER",
+def _five_panel(results, sb, sa, st, sr=None, sa_title="loopback AFTER",
                 suptitle=None) -> Figure:
-    """The full-cal result page: three constellations (loopback before /
-    loopback current / TX @ PA output — the loopback view cancels
-    common-LO phase noise, the TX view is the 802.11be spec measurement
-    point where it counts), the PA-output PSD overlay, and the per-step
-    dB metrics of ``results``."""
+    """The full-cal result page: four constellations (loopback before /
+    loopback current / TX @ PA output / RX @ digital output — the
+    loopback view cancels common-LO phase noise, the TX view is the
+    802.11be spec measurement point where it counts, the RX view feeds
+    an ideal waveform into the receiver with an independent LO), the
+    PA-output PSD overlay, and the per-step dB metrics of ``results``."""
     from wifitrx.metrics.spectrum import psd
 
-    fig = new_figure(figsize=(11.5, 7))
-    gs = fig.add_gridspec(2, 6)
-    ax_cb = fig.add_subplot(gs[0, 0:2])
-    ax_ca = fig.add_subplot(gs[0, 2:4])
-    ax_ct = fig.add_subplot(gs[0, 4:6])
-    ax_psd = fig.add_subplot(gs[1, 0:3])
-    ax_bar = fig.add_subplot(gs[1, 3:6])
+    fig = new_figure(figsize=(12.5, 7))
+    gs = fig.add_gridspec(2, 4)
+    ax_cb = fig.add_subplot(gs[0, 0])
+    ax_ca = fig.add_subplot(gs[0, 1])
+    ax_ct = fig.add_subplot(gs[0, 2])
+    ax_cr = fig.add_subplot(gs[0, 3])
+    ax_psd = fig.add_subplot(gs[1, 0:2])
+    ax_bar = fig.add_subplot(gs[1, 2:4])
 
     panels = [(ax_cb, sb, "loopback BEFORE"),
               (ax_ca, sa, sa_title),
-              (ax_ct, st, "TX @ PA out")]
+              (ax_ct, st, "TX @ PA out"),
+              (ax_cr, sr, "RX @ digital out")]
     for ax, snap, title in panels:
         if snap is None:      # cal-states saved by older runs
             ax.set_axis_off()
@@ -165,10 +168,13 @@ def _cal_setup(p: dict):
 
 
 def _cal_metrics(results, final):
-    return {"loopback_evm_db": final.metrics_after["evm_db"],
-            "tx_evm_db": final.metrics_after["tx_evm_db"],
-            "steps_passed": sum(1 for r in results if r.passed),
-            "steps_total": len(results)}
+    m = {"loopback_evm_db": final.metrics_after["evm_db"],
+         "tx_evm_db": final.metrics_after["tx_evm_db"],
+         "steps_passed": sum(1 for r in results if r.passed),
+         "steps_total": len(results)}
+    if "rx_evm_db" in final.metrics_after:
+        m["rx_evm_db"] = final.metrics_after["rx_evm_db"]
+    return m
 
 
 def run_full_cal(p: dict) -> AnalysisResult:
@@ -179,7 +185,8 @@ def run_full_cal(p: dict) -> AnalysisResult:
     final = {r.name: r for r in results}["final_loopback_evm"]
     fig = _five_panel(results, final.artifacts.get("snapshot_before"),
                       final.artifacts.get("snapshot_after"),
-                      final.artifacts.get("snapshot_tx"))
+                      final.artifacts.get("snapshot_tx"),
+                      final.artifacts.get("snapshot_rx"))
     return AnalysisResult(metrics=_cal_metrics(results, final), figure=fig,
                           cal_state={"tx_state": tx.correction_state(),
                                      "rx_state": rx.correction_state(),
@@ -195,29 +202,33 @@ def run_full_cal_steps(p: dict) -> AnalysisResult:
     level the sequence set — the corrections this mode programs are
     bit-identical to the one-shot mode's."""
     from wifitrx.cal.sequence import (loopback_snapshot, run_full_cal as
-                                      _run, tx_snapshot)
+                                      _run, rx_snapshot, tx_snapshot)
+    from wifitrx.units import power_dbm
 
     cfg, tx, rx, path = _cal_setup(p)
     drive = 0.12                       # final_drive_scale of the sequence
     sb = loopback_snapshot(tx, rx, path, cfg, drive_scale=drive)
     pages: list[tuple[str, Figure]] = []
     seen: list = []
-    track: list[tuple[str, float, float]] = []
+    track: list[tuple[str, float, float, float]] = []
 
     def on_step(res) -> None:
         seen.append(res)
         if res.name == "final_loopback_evm":
             sa = res.artifacts["snapshot_after"]
             st = res.artifacts["snapshot_tx"]
+            sr = res.artifacts["snapshot_rx"]
         else:
             agc_state = (rx.lna_idx, rx.vga_db)
             sa = loopback_snapshot(tx, rx, path, cfg, drive_scale=drive)
             st = tx_snapshot(tx, cfg, drive_scale=drive)
+            sr = rx_snapshot(rx, cfg,
+                             power_dbm(sa["pa_out"]) - path.atten_db)
             rx.lna_idx, rx.vga_db = agc_state
-        track.append((res.name, sa["evm_db"], st["evm_db"]))
+        track.append((res.name, sa["evm_db"], st["evm_db"], sr["evm_db"]))
         n = len(seen)
         pages.append((f"step {n}: {res.name}", _five_panel(
-            seen, sb, sa, st, sa_title="loopback after this step",
+            seen, sb, sa, st, sr, sa_title="loopback after this step",
             suptitle=f"After step {n}: {res.name}")))
 
     results = _run(tx, rx, cfg, path, with_dpd=bool(p["with_dpd"]),
@@ -230,8 +241,10 @@ def run_full_cal_steps(p: dict) -> AnalysisResult:
     xpos = np.arange(len(track) + 1)
     lb = [sb["evm_db"]] + [t[1] for t in track]
     te = [t[2] for t in track]
+    re_ = [t[3] for t in track]
     ax.plot(xpos, lb, "o-", label="loopback EVM")
     ax.plot(xpos[1:], te, "s-", label="TX EVM @ PA out")
+    ax.plot(xpos[1:], re_, "^-", label="RX EVM @ digital out")
     ax.set_xticks(xpos)
     ax.set_xticklabels(["(uncal)"] + [t[0] for t in track],
                        rotation=40, ha="right", fontsize=7)
