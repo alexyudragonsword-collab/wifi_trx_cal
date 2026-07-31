@@ -11,10 +11,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "app"))
 from specs import ALL_ANALYSES  # noqa: E402
 
 FAST_PARAMS = {
-    "full_cal": {"bw_mhz": 80, "qam": 256, "seed": 5, "with_dpd": False},
+    "full_cal": {"bw_mhz": 80, "qam": 256, "seed": 5, "with_dpd": False,
+                 "std": "11ax/be"},
     "full_cal_steps": {"bw_mhz": 80, "qam": 256, "seed": 5,
-                       "with_dpd": False},
-    "rx_evm_sweep": {"bw_mhz": 80, "qam": 256, "seed": 5},
+                       "with_dpd": False, "std": "11ax/be"},
+    "rx_evm_sweep": {"bw_mhz": 80, "qam": 256, "seed": 5,
+                     "std": "11ax/be"},
     "drift_tracking": {"bw_mhz": 80, "n_states": 3},
     "blocker_desense": {"bw_mhz": 160, "offset_mhz": 200.0,
                         "p_sig_dbm": -60.0},
@@ -30,6 +32,26 @@ def test_spec_runs(spec):
     result = spec.run(params)
     assert result.metrics, spec.key
     assert result.figure is not None
+
+
+def test_legacy_standard_setup():
+    """The 11ac/n selector builds the legacy numerology (312.5 kHz
+    spacing, long GI, 4x symbols) and rejects bandwidths the legacy
+    standards never defined."""
+    from specs import _cal_setup
+
+    cfg, tx, rx, path = _cal_setup({"bw_mhz": 40, "qam": 64, "seed": 1,
+                                    "std": "11ac/n"})
+    assert cfg.subcarrier_spacing_hz == 312.5e3
+    assert cfg.fft_size == 128
+    assert cfg.n_active == 114          # 11n 40 MHz: 108 data + 6 pilots
+    assert cfg.cp_len == 32             # 0.8 us long GI
+    assert cfg.n_symbols == 24
+    with pytest.raises(ValueError, match="160 MHz"):
+        _cal_setup({"bw_mhz": 320, "qam": 64, "seed": 1, "std": "11ac/n"})
+    # default remains 11ax
+    cfg2, *_ = _cal_setup({"bw_mhz": 20, "qam": 256, "seed": 1})
+    assert cfg2.subcarrier_spacing_hz == 78.125e3
 
 
 def test_step_through_matches_one_shot():

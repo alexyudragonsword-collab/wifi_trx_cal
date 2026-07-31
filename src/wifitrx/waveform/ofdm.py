@@ -27,6 +27,16 @@ _ACTIVE_TONES = {
     320e6: 3984,
 }
 
+# Legacy 802.11a/n/ac numerology (312.5 kHz spacing): data + pilots per
+# bandwidth — 52 of 64 tones at 20 MHz, 114 of 128 at 40 MHz (11n),
+# 242 of 256 / 484 of 512 for 11ac 80/160 MHz.
+_ACTIVE_TONES_LEGACY = {
+    20e6: 52,
+    40e6: 114,
+    80e6: 242,
+    160e6: 484,
+}
+
 
 @dataclass
 class OFDMConfig:
@@ -52,12 +62,15 @@ class OFDMConfig:
 
     @property
     def n_active(self) -> int:
-        # the per-bandwidth table is 802.11ax/be numerology; legacy
-        # spacings size occupancy from the FFT instead (11a/n/ac 20 MHz:
-        # 52 of 64 tones -> 0.41 per side)
+        # per-numerology occupancy tables; a fraction-of-FFT heuristic
+        # covers non-standard bandwidths (0.47 per side ~ 11ax edge,
+        # 0.41 ~ the legacy 52-of-64 ratio)
         if (self.subcarrier_spacing_hz == SUBCARRIER_SPACING_HZ
                 and self.bandwidth_hz in _ACTIVE_TONES):
             return _ACTIVE_TONES[self.bandwidth_hz]
+        if (self.subcarrier_spacing_hz == 312.5e3
+                and self.bandwidth_hz in _ACTIVE_TONES_LEGACY):
+            return _ACTIVE_TONES_LEGACY[self.bandwidth_hz]
         frac = 0.47 if self.subcarrier_spacing_hz == SUBCARRIER_SPACING_HZ \
             else 0.41
         return 2 * int(frac * self.fft_size)

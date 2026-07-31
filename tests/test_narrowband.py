@@ -107,6 +107,12 @@ def test_wifi5_numerology_properties():
     assert cfg.fft_size == 64
     assert cfg.n_active == 52          # 11a/n/ac 20 MHz occupancy
     assert cfg.cp_len == 16            # 0.8 us long GI at 20 MHz
+    # legacy occupancy table, not the fraction heuristic: 11n 40 MHz is
+    # 114 of 128 tones, 11ac 80 MHz is 242 of 256
+    assert OFDMConfig(bandwidth_hz=40e6, subcarrier_spacing_hz=312.5e3,
+                      cp_fraction=1 / 4, n_symbols=4).n_active == 114
+    assert OFDMConfig(bandwidth_hz=80e6, subcarrier_spacing_hz=312.5e3,
+                      cp_fraction=1 / 4, n_symbols=4).n_active == 242
     assert OFDMConfig(bandwidth_hz=20e6, subcarrier_spacing_hz=312.5e3,
                       cp_fraction=1 / 8, n_symbols=4).cp_len == 8
     # 11ax table untouched by the numerology parameter

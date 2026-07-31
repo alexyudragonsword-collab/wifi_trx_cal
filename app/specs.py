@@ -185,13 +185,24 @@ def _cal_setup(p: dict):
     from wifitrx.waveform import OFDMConfig
 
     bw = float(p["bw_mhz"]) * 1e6
-    cfg = OFDMConfig(bandwidth_hz=bw, qam_order=int(p["qam"]),
-                     n_symbols=6, oversampling=4)
+    if p.get("std", "11ax/be") == "11ac/n":
+        if bw > 160e6:
+            raise ValueError("802.11ac/n supports at most 160 MHz — "
+                             "select the 11ax/be standard for 320 MHz")
+        # legacy numerology: 312.5 kHz spacing, 3.2 us symbol, 0.8 us
+        # long GI; 4x the symbol count keeps the capture length (and
+        # hence every estimator's averaging) comparable to 11ax runs
+        cfg = OFDMConfig(bandwidth_hz=bw, qam_order=int(p["qam"]),
+                         n_symbols=24, oversampling=4,
+                         subcarrier_spacing_hz=312.5e3, cp_fraction=1 / 4)
+    else:
+        cfg = OFDMConfig(bandwidth_hz=bw, qam_order=int(p["qam"]),
+                         n_symbols=6, oversampling=4)
     tx, rx = _chains(bw, int(p["seed"]), cfg.sample_rate_hz)
     return cfg, tx, rx, LoopbackPath(atten_db=40.0, delay_ns=6.0)
 
 
-_QAM_MCS = {256: 9, 1024: 11, 4096: 13}
+_QAM_MCS = {64: 7, 256: 9, 1024: 11, 4096: 13}
 _RX_SWEEP_PIN = np.arange(-90.0, -23.0, 6.0)
 
 
@@ -501,7 +512,11 @@ ALL_ANALYSES: tuple[AnalysisSpec, ...] = (
             ParamSpec("bw_mhz", "Bandwidth [MHz]", "choice", 80,
                       choices=(20, 40, 80, 160, 320)),
             ParamSpec("qam", "QAM order", "choice", 1024,
-                      choices=(256, 1024, 4096)),
+                      choices=(64, 256, 1024, 4096)),
+            ParamSpec("std", "Standard", "choice", "11ax/be",
+                      choices=("11ax/be", "11ac/n"),
+                      tooltip="11ac/n: 312.5 kHz spacing, 3.2 us symbol, "
+                              "0.8 us long GI; max 160 MHz"),
             ParamSpec("seed", "Process seed", "int", 5, minimum=0),
             ParamSpec("with_dpd", "Run DPD", "bool", False),
         ),
@@ -515,7 +530,11 @@ ALL_ANALYSES: tuple[AnalysisSpec, ...] = (
             ParamSpec("bw_mhz", "Bandwidth [MHz]", "choice", 80,
                       choices=(20, 40, 80, 160, 320)),
             ParamSpec("qam", "QAM order", "choice", 1024,
-                      choices=(256, 1024, 4096)),
+                      choices=(64, 256, 1024, 4096)),
+            ParamSpec("std", "Standard", "choice", "11ax/be",
+                      choices=("11ax/be", "11ac/n"),
+                      tooltip="11ac/n: 312.5 kHz spacing, 3.2 us symbol, "
+                              "0.8 us long GI; max 160 MHz"),
             ParamSpec("seed", "Process seed", "int", 5, minimum=0),
             ParamSpec("with_dpd", "Run DPD", "bool", False),
         ),
@@ -529,7 +548,11 @@ ALL_ANALYSES: tuple[AnalysisSpec, ...] = (
             ParamSpec("bw_mhz", "Bandwidth [MHz]", "choice", 80,
                       choices=(20, 40, 80, 160, 320)),
             ParamSpec("qam", "QAM order", "choice", 1024,
-                      choices=(256, 1024, 4096)),
+                      choices=(64, 256, 1024, 4096)),
+            ParamSpec("std", "Standard", "choice", "11ax/be",
+                      choices=("11ax/be", "11ac/n"),
+                      tooltip="11ac/n: 312.5 kHz spacing, 3.2 us symbol, "
+                              "0.8 us long GI; max 160 MHz"),
             ParamSpec("seed", "Process seed", "int", 5, minimum=0),
         ),
         run=run_rx_evm_sweep),
