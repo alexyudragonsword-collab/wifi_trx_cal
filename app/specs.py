@@ -69,24 +69,26 @@ def _chains(bw: float, seed: int, fs: float):
     return TxChain(txp, fs), RxChain(rxp, fs)
 
 
-def _five_panel(results, sb, sa, st, sr=None, sa_title="loopback AFTER",
-                suptitle=None) -> Figure:
+def _five_panel(results, sb, sa, st, sr=None, rx_sweep=None,
+                sa_title="loopback AFTER", suptitle=None) -> Figure:
     """The full-cal result page: four constellations (loopback before /
     loopback current / TX @ PA output / RX @ digital output — the
     loopback view cancels common-LO phase noise, the TX view is the
     802.11be spec measurement point where it counts, the RX view feeds
     an ideal waveform into the receiver with an independent LO), the
-    PA-output PSD overlay, and the per-step dB metrics of ``results``."""
+    PA-output PSD overlay, the RX EVM vs input power curve (when
+    provided) and the per-step dB metrics of ``results``."""
     from wifitrx.metrics.spectrum import psd
 
-    fig = new_figure(figsize=(12.5, 7))
-    gs = fig.add_gridspec(2, 4)
-    ax_cb = fig.add_subplot(gs[0, 0])
-    ax_ca = fig.add_subplot(gs[0, 1])
-    ax_ct = fig.add_subplot(gs[0, 2])
-    ax_cr = fig.add_subplot(gs[0, 3])
-    ax_psd = fig.add_subplot(gs[1, 0:2])
-    ax_bar = fig.add_subplot(gs[1, 2:4])
+    fig = new_figure(figsize=(13.5, 7))
+    gs = fig.add_gridspec(2, 12)
+    ax_cb = fig.add_subplot(gs[0, 0:3])
+    ax_ca = fig.add_subplot(gs[0, 3:6])
+    ax_ct = fig.add_subplot(gs[0, 6:9])
+    ax_cr = fig.add_subplot(gs[0, 9:12])
+    ax_psd = fig.add_subplot(gs[1, 0:4])
+    ax_swp = fig.add_subplot(gs[1, 4:8])
+    ax_bar = fig.add_subplot(gs[1, 8:12])
 
     panels = [(ax_cb, sb, "loopback BEFORE"),
               (ax_ca, sa, sa_title),
@@ -123,6 +125,25 @@ def _five_panel(results, sb, sa, st, sr=None, sa_title="loopback AFTER",
     ax_psd.set_ylim(-80, 25)
     ax_psd.legend(fontsize=8)
     ax_psd.grid(True, alpha=0.3)
+
+    # RX EVM vs input power (calibrated chain; final result page only)
+    if rx_sweep is not None:
+        ax_swp.plot(rx_sweep["p_in"], rx_sweep["evm"], "s-", ms=3,
+                    color="tab:orange", label="RX EVM (calibrated)")
+        ax_swp.axhline(rx_sweep["req_db"], ls="--", lw=0.8, color="gray")
+        ax_swp.annotate(rx_sweep["label"],
+                        (rx_sweep["p_in"][0], rx_sweep["req_db"]),
+                        fontsize=7, va="bottom", color="gray")
+        ax_swp.plot(*rx_sweep["op"], "o", ms=7, mfc="none",
+                    color="tab:red", label="loopback op. point")
+        ax_swp.set_xlabel("RF input [dBm]")
+        ax_swp.set_ylabel("EVM [dB]")
+        ax_swp.set_title("RX EVM vs input power", fontsize=9)
+        ax_swp.set_ylim(-60, 5)
+        ax_swp.legend(fontsize=7)
+        ax_swp.grid(True, alpha=0.3)
+    else:
+        ax_swp.set_axis_off()
 
     # per-step dB metrics
     names, befores, afters = [], [], []
@@ -167,6 +188,26 @@ def _cal_setup(p: dict):
     return cfg, tx, rx, LoopbackPath(atten_db=40.0, delay_ns=6.0)
 
 
+_QAM_MCS = {256: 9, 1024: 11, 4096: 13}
+
+
+def _rx_sweep(rx, cfg, snap_rx) -> dict:
+    """RX EVM vs input power on the calibrated chain, with the SNR
+    requirement of the MCS matching the run's QAM order and the
+    loopback operating point marked."""
+    from wifitrx.link.mcs import mcs
+    from wifitrx.link.sensitivity import measured_rx_evm_db
+
+    idx = _QAM_MCS.get(int(cfg.qam_order), 11)
+    m = mcs(idx)
+    p_in = np.arange(-90.0, -23.0, 6.0)
+    return {"p_in": p_in,
+            "evm": [measured_rx_evm_db(rx, cfg, float(pi)) for pi in p_in],
+            "req_db": -m.snr_req_db,
+            "label": f"MCS{idx} ({m.modulation})",
+            "op": (snap_rx["p_in_dbm"], snap_rx["evm_db"])}
+
+
 def _cal_metrics(results, final):
     m = {"loopback_evm_db": final.metrics_after["evm_db"],
          "tx_evm_db": final.metrics_after["tx_evm_db"],
@@ -183,10 +224,11 @@ def run_full_cal(p: dict) -> AnalysisResult:
     cfg, tx, rx, path = _cal_setup(p)
     results = _run(tx, rx, cfg, path, with_dpd=bool(p["with_dpd"]))
     final = {r.name: r for r in results}["final_loopback_evm"]
+    sr = final.artifacts.get("snapshot_rx")
     fig = _five_panel(results, final.artifacts.get("snapshot_before"),
                       final.artifacts.get("snapshot_after"),
-                      final.artifacts.get("snapshot_tx"),
-                      final.artifacts.get("snapshot_rx"))
+                      final.artifacts.get("snapshot_tx"), sr,
+                      rx_sweep=_rx_sweep(rx, cfg, sr))
     return AnalysisResult(metrics=_cal_metrics(results, final), figure=fig,
                           cal_state={"tx_state": tx.correction_state(),
                                      "rx_state": rx.correction_state(),
@@ -234,6 +276,17 @@ def run_full_cal_steps(p: dict) -> AnalysisResult:
     results = _run(tx, rx, cfg, path, with_dpd=bool(p["with_dpd"]),
                    on_step=on_step)
     final = {r.name: r for r in results}["final_loopback_evm"]
+
+    # re-render the final page with the RX EVM vs input power sweep
+    # (sweeping at every intermediate step would cost ~12 RX captures
+    # per step for little insight; the calibrated curve is what matters)
+    sr_f = final.artifacts["snapshot_rx"]
+    pages[-1] = (pages[-1][0], _five_panel(
+        seen, sb, final.artifacts["snapshot_after"],
+        final.artifacts["snapshot_tx"], sr_f,
+        rx_sweep=_rx_sweep(rx, cfg, sr_f),
+        sa_title="loopback after this step",
+        suptitle=f"After step {len(seen)}: final_loopback_evm"))
 
     # summary page: EVM trajectory across the sequence
     fig = new_figure(figsize=(11.5, 5.5))
