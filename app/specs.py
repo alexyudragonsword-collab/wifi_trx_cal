@@ -81,24 +81,34 @@ def run_full_cal(p: dict) -> AnalysisResult:
 
     from wifitrx.metrics.spectrum import psd
 
-    fig = new_figure(figsize=(9.5, 7))
-    ax_cb = fig.add_subplot(2, 2, 1)
-    ax_ca = fig.add_subplot(2, 2, 2)
-    ax_psd = fig.add_subplot(2, 2, 3)
-    ax_bar = fig.add_subplot(2, 2, 4)
+    fig = new_figure(figsize=(11.5, 7))
+    gs = fig.add_gridspec(2, 6)
+    ax_cb = fig.add_subplot(gs[0, 0:2])
+    ax_ca = fig.add_subplot(gs[0, 2:4])
+    ax_ct = fig.add_subplot(gs[0, 4:6])
+    ax_psd = fig.add_subplot(gs[1, 0:3])
+    ax_bar = fig.add_subplot(gs[1, 3:6])
 
-    # constellation before/after (equalized loopback symbols)
+    # constellations: loopback before/after (composite TX+RX, common-LO
+    # phase noise cancels) and the PA-output TX view (ideal test
+    # receiver — the 802.11be spec measurement point, phase noise counts)
     sb = final.artifacts.get("snapshot_before")
     sa = final.artifacts.get("snapshot_after")
-    for ax, snap, title in ((ax_cb, sb, "constellation BEFORE"),
-                            (ax_ca, sa, "constellation AFTER")):
+    st = final.artifacts.get("snapshot_tx")
+    panels = [(ax_cb, sb, "loopback BEFORE"),
+              (ax_ca, sa, "loopback AFTER"),
+              (ax_ct, st, "TX @ PA out AFTER")]
+    for ax, snap, title in panels:
+        if snap is None:      # cal-states saved by older runs
+            ax.set_axis_off()
+            continue
         pts = np.ravel(snap["syms_eq"])
         if pts.size > 6000:
             idx = np.random.default_rng(0).choice(pts.size, 6000,
                                                   replace=False)
             pts = pts[idx]
         ax.plot(pts.real, pts.imag, ".", ms=1.0, alpha=0.5)
-        ax.set_title(f"{title}  (EVM {snap['evm_db']:.1f} dB)", fontsize=9)
+        ax.set_title(f"{title}\n(EVM {snap['evm_db']:.1f} dB)", fontsize=9)
         ax.set_aspect("equal")
         ax.set_xlim(-1.55, 1.55)
         ax.set_ylim(-1.55, 1.55)

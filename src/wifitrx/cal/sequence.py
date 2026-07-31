@@ -72,13 +72,14 @@ def capture_aligned(tx: TxChain, rx: RxChain, path: LoopbackPath,
     return compensate_delay(cap, info["lag_total"], n_warmup, len(x))
 
 
-def tx_evm(tx: TxChain, cfg: OFDMConfig, drive_scale: float = 0.15,
-           n_warmup: int = 512, n_guard: int = 64, seed: int = 0) -> float:
-    """TX EVM at the PA output (the 802.11be TX spec measurement point):
-    per-tone EQ + CPE removal, as a standard-compliant test receiver does.
-    A cyclic warm-up prefix settles the TX baseband filter, a cyclic
-    guard tail keeps delay compensation inside the frame, and the capture
-    is delay-aligned before demodulation.
+def tx_snapshot(tx: TxChain, cfg: OFDMConfig, drive_scale: float = 0.15,
+                n_warmup: int = 512, n_guard: int = 64) -> dict:
+    """PA-output EVM plus the equalized constellation, as a
+    standard-compliant test receiver sees it (the 802.11be TX spec
+    measurement point): per-tone EQ + CPE removal.  A cyclic warm-up
+    prefix settles the TX baseband filter, a cyclic guard tail keeps
+    delay compensation inside the frame, and the capture is
+    delay-aligned before demodulation.
 
     One extra padding symbol is transmitted and excluded from the score
     (lab practice: measure interior symbols).  The burst's final symbol
@@ -97,7 +98,18 @@ def tx_evm(tx: TxChain, cfg: OFDMConfig, drive_scale: float = 0.15,
     syms = demodulate_ofdm(y / g / drive_scale, wf)[: cfg.n_symbols]
     ref = wf.tx_symbols[: cfg.n_symbols]
     syms = correct_cpe(syms, ref)
-    return evm(syms, ref, equalize="per_tone").db
+    return {"evm_db": evm(syms, ref, equalize="per_tone").db,
+            "syms_eq": _equalize_per_tone(syms, ref),
+            "ref_syms": ref,
+            "bandwidth_hz": cfg.bandwidth_hz}
+
+
+def tx_evm(tx: TxChain, cfg: OFDMConfig, drive_scale: float = 0.15,
+           n_warmup: int = 512, n_guard: int = 64, seed: int = 0) -> float:
+    """TX EVM at the PA output; see ``tx_snapshot`` for the measurement
+    conventions."""
+    return tx_snapshot(tx, cfg, drive_scale=drive_scale,
+                       n_warmup=n_warmup, n_guard=n_guard)["evm_db"]
 
 
 def _equalize_per_tone(syms: np.ndarray, ref: np.ndarray) -> np.ndarray:
@@ -267,14 +279,14 @@ def run_full_cal(tx: TxChain, rx: RxChain, cfg: OFDMConfig,
     snap_after = loopback_snapshot(tx, rx, path, cfg,
                                    drive_scale=final_drive_scale, seed=seed)
     evm_after = snap_after["evm_db"]
+    snap_tx = tx_snapshot(tx, cfg, drive_scale=final_drive_scale)
     total_samples = sum(r.cost.get("samples", 0) for r in results)
     total_captures = sum(r.cost.get("captures", 0) for r in results)
     results.append(CalResult(
         name="final_loopback_evm",
         metrics_before={"evm_db": evm_before},
         metrics_after={"evm_db": evm_after,
-                       "tx_evm_db": tx_evm(tx, cfg,
-                                           drive_scale=final_drive_scale),
+                       "tx_evm_db": snap_tx["evm_db"],
                        "capture_time_ms": total_samples / tx.fs * 1e3,
                        "total_captures": total_captures},
         passed=evm_after < evm_before,
@@ -286,7 +298,8 @@ def run_full_cal(tx: TxChain, rx: RxChain, cfg: OFDMConfig,
               "EVM at the 802.11be TX spec measurement point (per-tone EQ "
               f"+ CPE removal in both); profile={profile}",
         artifacts={"snapshot_before": snap_before,
-                   "snapshot_after": snap_after},
+                   "snapshot_after": snap_after,
+                   "snapshot_tx": snap_tx},
     ))
     # The validated plan is only worth anything if it matches what actually
     # ran — this assert is what keeps planned_steps from drifting away from
