@@ -126,10 +126,13 @@ def _five_panel(results, sb, sa, st, sr=None, rx_sweep=None,
     ax_psd.legend(fontsize=8)
     ax_psd.grid(True, alpha=0.3)
 
-    # RX EVM vs input power (calibrated chain; final result page only)
+    # RX EVM vs input power (final result page only)
     if rx_sweep is not None:
+        if rx_sweep.get("evm_uncal") is not None:
+            ax_swp.plot(rx_sweep["p_in"], rx_sweep["evm_uncal"], "o-",
+                        ms=3, color="tab:blue", label="uncalibrated")
         ax_swp.plot(rx_sweep["p_in"], rx_sweep["evm"], "s-", ms=3,
-                    color="tab:orange", label="RX EVM (calibrated)")
+                    color="tab:orange", label="calibrated")
         ax_swp.axhline(rx_sweep["req_db"], ls="--", lw=0.8, color="gray")
         ax_swp.annotate(rx_sweep["label"],
                         (rx_sweep["p_in"][0], rx_sweep["req_db"]),
@@ -189,20 +192,28 @@ def _cal_setup(p: dict):
 
 
 _QAM_MCS = {256: 9, 1024: 11, 4096: 13}
+_RX_SWEEP_PIN = np.arange(-90.0, -23.0, 6.0)
 
 
-def _rx_sweep(rx, cfg, snap_rx) -> dict:
-    """RX EVM vs input power on the calibrated chain, with the SNR
-    requirement of the MCS matching the run's QAM order and the
-    loopback operating point marked."""
-    from wifitrx.link.mcs import mcs
+def _rx_sweep_points(rx, cfg) -> list:
+    """RX EVM at each _RX_SWEEP_PIN level for the chain's CURRENT
+    correction state — call once before the sequence (uncalibrated
+    curve) and once after (calibrated curve)."""
     from wifitrx.link.sensitivity import measured_rx_evm_db
+    return [measured_rx_evm_db(rx, cfg, float(pi)) for pi in _RX_SWEEP_PIN]
+
+
+def _rx_sweep(rx, cfg, snap_rx, evm_uncal) -> dict:
+    """Calibrated RX EVM vs input power, paired with the pre-cal curve,
+    the SNR requirement of the MCS matching the run's QAM order and the
+    loopback operating point."""
+    from wifitrx.link.mcs import mcs
 
     idx = _QAM_MCS.get(int(cfg.qam_order), 11)
     m = mcs(idx)
-    p_in = np.arange(-90.0, -23.0, 6.0)
-    return {"p_in": p_in,
-            "evm": [measured_rx_evm_db(rx, cfg, float(pi)) for pi in p_in],
+    return {"p_in": _RX_SWEEP_PIN,
+            "evm": _rx_sweep_points(rx, cfg),
+            "evm_uncal": evm_uncal,
             "req_db": -m.snr_req_db,
             "label": f"MCS{idx} ({m.modulation})",
             "op": (snap_rx["p_in_dbm"], snap_rx["evm_db"])}
@@ -222,13 +233,14 @@ def run_full_cal(p: dict) -> AnalysisResult:
     from wifitrx.cal.sequence import run_full_cal as _run
 
     cfg, tx, rx, path = _cal_setup(p)
+    evm_uncal = _rx_sweep_points(rx, cfg)   # before any correction
     results = _run(tx, rx, cfg, path, with_dpd=bool(p["with_dpd"]))
     final = {r.name: r for r in results}["final_loopback_evm"]
     sr = final.artifacts.get("snapshot_rx")
     fig = _five_panel(results, final.artifacts.get("snapshot_before"),
                       final.artifacts.get("snapshot_after"),
                       final.artifacts.get("snapshot_tx"), sr,
-                      rx_sweep=_rx_sweep(rx, cfg, sr))
+                      rx_sweep=_rx_sweep(rx, cfg, sr, evm_uncal))
     return AnalysisResult(metrics=_cal_metrics(results, final), figure=fig,
                           cal_state={"tx_state": tx.correction_state(),
                                      "rx_state": rx.correction_state(),
@@ -249,6 +261,7 @@ def run_full_cal_steps(p: dict) -> AnalysisResult:
 
     cfg, tx, rx, path = _cal_setup(p)
     drive = 0.12                       # final_drive_scale of the sequence
+    evm_uncal = _rx_sweep_points(rx, cfg)   # before any correction
     sb = loopback_snapshot(tx, rx, path, cfg, drive_scale=drive)
     pages: list[tuple[str, Figure]] = []
     seen: list = []
@@ -284,7 +297,7 @@ def run_full_cal_steps(p: dict) -> AnalysisResult:
     pages[-1] = (pages[-1][0], _five_panel(
         seen, sb, final.artifacts["snapshot_after"],
         final.artifacts["snapshot_tx"], sr_f,
-        rx_sweep=_rx_sweep(rx, cfg, sr_f),
+        rx_sweep=_rx_sweep(rx, cfg, sr_f, evm_uncal),
         sa_title="loopback after this step",
         suptitle=f"After step {len(seen)}: final_loopback_evm"))
 
