@@ -12,6 +12,8 @@ from specs import ALL_ANALYSES  # noqa: E402
 
 FAST_PARAMS = {
     "full_cal": {"bw_mhz": 80, "qam": 256, "seed": 5, "with_dpd": False},
+    "full_cal_steps": {"bw_mhz": 80, "qam": 256, "seed": 5,
+                       "with_dpd": False},
     "drift_tracking": {"bw_mhz": 80, "n_states": 3},
     "blocker_desense": {"bw_mhz": 160, "offset_mhz": 200.0,
                         "p_sig_dbm": -60.0},
@@ -27,6 +29,22 @@ def test_spec_runs(spec):
     result = spec.run(params)
     assert result.metrics, spec.key
     assert result.figure is not None
+
+
+def test_step_through_matches_one_shot():
+    """The step-through mode's per-step snapshots are observers: the
+    corrections it programs must be bit-identical to the one-shot mode's
+    (AGC runtime state is saved/restored around every snapshot — without
+    that, mid-sequence snapshots would shift the level the IQ cals see)."""
+    from specs import run_full_cal, run_full_cal_steps
+
+    params = FAST_PARAMS["full_cal"]
+    one = run_full_cal(dict(params))
+    step = run_full_cal_steps(dict(params))
+    assert step.figures and len(step.figures) >= 10
+    for side in ("tx_state", "rx_state"):
+        assert one.cal_state[side] == step.cal_state[side], side
+    assert one.metrics["tx_evm_db"] == step.metrics["tx_evm_db"]
 
 
 def test_mainwindow_offscreen():

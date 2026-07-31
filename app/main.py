@@ -135,9 +135,16 @@ class MainWindow(QMainWindow):
         self.text.setReadOnly(True)
         self.text.setMaximumHeight(120)
         rv.addWidget(self.text)
+        # page selector for multi-figure results (step-through mode);
+        # hidden while a result has a single figure
+        self.page_combo = QComboBox()
+        self.page_combo.setVisible(False)
+        self.page_combo.currentIndexChanged.connect(self._show_page)
+        rv.addWidget(self.page_combo)
         self.canvas_holder = QVBoxLayout()
         rv.addLayout(self.canvas_holder, 3)
         self.canvas: FigureCanvasQTAgg | None = None
+        self._pages: list = []
 
         split = QSplitter()
         split.addWidget(left)
@@ -197,12 +204,25 @@ class MainWindow(QMainWindow):
             val = f"{v:.2f}" if isinstance(v, float) else str(v)
             self.table.setItem(row, 1, QTableWidgetItem(val))
         self.text.setPlainText(result.text)
+        self._pages = list(result.figures) or (
+            [("figure", result.figure)] if result.figure is not None else [])
+        self.page_combo.blockSignals(True)
+        self.page_combo.clear()
+        for title, _ in self._pages:
+            self.page_combo.addItem(title)
+        self.page_combo.setVisible(len(self._pages) > 1)
+        last = len(self._pages) - 1     # step-through: land on the summary
+        self.page_combo.setCurrentIndex(max(last, 0))
+        self.page_combo.blockSignals(False)
+        self._show_page(last)
+
+    def _show_page(self, idx: int) -> None:
         if self.canvas is not None:
             self.canvas_holder.removeWidget(self.canvas)
             self.canvas.deleteLater()
             self.canvas = None
-        if result.figure is not None:
-            self.canvas = FigureCanvasQTAgg(result.figure)
+        if 0 <= idx < len(self._pages):
+            self.canvas = FigureCanvasQTAgg(self._pages[idx][1])
             self.canvas_holder.addWidget(self.canvas)
 
     def _on_failed(self, tb: str) -> None:

@@ -190,7 +190,8 @@ def run_full_cal(tx: TxChain, rx: RxChain, cfg: OFDMConfig,
                  path: LoopbackPath | None = None,
                  with_dpd: bool = True, target_pout_dbm: float | None = None,
                  final_drive_scale: float = 0.12, profile: str = "factory",
-                 seed: int = 0) -> list[CalResult]:
+                 seed: int = 0,
+                 on_step=None) -> list[CalResult]:
     """Execute the canonical sequence; returns the ordered CalResult list.
 
     ``final_drive_scale=0.12`` puts the final EVM check at ~16.5 dB PA
@@ -201,6 +202,13 @@ def run_full_cal(tx: TxChain, rx: RxChain, cfg: OFDMConfig,
     ``profile`` selects the capture-time budget: "factory" (exhaustive)
     or "poweron" (fast: bisection searches, shorter captures, single IQ
     iteration — a fraction of the capture time at a small EVM cost).
+
+    ``on_step``, if given, is called with each CalResult right after its
+    step completes (the GUI step-through mode hooks per-step snapshots
+    here).  Observers must follow the reader contract pinned by
+    tests/test_observers.py: they may capture through the chains but must
+    leave every calibration correction untouched, and should save/restore
+    the AGC runtime state so later steps see the level the sequence set.
     """
     if path is None:
         path = LoopbackPath(atten_db=40.0, delay_ns=6.0)
@@ -213,30 +221,35 @@ def run_full_cal(tx: TxChain, rx: RxChain, cfg: OFDMConfig,
     validate_order(plan)
     results: list[CalResult] = []
 
+    def _emit(r: CalResult) -> None:
+        results.append(r)
+        if on_step is not None:
+            on_step(r)
+
     snap_before = loopback_snapshot(tx, rx, path, cfg,
                                     drive_scale=final_drive_scale, seed=seed)
     evm_before = snap_before["evm_db"]
 
     # 1. LPF corners
-    results.append(calibrate_lpf_corner_tx(tx, n=prof["n_scalar"],
+    _emit(calibrate_lpf_corner_tx(tx, n=prof["n_scalar"],
                                            search=prof["lpf_search"]))
-    results.append(calibrate_lpf_corner_rx(rx, n=prof["n_scalar"],
+    _emit(calibrate_lpf_corner_rx(rx, n=prof["n_scalar"],
                                            search=prof["lpf_search"]))
     # 2. RX DC
-    results.append(calibrate_rx_dc(rx, n=prof["n_scalar"]))
+    _emit(calibrate_rx_dc(rx, n=prof["n_scalar"]))
     # 3. TX LO leakage
     if prof["envdet_leak"]:
-        results.append(calibrate_tx_lo_leak_envdet(tx))
+        _emit(calibrate_tx_lo_leak_envdet(tx))
     offset_path = LoopbackPath(atten_db=path.atten_db, delay_ns=path.delay_ns,
                                rx_lo_offset_hz=4.8e6)
-    results.append(calibrate_tx_lo_leak_loopback(tx, rx, offset_path,
+    _emit(calibrate_tx_lo_leak_loopback(tx, rx, offset_path,
                                                  n=prof["n_scalar"]))
     # 3.5 RX IIP2 — MUST follow TX LO-leak cal: the PA's third-order
     # product tone2 x leak x tone1* lands exactly on the (f2 - f1) IM2
     # measurement bin, and with an uncalibrated carrier leak it buries the
     # IM2 null by ~35 dB.
     if rx.params.im2.enabled:
-        results.append(calibrate_rx_iip2(
+        _emit(calibrate_rx_iip2(
             tx, rx, LoopbackPath(atten_db=path.atten_db - 10.0,
                                  delay_ns=path.delay_ns),
             n=prof["n_scalar"], n_iter=prof["iip2_iters"],
@@ -244,7 +257,7 @@ def run_full_cal(tx: TxChain, rx: RxChain, cfg: OFDMConfig,
     # 4. loopback delay (AGC set for the coupled level first)
     wf_probe = generate_ofdm(cfg)
     agc_for_loopback(tx, rx, path, wf_probe.x * 0.25)
-    results.append(measure_loopback_delay(tx, rx, path, cfg))
+    _emit(measure_loopback_delay(tx, rx, path, cfg))
     # 5. TX IQ + group-delay verification.  The correction FIR tap count
     # scales with the oversampling ratio so its time span (and hence its
     # frequency resolution across the signal band) stays constant.
@@ -254,26 +267,26 @@ def run_full_cal(tx: TxChain, rx: RxChain, cfg: OFDMConfig,
     res_txiq = calibrate_tx_iq(tx, rx, iq_path, n_taps=n_taps,
                                n=prof["n_iq"], n_iter=prof["iq_iters"],
                                n_tones=prof["iq_tones"])
-    results.append(res_txiq)
+    _emit(res_txiq)
     rho_f = np.asarray(res_txiq.estimated["rho_f_hz"])
     rho_v = np.asarray(res_txiq.estimated["rho"])
     inj_gd = tx.params.iq.gd_mismatch_ps if tx.params.iq.enabled else 0.0
-    results.append(verify_gd_estimate(rho_f, rho_v, inj_gd, tol_ps=80.0))
+    _emit(verify_gd_estimate(rho_f, rho_v, inj_gd, tol_ps=80.0))
     # 6. RX IQ
-    results.append(calibrate_rx_iq(tx, rx, LoopbackPath(
+    _emit(calibrate_rx_iq(tx, rx, LoopbackPath(
         atten_db=path.atten_db, delay_ns=path.delay_ns), n_taps=n_taps,
         n=prof["n_iq"], n_iter=prof["iq_iters"], n_tones=prof["iq_tones"]))
     # 7. TX power
     wf = generate_ofdm(cfg)
-    results.append(calibrate_tx_power(
+    _emit(calibrate_tx_power(
         tx, wf.x * 0.25, target_dbm=target_pout_dbm,
         codes_db=np.arange(-20.0, 6.5, prof["power_step_db"])))
     # 8. DPD (trained at the final operating drive)
     if with_dpd:
-        results.append(calibrate_dpd(tx, rx, wf, path,
+        _emit(calibrate_dpd(tx, rx, wf, path,
                                      drive_scale=final_drive_scale))
     # 9. AGC verification
-    results.append(calibrate_agc(
+    _emit(calibrate_agc(
         rx, p_in_range_dbm=np.arange(-85.0, -5.0, prof["agc_step_db"])))
 
     snap_after = loopback_snapshot(tx, rx, path, cfg,
@@ -282,7 +295,7 @@ def run_full_cal(tx: TxChain, rx: RxChain, cfg: OFDMConfig,
     snap_tx = tx_snapshot(tx, cfg, drive_scale=final_drive_scale)
     total_samples = sum(r.cost.get("samples", 0) for r in results)
     total_captures = sum(r.cost.get("captures", 0) for r in results)
-    results.append(CalResult(
+    _emit(CalResult(
         name="final_loopback_evm",
         metrics_before={"evm_db": evm_before},
         metrics_after={"evm_db": evm_after,

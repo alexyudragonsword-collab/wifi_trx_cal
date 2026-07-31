@@ -38,6 +38,10 @@ class AnalysisResult:
     # frozen exe (no examples/, no CLI) can still produce the deliverable
     # and feed the inspector tab
     cal_state: dict | None = None
+    # optional multi-page output: ((title, Figure), ...).  When present
+    # the main window shows a page selector; ``figure`` stays the
+    # single-figure fallback (and the page shown by default)
+    figures: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -65,20 +69,13 @@ def _chains(bw: float, seed: int, fs: float):
     return TxChain(txp, fs), RxChain(rxp, fs)
 
 
-def run_full_cal(p: dict) -> AnalysisResult:
-    from wifitrx.cal.sequence import run_full_cal as _run
-    from wifitrx.chain import LoopbackPath
-    from wifitrx.waveform import OFDMConfig
-
-    bw = float(p["bw_mhz"]) * 1e6
-    cfg = OFDMConfig(bandwidth_hz=bw, qam_order=int(p["qam"]),
-                     n_symbols=6, oversampling=4)
-    tx, rx = _chains(bw, int(p["seed"]), cfg.sample_rate_hz)
-    results = _run(tx, rx, cfg, LoopbackPath(atten_db=40.0, delay_ns=6.0),
-                   with_dpd=bool(p["with_dpd"]))
-    by = {r.name: r for r in results}
-    final = by["final_loopback_evm"]
-
+def _five_panel(results, sb, sa, st, sa_title="loopback AFTER",
+                suptitle=None) -> Figure:
+    """The full-cal result page: three constellations (loopback before /
+    loopback current / TX @ PA output — the loopback view cancels
+    common-LO phase noise, the TX view is the 802.11be spec measurement
+    point where it counts), the PA-output PSD overlay, and the per-step
+    dB metrics of ``results``."""
     from wifitrx.metrics.spectrum import psd
 
     fig = new_figure(figsize=(11.5, 7))
@@ -89,15 +86,9 @@ def run_full_cal(p: dict) -> AnalysisResult:
     ax_psd = fig.add_subplot(gs[1, 0:3])
     ax_bar = fig.add_subplot(gs[1, 3:6])
 
-    # constellations: loopback before/after (composite TX+RX, common-LO
-    # phase noise cancels) and the PA-output TX view (ideal test
-    # receiver — the 802.11be spec measurement point, phase noise counts)
-    sb = final.artifacts.get("snapshot_before")
-    sa = final.artifacts.get("snapshot_after")
-    st = final.artifacts.get("snapshot_tx")
     panels = [(ax_cb, sb, "loopback BEFORE"),
-              (ax_ca, sa, "loopback AFTER"),
-              (ax_ct, st, "TX @ PA out AFTER")]
+              (ax_ca, sa, sa_title),
+              (ax_ct, st, "TX @ PA out")]
     for ax, snap, title in panels:
         if snap is None:      # cal-states saved by older runs
             ax.set_axis_off()
@@ -117,7 +108,9 @@ def run_full_cal(p: dict) -> AnalysisResult:
     # PA-output PSD overlay (re-referenced to each curve's in-band median:
     # peak normalization would let the pre-cal LO-leak spike shift the
     # whole curve and fake the shoulder comparison)
-    for snap, label in ((sb, "before"), (sa, "after")):
+    for snap, label in ((sb, "before"), (sa, "current")):
+        if snap is None or "pa_out" not in snap:
+            continue
         f, p = psd(snap["pa_out"], snap["fs"])
         inband = np.abs(f) < 0.4 * snap["bandwidth_hz"]
         ax_psd.plot(f / 1e6, p - np.median(p[inband]), lw=0.8, label=label)
@@ -152,13 +145,105 @@ def run_full_cal(p: dict) -> AnalysisResult:
     ax_bar.set_title("Per-step dB metrics", fontsize=9)
     ax_bar.legend(fontsize=8)
     ax_bar.grid(True, alpha=0.3)
-    fig.tight_layout()
+    if suptitle:
+        fig.suptitle(suptitle, fontsize=11)
+        fig.tight_layout(rect=(0, 0, 1, 0.96))
+    else:
+        fig.tight_layout()
+    return fig
 
-    metrics = {"loopback_evm_db": final.metrics_after["evm_db"],
-               "tx_evm_db": final.metrics_after["tx_evm_db"],
-               "steps_passed": sum(1 for r in results if r.passed),
-               "steps_total": len(results)}
-    return AnalysisResult(metrics=metrics, figure=fig,
+
+def _cal_setup(p: dict):
+    from wifitrx.chain import LoopbackPath
+    from wifitrx.waveform import OFDMConfig
+
+    bw = float(p["bw_mhz"]) * 1e6
+    cfg = OFDMConfig(bandwidth_hz=bw, qam_order=int(p["qam"]),
+                     n_symbols=6, oversampling=4)
+    tx, rx = _chains(bw, int(p["seed"]), cfg.sample_rate_hz)
+    return cfg, tx, rx, LoopbackPath(atten_db=40.0, delay_ns=6.0)
+
+
+def _cal_metrics(results, final):
+    return {"loopback_evm_db": final.metrics_after["evm_db"],
+            "tx_evm_db": final.metrics_after["tx_evm_db"],
+            "steps_passed": sum(1 for r in results if r.passed),
+            "steps_total": len(results)}
+
+
+def run_full_cal(p: dict) -> AnalysisResult:
+    from wifitrx.cal.sequence import run_full_cal as _run
+
+    cfg, tx, rx, path = _cal_setup(p)
+    results = _run(tx, rx, cfg, path, with_dpd=bool(p["with_dpd"]))
+    final = {r.name: r for r in results}["final_loopback_evm"]
+    fig = _five_panel(results, final.artifacts.get("snapshot_before"),
+                      final.artifacts.get("snapshot_after"),
+                      final.artifacts.get("snapshot_tx"))
+    return AnalysisResult(metrics=_cal_metrics(results, final), figure=fig,
+                          cal_state={"tx_state": tx.correction_state(),
+                                     "rx_state": rx.correction_state(),
+                                     "results": results})
+
+
+def run_full_cal_steps(p: dict) -> AnalysisResult:
+    """Step-through mode: the same canonical sequence, but after every
+    step a read-only snapshot trio is taken and rendered as one result
+    page, so each step's direct payoff is visible.  Snapshots follow the
+    observer contract (tests/test_observers.py): corrections untouched,
+    AGC runtime state saved and restored so later steps see exactly the
+    level the sequence set — the corrections this mode programs are
+    bit-identical to the one-shot mode's."""
+    from wifitrx.cal.sequence import (loopback_snapshot, run_full_cal as
+                                      _run, tx_snapshot)
+
+    cfg, tx, rx, path = _cal_setup(p)
+    drive = 0.12                       # final_drive_scale of the sequence
+    sb = loopback_snapshot(tx, rx, path, cfg, drive_scale=drive)
+    pages: list[tuple[str, Figure]] = []
+    seen: list = []
+    track: list[tuple[str, float, float]] = []
+
+    def on_step(res) -> None:
+        seen.append(res)
+        if res.name == "final_loopback_evm":
+            sa = res.artifacts["snapshot_after"]
+            st = res.artifacts["snapshot_tx"]
+        else:
+            agc_state = (rx.lna_idx, rx.vga_db)
+            sa = loopback_snapshot(tx, rx, path, cfg, drive_scale=drive)
+            st = tx_snapshot(tx, cfg, drive_scale=drive)
+            rx.lna_idx, rx.vga_db = agc_state
+        track.append((res.name, sa["evm_db"], st["evm_db"]))
+        n = len(seen)
+        pages.append((f"step {n}: {res.name}", _five_panel(
+            seen, sb, sa, st, sa_title="loopback after this step",
+            suptitle=f"After step {n}: {res.name}")))
+
+    results = _run(tx, rx, cfg, path, with_dpd=bool(p["with_dpd"]),
+                   on_step=on_step)
+    final = {r.name: r for r in results}["final_loopback_evm"]
+
+    # summary page: EVM trajectory across the sequence
+    fig = new_figure(figsize=(11.5, 5.5))
+    ax = fig.add_subplot(1, 1, 1)
+    xpos = np.arange(len(track) + 1)
+    lb = [sb["evm_db"]] + [t[1] for t in track]
+    te = [t[2] for t in track]
+    ax.plot(xpos, lb, "o-", label="loopback EVM")
+    ax.plot(xpos[1:], te, "s-", label="TX EVM @ PA out")
+    ax.set_xticks(xpos)
+    ax.set_xticklabels(["(uncal)"] + [t[0] for t in track],
+                       rotation=40, ha="right", fontsize=7)
+    ax.set_ylabel("EVM [dB]")
+    ax.set_title("EVM after each calibration step")
+    ax.legend(fontsize=9)
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    pages.append(("summary: EVM per step", fig))
+
+    return AnalysisResult(metrics=_cal_metrics(results, final), figure=fig,
+                          figures=tuple(pages),
                           cal_state={"tx_state": tx.correction_state(),
                                      "rx_state": rx.correction_state(),
                                      "results": results})
@@ -289,6 +374,20 @@ ALL_ANALYSES: tuple[AnalysisSpec, ...] = (
             ParamSpec("with_dpd", "Run DPD", "bool", False),
         ),
         run=run_full_cal),
+    AnalysisSpec(
+        key="full_cal_steps", title="Full calibration, step-through",
+        description="Same sequence, one result page per step (snapshot "
+                    "trio after every calibration) plus an EVM-per-step "
+                    "summary — shows each step's direct payoff",
+        params=(
+            ParamSpec("bw_mhz", "Bandwidth [MHz]", "choice", 80,
+                      choices=(20, 40, 80, 160, 320)),
+            ParamSpec("qam", "QAM order", "choice", 1024,
+                      choices=(256, 1024, 4096)),
+            ParamSpec("seed", "Process seed", "int", 5, minimum=0),
+            ParamSpec("with_dpd", "Run DPD", "bool", False),
+        ),
+        run=run_full_cal_steps),
     AnalysisSpec(
         key="drift_tracking", title="PA drift tracking DPD",
         description="RLS DPD vs frozen DPD over a thermal ramp",
