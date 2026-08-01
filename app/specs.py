@@ -206,6 +206,13 @@ def _cal_setup(p: dict):
         cfg = OFDMConfig(bandwidth_hz=bw, qam_order=int(p["qam"]),
                          n_symbols=6, oversampling=4)
     tx, rx = _chains(bw, int(p["seed"]), cfg.sample_rate_hz)
+    if p.get("rx_hp", False):
+        # "RX high-performance" study knob: every LNA/mixer gain state
+        # gets NF -1 dB and IIP3 +2 dB (hand-over thresholds untouched)
+        from dataclasses import replace as _replace
+        rx.params.lna_states = tuple(
+            _replace(s, nf_db=s.nf_db - 1.0, iip3_dbm=s.iip3_dbm + 2.0)
+            for s in rx.params.lna_states)
     from wifitrx.chain.loopback import recommended_loopback_atten_db
     return cfg, tx, rx, LoopbackPath(
         atten_db=recommended_loopback_atten_db(bw), delay_ns=6.0)
@@ -574,6 +581,9 @@ ALL_ANALYSES: tuple[AnalysisSpec, ...] = (
                       choices=("11ax/be", "11ac/n"),
                       tooltip="11ac/n: 312.5 kHz spacing, 3.2 us symbol, "
                               "0.8 us long GI; max 160 MHz"),
+            ParamSpec("rx_hp", "RX high-performance", "bool", False,
+                      tooltip="Every LNA gain state: NF -1 dB, IIP3 +2 dB "
+                              "(hand-over thresholds unchanged)"),
             ParamSpec("seed", "Process seed", "int", 5, minimum=0),
             ParamSpec("with_dpd", "Run DPD", "bool", False),
         ),
@@ -592,6 +602,9 @@ ALL_ANALYSES: tuple[AnalysisSpec, ...] = (
                       choices=("11ax/be", "11ac/n"),
                       tooltip="11ac/n: 312.5 kHz spacing, 3.2 us symbol, "
                               "0.8 us long GI; max 160 MHz"),
+            ParamSpec("rx_hp", "RX high-performance", "bool", False,
+                      tooltip="Every LNA gain state: NF -1 dB, IIP3 +2 dB "
+                              "(hand-over thresholds unchanged)"),
             ParamSpec("seed", "Process seed", "int", 5, minimum=0),
             ParamSpec("with_dpd", "Run DPD", "bool", False),
         ),
@@ -610,6 +623,9 @@ ALL_ANALYSES: tuple[AnalysisSpec, ...] = (
                       choices=("11ax/be", "11ac/n"),
                       tooltip="11ac/n: 312.5 kHz spacing, 3.2 us symbol, "
                               "0.8 us long GI; max 160 MHz"),
+            ParamSpec("rx_hp", "RX high-performance", "bool", False,
+                      tooltip="Every LNA gain state: NF -1 dB, IIP3 +2 dB "
+                              "(hand-over thresholds unchanged)"),
             ParamSpec("seed", "Process seed", "int", 5, minimum=0),
         ),
         run=run_rx_evm_sweep),
