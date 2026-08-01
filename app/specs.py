@@ -374,12 +374,42 @@ def run_rx_evm_sweep(p: dict) -> AnalysisResult:
     # only and irrelevant here, so skip it for speed
     results = _run(tx, rx, cfg, path, with_dpd=False)
     evm_cal = [measured_rx_evm_db(rx, cfg, float(pi)) for pi in p_in]
+
+    # contribution split on the calibrated chain: toggle each stochastic
+    # source off (read-only runtime switches, corrections untouched)
+    def _split(noise, nonlin):
+        rx.noise_enabled = noise
+        rx.params.nonlin_enabled = nonlin
+        out = [measured_rx_evm_db(rx, cfg, float(pi)) for pi in p_in]
+        rx.noise_enabled = True
+        rx.params.nonlin_enabled = True
+        return out
+
+    evm_noise = _split(True, False)    # thermal noise only
+    evm_im3 = _split(False, True)      # per-state IM3 only
+    evm_det = _split(False, False)     # deterministic residual
     mcs_rows = sensitivity_study(rx, cfg, (7, 9, 11, 13))
+
+    # the split curves only mean something where the receiver locks;
+    # below that the analog DC saturates the ADC at railed VGA gain
+    # (digital-only DC correction — a recorded model limitation) and
+    # every toggle combination reads garbage alike
+    ok = np.asarray(evm_cal) < -15.0
+
+    def _mask(v):
+        return np.where(ok, np.asarray(v), np.nan)
 
     fig = new_figure(figsize=(9.5, 6))
     ax = fig.add_subplot(1, 1, 1)
-    ax.plot(p_in, evm_uncal, "o-", label="RX EVM, uncalibrated")
-    ax.plot(p_in, evm_cal, "s-", label="RX EVM, calibrated")
+    ax.plot(p_in, evm_uncal, "o--", color="lightgray", ms=4,
+            label="uncalibrated")
+    ax.plot(p_in, evm_cal, "o-", color="tab:red", label="calibrated (all)")
+    ax.plot(p_in, _mask(evm_noise), "s-", color="tab:blue", ms=3,
+            label="noise contribution")
+    ax.plot(p_in, _mask(evm_im3), "^-", color="tab:green", ms=3,
+            label="IM3 contribution")
+    ax.plot(p_in, _mask(evm_det), "--", color="gray", lw=1,
+            label="deterministic residual")
     for row in mcs_rows:
         ax.axhline(-row["snr_req_db"], ls="--", lw=0.7, color="gray")
         ax.axvline(row["measured_dbm"], ls=":", lw=0.7, color="tab:green")
