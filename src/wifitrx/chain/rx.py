@@ -33,6 +33,23 @@ def fractional_advance(y: np.ndarray, frac: float) -> np.ndarray:
     return np.fft.ifft(np.fft.fft(y) * np.exp(2j * np.pi * f * frac))
 
 
+# Analog DC-trim DAC at the baseband node (pre-LPF/VGA): range and step
+# in sqrt(mW) per rail (~6-bit).  The coarse analog stage exists to keep
+# the DC out of the VGA/ADC headroom at high gain — a digital-only
+# correction cannot prevent the railed VGA from clipping the ADC on DC
+# (found via the noiseless RX EVM decomposition, backlog B4).
+DC_TRIM_RANGE = 0.064
+DC_TRIM_STEP = 2.0e-3
+
+
+def _snap_trim(v: complex) -> complex:
+    """What the trim DAC actually realizes for a programmed value."""
+    def rail(x: float) -> float:
+        x = min(max(x, -DC_TRIM_RANGE), DC_TRIM_RANGE)
+        return round(x / DC_TRIM_STEP) * DC_TRIM_STEP
+    return complex(rail(v.real), rail(v.imag))
+
+
 class RxChain:
     def __init__(self, params: RxParams, fs: float):
         self.params = params
@@ -40,7 +57,12 @@ class RxChain:
         self.lna_idx: int = 0
         self.vga_db: float = 20.0
         # ---- calibration state ----
-        self.dc_post: dict[int, complex] = {}   # per-LNA-state digital DC sub
+        self.dc_ana: dict[int, complex] = {}    # per-state analog trim (DAC)
+        # per-state digital fine trim, stored NODE-referred (sqrt(mW) at
+        # the baseband node) and scaled by the live VGA gain when
+        # subtracted — a digital-domain table would only be correct at
+        # the VGA the calibration happened to use
+        self.dc_post: dict[int, complex] = {}
         self.w1: np.ndarray | None = None
         self.w2: np.ndarray | None = None
         self.w2_by_state: dict[int, np.ndarray] = {}  # overrides w2 per state
@@ -115,6 +137,8 @@ class RxChain:
         else:
             y = p.iq.apply(y, self.fs)
         y = y + p.dc_for_state(self.lna_idx)
+        if self.dc_ana:
+            y = y - _snap_trim(self.dc_ana.get(self.lna_idx, 0.0 + 0.0j))
         y = p.lpf.apply(y, self.fs)
         y = y * db_to_amp(self.vga_db)
         if nodes is not None:
@@ -124,8 +148,10 @@ class RxChain:
             y = p.clock.apply_sco(y, self.fs)
         x = p.adc.apply(y, self.fs)
 
-        # digital back-end corrections
-        x = x - self.dc_post.get(self.lna_idx, 0.0 + 0.0j)
+        # digital back-end corrections (fine DC is node-referred: scale
+        # by the live VGA gain and the ADC full-scale)
+        x = x - (self.dc_post.get(self.lna_idx, 0.0 + 0.0j)
+                 * db_to_amp(self.vga_db) / p.adc.a_fs)
         w2 = self.w2_by_state.get(self.lna_idx, self.w2)
         x = apply_widely_linear(x, self.w1, w2)
         if self.frac_delay_iq != 0.0:
@@ -137,6 +163,7 @@ class RxChain:
     # ------------------------------------------------------------ state
     def correction_state(self) -> dict:
         return {
+            "dc_ana": {str(k): [v.real, v.imag] for k, v in self.dc_ana.items()},
             "dc_post": {str(k): [v.real, v.imag] for k, v in self.dc_post.items()},
             "w1": None if self.w1 is None else
                  [list(np.real(self.w1)), list(np.imag(self.w1))],
@@ -149,6 +176,8 @@ class RxChain:
         }
 
     def load_correction_state(self, state: dict) -> None:
+        self.dc_ana = {int(k): complex(v[0], v[1])
+                       for k, v in state.get("dc_ana", {}).items()}
         self.dc_post = {int(k): complex(v[0], v[1])
                         for k, v in state.get("dc_post", {}).items()}
         for name in ("w1", "w2"):

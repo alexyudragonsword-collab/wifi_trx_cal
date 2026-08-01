@@ -68,7 +68,44 @@ def test_rx_dc_cal(seed):
     res = calibrate_rx_dc(rx)
     assert res.passed, res.metrics_after
     for k, v in res.metrics_after.items():
-        assert v < -50.0, (k, v)
+        if k != "worst_dc_dbfs_after_analog":
+            assert v < -50.0, (k, v)
+    # the analog stage alone must already pull the DC out of the
+    # VGA/ADC headroom danger zone (trim-DAC quantization limited)
+    assert res.metrics_after["worst_dc_dbfs_after_analog"] < -20.0
+    assert res.corrections["dc_ana"], "analog trim table missing"
+
+
+def test_rx_dc_analog_trim_protects_adc_at_high_gain():
+    """The B4 scenario: railed VGA at sensitivity-level inputs.  With a
+    digital-only correction the analog DC clips the ADC and the
+    noiseless receiver cannot even lock; the analog trim stage must
+    keep the chain linear there."""
+    from wifitrx.link.sensitivity import measured_rx_evm_db
+    from wifitrx.waveform import OFDMConfig
+
+    bw = 20e6
+    cfg = OFDMConfig(bandwidth_hz=bw, qam_order=64, n_symbols=4,
+                     oversampling=4)
+    rng = np.random.default_rng(3)
+    rxp = _rx_params(bandwidth_hz=bw, adc=ADCParams()).randomize(rng)
+    rxp = rxp.__class__(**{**rxp.__dict__,
+                           "iq": FreqDepIQImbalance(enabled=False),
+                           "lpf": TunableLPF(enabled=False)})
+    rx = RxChain(rxp, cfg.sample_rate_hz)
+    rx.noise_enabled = False
+    import warnings
+    with warnings.catch_warnings():
+        # the clipped capture produces NaN inside the EVM math — that IS
+        # the documented failure mode
+        warnings.simplefilter("ignore", RuntimeWarning)
+        e_before = measured_rx_evm_db(rx, cfg, -90.0)
+    calibrate_rx_dc(rx)
+    e_after = measured_rx_evm_db(rx, cfg, -90.0)
+    # pre-fix this read garbage (~0 dB or NaN: ADC clipped on DC);
+    # with the analog trim the noiseless chain locks cleanly
+    assert not (e_before < -20.0), e_before   # documents the failure mode
+    assert e_after < -35.0, e_after
 
 
 @pytest.mark.parametrize("seed", range(6))

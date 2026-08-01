@@ -127,6 +127,11 @@ FIR 以中心抽头为群时延参考(等效 `np.convolve(mode="same")`)。
 每个损伤块都有 `enabled` 开关;`params.injected()` 返回注入真值(校准算法
 的对照标准);`params.randomize(rng)` 生成随机工艺样本(Monte-Carlo)。
 
+RX DC 校正为两级:`dc_ana`(逐档模拟微调 DAC,基带节点减除,±0.064 √mW、
+2e-3 步进量化——高增益下保护 VGA/ADC 动态范围)+ `dc_post`(逐档数字细调,
+**按基带节点参考存储**,运行时按当前 VGA 增益换算,任意 AGC 落点下均有效)。
+两者均出现在 cal-state JSON 的 `corrections` 中。
+
 ## 5. 指标工具
 
 - `wifitrx.metrics.evm(rx_syms, tx_syms, equalize="per_tone")`,
