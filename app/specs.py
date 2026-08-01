@@ -139,6 +139,13 @@ def _five_panel(results, sb, sa, st, sr=None, rx_sweep=None,
                         fontsize=7, va="bottom", color="gray")
         ax_swp.plot(*rx_sweep["op"], "o", ms=7, mfc="none",
                     color="tab:red", label="loopback op. point")
+        p_lo, p_hi = rx_sweep["p_in"][0], rx_sweep["p_in"][-1]
+        for p_th, lbl in rx_sweep.get("agc", ()):
+            if p_lo <= p_th <= p_hi:
+                ax_swp.axvline(p_th, ls="-.", lw=0.7, color="tab:purple",
+                               alpha=0.7)
+                ax_swp.annotate(lbl, (p_th, 3.0), fontsize=6, rotation=90,
+                                ha="right", va="top", color="tab:purple")
         ax_swp.set_xlabel("RF input [dBm]")
         ax_swp.set_ylabel("EVM [dB]")
         ax_swp.set_title("RX EVM vs input power", fontsize=9)
@@ -222,12 +229,18 @@ def _rx_sweep(rx, cfg, snap_rx, evm_uncal) -> dict:
 
     idx = _QAM_MCS.get(int(cfg.qam_order), 11)
     m = mcs(idx)
+    states = rx.params.lna_states
     return {"p_in": _RX_SWEEP_PIN,
             "evm": _rx_sweep_points(rx, cfg),
             "evm_uncal": evm_uncal,
             "req_db": -m.snr_req_db,
             "label": f"MCS{idx} ({m.modulation})",
-            "op": (snap_rx["p_in_dbm"], snap_rx["evm_db"])}
+            "op": (snap_rx["p_in_dbm"], snap_rx["evm_db"]),
+            # AGC hand-over thresholds: above max_input_dbm of state i
+            # the AGC selects state i+1 (each state's IM3 penalty peaks
+            # right below its own threshold)
+            "agc": [(st.max_input_dbm, f"AGC {i}→{i + 1}")
+                    for i, st in enumerate(states[:-1])]}
 
 
 def _cal_metrics(results, final):
@@ -369,10 +382,18 @@ def run_rx_evm_sweep(p: dict) -> AnalysisResult:
         ax.annotate(f"MCS{row['mcs']} ({row['modulation']})",
                     (p_in[-1], -row["snr_req_db"]), fontsize=7,
                     ha="right", va="bottom", color="gray")
+    for i, st in enumerate(rx.params.lna_states[:-1]):
+        if p_in[0] <= st.max_input_dbm <= p_in[-1]:
+            ax.axvline(st.max_input_dbm, ls="-.", lw=0.8,
+                       color="tab:purple", alpha=0.7)
+            ax.annotate(f"AGC {i}→{i + 1}", (st.max_input_dbm, 4.0),
+                        fontsize=7, rotation=90, ha="right", va="top",
+                        color="tab:purple")
     ax.set_xlabel("RF input power [dBm]")
     ax.set_ylabel("EVM [dB]")
     ax.set_title("RX EVM vs input power (dashed: MCS SNR requirement, "
-                 "dotted: measured sensitivity)", fontsize=10)
+                 "dotted: measured sensitivity, dash-dot: AGC hand-over)",
+                 fontsize=10)
     ax.set_ylim(-60, 5)
     ax.legend(fontsize=9)
     ax.grid(True, alpha=0.3)
