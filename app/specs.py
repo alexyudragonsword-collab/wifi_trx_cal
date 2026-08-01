@@ -210,7 +210,9 @@ def _cal_setup(p: dict):
 
 
 _QAM_MCS = {64: 7, 256: 9, 1024: 11, 4096: 13}
-_RX_SWEEP_PIN = np.arange(-90.0, -23.0, 6.0)
+# up to -12 dBm so the last AGC hand-over (state 2 -> 3 at -18 dBm) and
+# the IM3 sawtooth just below it stay inside the plot
+_RX_SWEEP_PIN = np.arange(-90.0, -11.0, 6.0)
 
 
 def _rx_sweep_points(rx, cfg) -> list:
@@ -364,7 +366,7 @@ def run_rx_evm_sweep(p: dict) -> AnalysisResult:
                                           sensitivity_study)
 
     cfg, tx, rx, path = _cal_setup(p)
-    p_in = np.arange(-92.0, -23.0, 4.0)
+    p_in = np.arange(-92.0, -11.0, 4.0)
     evm_uncal = [measured_rx_evm_db(rx, cfg, float(pi)) for pi in p_in]
     # RX corrections come from the standard sequence; DPD is TX-side
     # only and irrelevant here, so skip it for speed
