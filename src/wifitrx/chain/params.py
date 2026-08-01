@@ -125,10 +125,12 @@ class RxParams:
         return complex(self.dc_offset[idx % len(self.dc_offset)])
 
     def randomize(self, rng: np.random.Generator) -> "RxParams":
-        # LO self-mixing DC: larger in high-gain states.
+        # LO self-mixing DC: larger in high-gain states (8-state ladder;
+        # the bypass state's residual is board coupling, not LO-LNA).
         dc = tuple(
             (rng.normal(0.0, s) + 1j * rng.normal(0.0, s))
-            for s in (0.02, 0.01, 0.005, 0.003)[: len(self.lna_states)]
+            for s in (0.02, 0.014, 0.01, 0.007, 0.005, 0.004, 0.003,
+                      0.002)[: len(self.lna_states)]
         )
         return replace(
             self,

@@ -19,24 +19,32 @@ class LNAState:
     max_input_dbm: float   # switch to the next (lower-gain) state above this
 
 
-# Circuit-team ladder (2026-08 unified revision; see docs/backlog_zh.md
-# history).  Hand-over thresholds derive from the boundary-IM3 rule
-# 2*(IIP3 - max_input) >= 54 dBc (RX floor + 10 dB); state 3, being the
-# last state, is IM3-limited above -19 dBm by its +8 dBm IIP3.
+# Official 8-state ladder (system-team table, 2026-08; history in
+# docs/backlog_zh.md A3).  6 dB gain steps sample the analog
+# gain/NF/IIP3 trade-off finely enough that RX EVM rides the balanced
+# envelope with ~1.5 dB ripple; hand-over thresholds sit at the
+# noise-vs-IM3 balance points t_i = (2*IIP3_i + NF_{i+1} - 89)/3
+# (320 MHz anchored).  State 7 is the LNA-bypass/attenuator state: it
+# extends strong-signal coverage and restores ADC headroom at extreme
+# inputs.
 DEFAULT_LNA_STATES = (
-    LNAState(gain_db=37.0, nf_db=3.5, iip3_dbm=-20.0, max_input_dbm=-47.0),
-    LNAState(gain_db=25.0, nf_db=10.0, iip3_dbm=-9.0, max_input_dbm=-36.0),
-    LNAState(gain_db=13.0, nf_db=22.0, iip3_dbm=0.0, max_input_dbm=-27.0),
-    LNAState(gain_db=1.0, nf_db=30.0, iip3_dbm=8.0, max_input_dbm=10.0),
+    LNAState(gain_db=37.0, nf_db=3.5, iip3_dbm=-20.0, max_input_dbm=-40.7),
+    LNAState(gain_db=31.0, nf_db=6.0, iip3_dbm=-14.0, max_input_dbm=-36.0),
+    LNAState(gain_db=25.0, nf_db=10.0, iip3_dbm=-9.0, max_input_dbm=-30.3),
+    LNAState(gain_db=19.0, nf_db=16.0, iip3_dbm=-4.0, max_input_dbm=-25.3),
+    LNAState(gain_db=13.0, nf_db=22.0, iip3_dbm=0.0, max_input_dbm=-21.0),
+    LNAState(gain_db=7.0, nf_db=26.0, iip3_dbm=6.0, max_input_dbm=-17.0),
+    LNAState(gain_db=1.0, nf_db=30.0, iip3_dbm=8.0, max_input_dbm=-13.0),
+    LNAState(gain_db=-5.0, nf_db=38.0, iip3_dbm=12.0, max_input_dbm=10.0),
 )
 
 # Calibration-mode gain state: loopback observation captures pin this
 # state (real cal firmware does the same) instead of walking the normal
-# ladder — with the revised thresholds the 320 MHz observation level
-# (~-21 dBm at the 34 dB cal coupler) would otherwise land in state 3,
-# whose NF 30 buries the observation.  State 2 jointly optimizes thermal
-# SNR vs mixer IM3 at that level.
-CAL_OBSERVATION_STATE = 2
+# ladder — the 320 MHz observation level (~-21 dBm at the 34 dB cal
+# coupler) would otherwise land in a high-NF state that buries the
+# observation.  The NF-22 state (index 4 of the 8-state ladder) jointly
+# optimizes thermal SNR vs mixer IM3 at that level.
+CAL_OBSERVATION_STATE = 4
 
 
 def select_lna_state(states: tuple[LNAState, ...], p_in_dbm: float) -> int:
