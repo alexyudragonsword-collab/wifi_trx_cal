@@ -54,6 +54,24 @@ def test_legacy_standard_setup():
     assert cfg2.subcarrier_spacing_hz == 78.125e3
 
 
+def test_rx_hp_rebalances_thresholds():
+    """The RX high-performance knob shifts NF/IIP3 AND re-solves every
+    hand-over at the balance point t = (2*IIP3_i + NF_{i+1} - 89)/3."""
+    from specs import _cal_setup
+
+    from math import log10
+
+    _, _, rx, _ = _cal_setup({"bw_mhz": 80, "qam": 256, "seed": 5,
+                              "rx_hp": True})
+    st = rx.params.lna_states
+    assert st[0].nf_db == 2.5 and st[0].iip3_dbm == -18.0
+    const = -174.0 + 10.0 * log10(320e6)   # 320 MHz anchor convention
+    for i, s in enumerate(st[:-1]):
+        expect = (2 * s.iip3_dbm + st[i + 1].nf_db + const) / 3
+        assert s.max_input_dbm == pytest.approx(expect, abs=0.06), i
+    assert st[-1].max_input_dbm == 10.0   # last-state ceiling kept
+
+
 def test_step_through_matches_one_shot():
     """The step-through mode's per-step snapshots are observers: the
     corrections it programs must be bit-identical to the one-shot mode's

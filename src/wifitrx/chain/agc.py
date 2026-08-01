@@ -47,6 +47,30 @@ DEFAULT_LNA_STATES = (
 CAL_OBSERVATION_STATE = 4
 
 
+def rebalance_thresholds(states: tuple[LNAState, ...],
+                         bandwidth_hz: float = 320e6) -> tuple[LNAState, ...]:
+    """Re-solve every hand-over threshold at its noise-vs-IM3 balance
+    point, t_i = (2*IIP3_i + NF_{i+1} + (-174 + 10log10(BW))) / 3 —
+    staying in state i costs 2 dB/dB of IM3 while entering state i+1
+    costs 1 dB/dB of thermal SNR, and the balance point equalizes the
+    two.  The last state's ceiling is kept.  Anchored at 320 MHz by the
+    same convention as the official table; use this after any NF/IIP3
+    what-if transform (e.g. the GUI's RX high-performance knob) so the
+    thresholds track the modified ladder."""
+    from math import log10
+    const = -174.0 + 10.0 * log10(bandwidth_hz)
+    out = []
+    for i, s in enumerate(states):
+        if i == len(states) - 1:
+            out.append(s)
+            continue
+        t = (2.0 * s.iip3_dbm + states[i + 1].nf_db + const) / 3.0
+        out.append(LNAState(gain_db=s.gain_db, nf_db=s.nf_db,
+                            iip3_dbm=s.iip3_dbm,
+                            max_input_dbm=round(t, 1)))
+    return tuple(out)
+
+
 def select_lna_state(states: tuple[LNAState, ...], p_in_dbm: float) -> int:
     """First (highest-gain) state whose max input the signal stays below."""
     for i, st in enumerate(states):

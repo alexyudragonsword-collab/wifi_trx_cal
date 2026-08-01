@@ -208,11 +208,15 @@ def _cal_setup(p: dict):
     tx, rx = _chains(bw, int(p["seed"]), cfg.sample_rate_hz)
     if p.get("rx_hp", False):
         # "RX high-performance" study knob: every LNA/mixer gain state
-        # gets NF -1 dB and IIP3 +2 dB (hand-over thresholds untouched)
+        # gets NF -1 dB and IIP3 +2 dB, and the hand-over thresholds are
+        # re-solved at the noise-vs-IM3 balance points of the modified
+        # ladder (same 320 MHz anchor convention as the official table)
         from dataclasses import replace as _replace
-        rx.params.lna_states = tuple(
+
+        from wifitrx.chain.agc import rebalance_thresholds
+        rx.params.lna_states = rebalance_thresholds(tuple(
             _replace(s, nf_db=s.nf_db - 1.0, iip3_dbm=s.iip3_dbm + 2.0)
-            for s in rx.params.lna_states)
+            for s in rx.params.lna_states))
     from wifitrx.chain.loopback import recommended_loopback_atten_db
     return cfg, tx, rx, LoopbackPath(
         atten_db=recommended_loopback_atten_db(bw), delay_ns=6.0)
