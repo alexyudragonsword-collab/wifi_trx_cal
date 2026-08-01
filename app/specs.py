@@ -413,27 +413,29 @@ def run_rx_evm_sweep(p: dict) -> AnalysisResult:
     def _mask(v):
         return np.where(ok, np.asarray(v), np.nan)
 
-    # pure IM3 by power-domain subtraction (noise-off minus residual);
-    # once the two curves are within ~0.5 dB the difference is below the
-    # measurement resolution — IM3 is simply "below residual" there
-    _lin = (10.0 ** (np.asarray(evm_im3) / 10.0)
-            - 10.0 ** (np.asarray(evm_det) / 10.0))
-    _resolved = (np.asarray(evm_im3) - np.asarray(evm_det)) > 0.5
-    evm_im3_pure = np.where(
-        _resolved & ok, 10.0 * np.log10(np.maximum(_lin, 1e-30)), np.nan)
+    # isolate a single source by power-domain subtraction of the
+    # residual; once the raw curve is within ~0.5 dB of the residual the
+    # difference is below the measurement resolution — the source is
+    # simply "below residual" there and the point is blanked
+    def _pure(v):
+        lin = (10.0 ** (np.asarray(v) / 10.0)
+               - 10.0 ** (np.asarray(evm_det) / 10.0))
+        resolved = (np.asarray(v) - np.asarray(evm_det)) > 0.5
+        return np.where(resolved & ok,
+                        10.0 * np.log10(np.maximum(lin, 1e-30)), np.nan)
 
     fig = new_figure(figsize=(9.5, 6))
     ax = fig.add_subplot(1, 1, 1)
     ax.plot(p_in, evm_uncal, "o--", color="lightgray", ms=4,
             label="uncalibrated")
     ax.plot(p_in, evm_cal, "o-", color="tab:red", label="calibrated (all)")
-    ax.plot(p_in, _mask(evm_noise), "s-", color="tab:blue", ms=3,
-            label="IM3 off (thermal + residual)")
+    ax.plot(p_in, _pure(evm_noise), "s-", color="tab:blue", ms=3,
+            label="thermal alone (subtracted)")
     ax.plot(p_in, _mask(evm_im3), "^-", color="tab:green", ms=3,
             label="thermal off (IM3 + residual)")
     ax.plot(p_in, _mask(evm_det), "--", color="gray", lw=1,
             label="residual (PN + ISI + IQ + ADC)")
-    ax.plot(p_in, evm_im3_pure, "v:", color="darkgreen", ms=4, lw=1,
+    ax.plot(p_in, _pure(evm_im3), "v:", color="darkgreen", ms=4, lw=1,
             label="IM3 alone (subtracted; blank = below residual)")
     for row in mcs_rows:
         ax.axhline(-row["snr_req_db"], ls="--", lw=0.7, color="gray")
