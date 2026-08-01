@@ -35,7 +35,7 @@ DEFAULT_LNA_STATES = (
     LNAState(gain_db=13.0, nf_db=22.0, iip3_dbm=0.0, max_input_dbm=-21.0),
     LNAState(gain_db=7.0, nf_db=26.0, iip3_dbm=6.0, max_input_dbm=-17.0),
     LNAState(gain_db=1.0, nf_db=30.0, iip3_dbm=8.0, max_input_dbm=-13.0),
-    LNAState(gain_db=-5.0, nf_db=38.0, iip3_dbm=12.0, max_input_dbm=10.0),
+    LNAState(gain_db=-5.0, nf_db=34.0, iip3_dbm=12.0, max_input_dbm=10.0),
 )
 
 # Calibration-mode gain state: loopback observation captures pin this
