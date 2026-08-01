@@ -19,12 +19,24 @@ class LNAState:
     max_input_dbm: float   # switch to the next (lower-gain) state above this
 
 
+# Circuit-team ladder (2026-08 unified revision; see docs/backlog_zh.md
+# history).  Hand-over thresholds derive from the boundary-IM3 rule
+# 2*(IIP3 - max_input) >= 54 dBc (RX floor + 10 dB); state 3, being the
+# last state, is IM3-limited above -19 dBm by its +8 dBm IIP3.
 DEFAULT_LNA_STATES = (
-    LNAState(gain_db=36.0, nf_db=4.5, iip3_dbm=-12.0, max_input_dbm=-42.0),
-    LNAState(gain_db=24.0, nf_db=6.5, iip3_dbm=-2.0, max_input_dbm=-30.0),
-    LNAState(gain_db=12.0, nf_db=10.0, iip3_dbm=6.0, max_input_dbm=-18.0),
-    LNAState(gain_db=0.0, nf_db=16.0, iip3_dbm=14.0, max_input_dbm=10.0),
+    LNAState(gain_db=37.0, nf_db=3.5, iip3_dbm=-20.0, max_input_dbm=-47.0),
+    LNAState(gain_db=25.0, nf_db=10.0, iip3_dbm=-9.0, max_input_dbm=-36.0),
+    LNAState(gain_db=13.0, nf_db=22.0, iip3_dbm=0.0, max_input_dbm=-27.0),
+    LNAState(gain_db=1.0, nf_db=30.0, iip3_dbm=8.0, max_input_dbm=10.0),
 )
+
+# Calibration-mode gain state: loopback observation captures pin this
+# state (real cal firmware does the same) instead of walking the normal
+# ladder — with the revised thresholds the 320 MHz observation level
+# (~-21 dBm at the 34 dB cal coupler) would otherwise land in state 3,
+# whose NF 30 buries the observation.  State 2 jointly optimizes thermal
+# SNR vs mixer IM3 at that level.
+CAL_OBSERVATION_STATE = 2
 
 
 def select_lna_state(states: tuple[LNAState, ...], p_in_dbm: float) -> int:

@@ -77,9 +77,9 @@ def test_20mhz_full_cal_reaches_spec():
         assert res.passed in (True, None), (res.name, res.metrics_after)
     assert by["rx_iip2"].metrics_after["iip2_dbm"] > 60.0
     assert by["agc_sweep"].metrics_after["worst_landing_err_db"] < 2.5
-    # 1024-QAM needs ~-35 dB TX EVM; with in-channel probes and
-    # artifact-free meters this configuration lands ~-41.7/-44.2 at
-    # the uniform 1.3x/1.12x corners
+    # 1024-QAM needs ~-35 dB TX EVM; with in-channel probes,
+    # artifact-free meters and the 2026-08 AGC ladder (state-2 NF 22
+    # observation) this configuration lands ~-42.7/-43.1
     assert r.metrics["tx_evm_db"] <= -40.0, r.metrics
     assert r.metrics["loopback_evm_db"] <= -42.0, r.metrics
 

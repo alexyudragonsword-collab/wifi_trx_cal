@@ -28,6 +28,15 @@ from .rx import RxChain
 from .tx import TxChain
 
 
+def recommended_loopback_atten_db(bandwidth_hz: float) -> float:
+    """Cal-coupler design point.  40 dB suffices up to 160 MHz; at
+    320 MHz the state-2 observation (NF 22) needs a hotter input —
+    ~34 dB lands ~-21.5 dBm, where thermal SNR and mixer IM3
+    (IIP3 0 dBm) balance near 44 dBc and the joint observation floor
+    is deepest (see docs/backlog_zh.md A1 history)."""
+    return 34.0 if bandwidth_hz >= 320e6 else 40.0
+
+
 def frac_delay(y: np.ndarray, delay_samples: float) -> np.ndarray:
     n = y.size
     f = np.fft.fftfreq(n)

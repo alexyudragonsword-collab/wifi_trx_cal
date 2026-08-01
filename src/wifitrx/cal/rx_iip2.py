@@ -99,6 +99,9 @@ def calibrate_rx_iip2(tx: TxChain, rx: RxChain,
     p_in_lo = p_pa - path_lo.atten_db
 
     def _rx_beat(pathx: LoopbackPath, p_in: float, seed: int) -> complex:
+        # deliberately-hot two-tone: use the NORMAL ladder, not the
+        # cal-observation pin — the low-gain state's linearity is what
+        # protects the mixer here, and the IM2 trim is state-independent
         rx.agc(p_in)
         return _im2_beat(tx, rx, pathx, f1, f2, n, amp,
                          n_avg=n_avg, seed=seed)

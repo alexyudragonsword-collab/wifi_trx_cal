@@ -206,7 +206,9 @@ def _cal_setup(p: dict):
         cfg = OFDMConfig(bandwidth_hz=bw, qam_order=int(p["qam"]),
                          n_symbols=6, oversampling=4)
     tx, rx = _chains(bw, int(p["seed"]), cfg.sample_rate_hz)
-    return cfg, tx, rx, LoopbackPath(atten_db=40.0, delay_ns=6.0)
+    from wifitrx.chain.loopback import recommended_loopback_atten_db
+    return cfg, tx, rx, LoopbackPath(
+        atten_db=recommended_loopback_atten_db(bw), delay_ns=6.0)
 
 
 _QAM_MCS = {64: 7, 256: 9, 1024: 11, 4096: 13}

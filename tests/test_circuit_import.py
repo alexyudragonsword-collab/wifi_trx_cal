@@ -94,7 +94,10 @@ def test_full_cal_on_circuit_templates():
     rxp.lpf.fc_nominal_hz = bw / 2 * 1.12
     tx = TxChain(txp, fs, pa=pa)
     rx = RxChain(rxp, fs)
-    results = run_full_cal(tx, rx, cfg, LoopbackPath(atten_db=40.0, delay_ns=6.0))
+    # path=None -> the bandwidth-dependent cal-coupler design point
+    # (34 dB at 320 MHz: the state-2 observation with real NF 22 needs
+    # the hotter input; 40 dB here starves rx_iq of observation SNR)
+    results = run_full_cal(tx, rx, cfg)
     final = {r.name: r for r in results}["final_loopback_evm"]
     assert final.metrics_after["tx_evm_db"] < -37.0, final.metrics_after
     for r in results:

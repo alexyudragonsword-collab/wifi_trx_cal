@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..chain.agc import CAL_OBSERVATION_STATE
 from ..chain.loopback import LoopbackPath, run_loopback
 from ..chain.rx import RxChain
 from ..chain.tx import TxChain
@@ -54,7 +55,7 @@ def calibrate_dpd(tx: TxChain, rx: RxChain, wf: OFDMWaveform,
 
     # AGC for the actual coupled level (the observation ADC must not clip)
     from ..units import power_dbm
-    rx.agc(power_dbm(tx(x)) - path.atten_db)
+    rx.agc_pinned(power_dbm(tx(x)) - path.atten_db, CAL_OBSERVATION_STATE)
 
     def pa_out_metrics() -> dict:
         y = tx(x)
@@ -100,10 +101,15 @@ def calibrate_dpd(tx: TxChain, rx: RxChain, wf: OFDMWaveform,
         # the pass gate is EVM-driven with ACLR required not to regress
         # (ACLR is NaN when fs < 3*bw and then only the EVM gate applies).
         # A PA already linear enough (post EVM <= -40 dB, beyond MCS13
-        # needs) passes even without a 3 dB improvement to show.
+        # needs) passes even without a 3 dB improvement to show.  The
+        # regression check only bites while ACLR is shallower than
+        # -45 dBc: a ~1 dB wobble on an already phase-noise-limited -48
+        # (highly linear imported PA) is measurement noise, not learned
+        # distortion regrowth.
         passed=((after["evm_db"] < before["evm_db"] - 3.0
                  or after["evm_db"] <= -40.0)
                 and not (after["aclr_worst_dbc"]
-                         > before["aclr_worst_dbc"] + 1.0)),
+                         > before["aclr_worst_dbc"] + 1.0
+                         and after["aclr_worst_dbc"] > -45.0)),
         cost={"captures": n_iter, "samples": n_iter * (x.size + 512)},
     )

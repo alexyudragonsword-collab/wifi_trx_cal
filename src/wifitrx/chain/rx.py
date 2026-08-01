@@ -64,6 +64,18 @@ class RxChain:
         self.vga_db = vga_gain_db(p_in_dbm, p.lna_states[self.lna_idx].gain_db,
                                   target)
 
+    def agc_pinned(self, p_in_dbm: float, state_idx: int) -> None:
+        """Calibration-mode AGC: force a gain state and set the VGA for
+        the actual input level.  Loopback observation captures use this
+        (real cal firmware pins the gain state the same way) — the
+        normal ladder optimizes the RX for reception, not for
+        observation quality at the cal coupler's level."""
+        p = self.params
+        self.lna_idx = int(state_idx)
+        target = p.adc.fullscale_dbm - p.adc_backoff_db
+        self.vga_db = vga_gain_db(p_in_dbm, p.lna_states[self.lna_idx].gain_db,
+                                  target)
+
     def lo_phase(self, n: int, rng: np.random.Generator | None = None) -> np.ndarray:
         if rng is None:
             rng = np.random.default_rng(self.params.seed + 1)

@@ -28,6 +28,7 @@ from dataclasses import replace
 
 import numpy as np
 
+from ..chain.agc import CAL_OBSERVATION_STATE
 from ..chain.loopback import LoopbackPath, run_loopback
 from ..chain.rx import RxChain
 from ..chain.tx import TxChain
@@ -53,9 +54,10 @@ from .tx_power import calibrate_tx_power
 
 def agc_for_loopback(tx: TxChain, rx: RxChain, path: LoopbackPath,
                      x_probe: np.ndarray) -> None:
-    """Set the RX gain for the actual coupled TX power."""
+    """Set the RX gain for the actual coupled TX power, pinned to the
+    calibration observation state (see agc.CAL_OBSERVATION_STATE)."""
     p_rx_in = power_dbm(tx(x_probe)) - path.atten_db
-    rx.agc(p_rx_in)
+    rx.agc_pinned(p_rx_in, CAL_OBSERVATION_STATE)
 
 
 def capture_aligned(tx: TxChain, rx: RxChain, path: LoopbackPath,
@@ -241,7 +243,10 @@ def run_full_cal(tx: TxChain, rx: RxChain, cfg: OFDMConfig,
     the AGC runtime state so later steps see the level the sequence set.
     """
     if path is None:
-        path = LoopbackPath(atten_db=40.0, delay_ns=6.0)
+        from ..chain.loopback import recommended_loopback_atten_db
+        path = LoopbackPath(
+            atten_db=recommended_loopback_atten_db(cfg.bandwidth_hz),
+            delay_ns=6.0)
     prof = PROFILES[profile]
     # Validate the ordering constraints on the *plan*, before the first
     # capture: a mis-ordered calibration converges on a wrong answer
@@ -279,8 +284,12 @@ def run_full_cal(tx: TxChain, rx: RxChain, cfg: OFDMConfig,
     # measurement bin, and with an uncalibrated carrier leak it buries the
     # IM2 null by ~35 dB.
     if rx.params.im2.enabled:
+        # hotter than the main path for IM2 beat SNR, but never below
+        # 30 dB: with the 320 MHz cal coupler at 34 dB, "-10" would put
+        # the two-tone at -2 dBm and compress even the last gain state
+        # (IM3 ~20 dBc), corrupting the two-level cancellation
         _emit(calibrate_rx_iip2(
-            tx, rx, LoopbackPath(atten_db=path.atten_db - 10.0,
+            tx, rx, LoopbackPath(atten_db=max(path.atten_db - 10.0, 30.0),
                                  delay_ns=path.delay_ns),
             n=prof["n_scalar"], n_iter=prof["iip2_iters"],
             n_avg=prof["iip2_avg"]))
@@ -311,10 +320,17 @@ def run_full_cal(tx: TxChain, rx: RxChain, cfg: OFDMConfig,
     _emit(calibrate_tx_power(
         tx, wf.x * 0.25, target_dbm=target_pout_dbm,
         codes_db=np.arange(-20.0, 6.5, prof["power_step_db"])))
-    # 8. DPD (trained at the final operating drive)
+    # 8. DPD (trained at the final operating drive).  The ILA is
+    # bias-sensitive but noise-tolerant: LS averaging removes thermal
+    # noise, while systematic RX third-order distortion gets LEARNED
+    # into the predistorter and re-applied (ACLR regression).  The DPD
+    # observation therefore always uses the cold coupler point
+    # (>= 40 dB, RX IM3 >= 57 dBc) even when the IQ/EVM observations
+    # run at the hot 320 MHz cal point (34 dB, IM3 ~45 dBc).
     if with_dpd:
-        _emit(calibrate_dpd(tx, rx, wf, path,
-                                     drive_scale=final_drive_scale))
+        dpd_path = replace(path, atten_db=max(path.atten_db, 40.0))
+        _emit(calibrate_dpd(tx, rx, wf, dpd_path,
+                            drive_scale=final_drive_scale))
     # 9. AGC verification
     _emit(calibrate_agc(
         rx, p_in_range_dbm=np.arange(-85.0, -5.0, prof["agc_step_db"])))
