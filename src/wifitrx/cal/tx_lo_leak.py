@@ -78,11 +78,17 @@ def calibrate_tx_lo_leak_envdet(tx: TxChain, det: EnvelopeDetector | None = None
 def calibrate_tx_lo_leak_loopback(tx: TxChain, rx: RxChain,
                                   path: LoopbackPath | None = None,
                                   n: int = 1 << 14, f_probe: float | None = None,
-                                  n_iter: int = 2) -> CalResult:
+                                  n_iter: int = 2,
+                                  skip_below_dbc: float = -55.0) -> CalResult:
     """Loopback DC-bin method with RX-LO offset (run after RX DC cal).
 
     The TX carrier appears at -path.rx_lo_offset_hz in the RX capture.  A
     probe tone keeps the AGC/PA at a representative level.
+
+    When the envelope-detector pass already left the leak at or below
+    ``skip_below_dbc`` the refinement is skipped: near the measurement
+    floor the iteration just walks on noise for ~10 captures with no net
+    gain (320 MHz measured -59.1 -> -58.0 dBc).
     """
     if path is None:
         path = LoopbackPath(atten_db=40.0, delay_ns=6.0, rx_lo_offset_hz=4.8e6)
@@ -91,6 +97,18 @@ def calibrate_tx_lo_leak_loopback(tx: TxChain, rx: RxChain,
         f_probe = scaled_probe(23e6, tx.params.bandwidth_hz)
     x = single_tone(f_probe, tx.fs, n, amp=0.25)
     before_dbc = lo_leak_dbc(tx(x), tx.fs)
+    if before_dbc <= skip_below_dbc:
+        return CalResult(
+            name="tx_lo_leak_loopback",
+            estimated={"dc_pre": tx.dc_pre},
+            corrections={"dc_pre": [tx.dc_pre.real, tx.dc_pre.imag]},
+            metrics_before={"lo_leak_dbc": before_dbc},
+            metrics_after={"lo_leak_dbc": before_dbc},
+            passed=True,
+            spec={"metric": "lo_leak_dbc", "limit": -40.0, "sense": "max"},
+            notes=f"already at {before_dbc:.1f} dBc (<= {skip_below_dbc}); "
+                  "refinement near the measurement floor skipped",
+        )
     trace = []
 
     for it in range(n_iter):

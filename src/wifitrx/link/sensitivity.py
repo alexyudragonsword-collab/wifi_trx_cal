@@ -67,7 +67,15 @@ def sensitivity_study(rx: RxChain, cfg: OFDMConfig, mcs_indices,
     NF, measure EVM at three input levels around it, and interpolate the
     -snr_req crossing (EVM in dB is ~linear in input power in the
     noise-limited region).
+
+    ``floor_limited`` marks rows whose -snr_req sits within 5 dB of the
+    strong-signal EVM floor: there the crossing leaves the pure 1 dB/dB
+    noise slope and the measured sensitivity legitimately deviates from
+    the Friis analytic value (e.g. 4096-QAM at 320 MHz measured +2.6 dB
+    against a -43.6 dB floor) — a floor-vs-noise joint limit, not a
+    model error.
     """
+    floor_evm_db = measured_rx_evm_db(rx, cfg, -30.0, seed=seed)
     rows = []
     for idx in mcs_indices:
         m = mcs(idx)
@@ -88,5 +96,7 @@ def sensitivity_study(rx: RxChain, cfg: OFDMConfig, mcs_indices,
             "snr_req_db": m.snr_req_db, "nf_db": nf,
             "analytic_dbm": analytic, "measured_dbm": measured,
             "delta_db": measured - analytic,
+            "floor_evm_db": floor_evm_db,
+            "floor_limited": bool(floor_evm_db > -(m.snr_req_db + 5.0)),
         })
     return rows

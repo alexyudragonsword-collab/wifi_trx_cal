@@ -404,7 +404,9 @@ def run_rx_evm_sweep(p: dict) -> AnalysisResult:
     text = "sensitivity, measured vs analytic (Friis):\n" + "\n".join(
         f"  MCS{r['mcs']:2d} {r['modulation']:>9s}: "
         f"{r['measured_dbm']:7.1f} dBm  (analytic {r['analytic_dbm']:7.1f}, "
-        f"delta {r['delta_db']:+.1f} dB)" for r in mcs_rows)
+        f"delta {r['delta_db']:+.1f} dB)"
+        + ("  [floor-limited]" if r["floor_limited"] else "")
+        for r in mcs_rows)
     metrics = {"rx_evm_floor_db": float(min(evm_cal)),
                "rx_evm_floor_uncal_db": float(min(evm_uncal))}
     for r in mcs_rows:

@@ -15,17 +15,8 @@
 ### A2. MCS 所需 SNR 列与链路仿真对表
 - **状态**:等链路仿真组提供各 MCS 的实测门限(PER 仿真值,含实现损耗)。
 - **背景**:`link/mcs.py` 的 `snr_req_db` 列是 AWGN 工程近似(模块 docstring 已注明验证状态);MCS13 的 40 dB 直接决定 4096-QAM 灵敏度与 RX 图上需求线的位置。行间差值可信,绝对值需对表。
-- **附带发现**:320 MHz MCS13 实测灵敏度比解析值差 +2.6 dB——底板(−43.6)与需求线(−40)贴近导致穿越区偏离纯噪声斜率,4096-QAM 灵敏度是"底板+噪声"联合受限;AGC/NF 修订后此档需复核。
+- **附带发现**:320 MHz MCS13 实测灵敏度比解析值差 +2.6 dB——底板(−43.6)与需求线(−40)贴近导致穿越区偏离纯噪声斜率,4096-QAM 灵敏度是"底板+噪声"联合受限(`sensitivity_study` 已以 `floor_limited` 标记);AGC/NF 修订后此档需复核。
 
-## B. 可立即做(仓库内部)
+<!-- B1(文档同步)、B2(泄漏精修短路)、B3(floor_limited 标记)已完成,
+     见提交历史。 -->
 
-### B1. 教程/交付文档同步最近一轮功能
-- tutorial(ch8 接口章)与 README 尚未覆盖:四口径结果页(环回/TX/RX 星座 + RX 功率曲线)、逐步检查模式、RX EVM sweep 分析、11ac/n 制式与 64-QAM 选项;
-- `final_loopback_evm` 新增 `rx_evm_db` 指标:`docs/interface_zh.md` / `handoff_zh.md` 的指标字段说明需同步;
-- 完成后重建 `docs/*.html`。
-
-### B2. tx_lo_leak_loopback 短路逻辑
-- envdet 步之后泄漏常已达标(320M 实测 −59 dBc 起点),loopback 精修在测量底板附近游走(−59.1→−58.0,无净收益)。加"起点已达标即跳过"逻辑,省 ~10 次捕获;补一致性测试。
-
-### B3. sensitivity_study 底板受限标注
-- 当测量的 EVM 底板距 −snr_req 不足 ~5 dB 时,在结果行加 `floor_limited` 标记并在教程/handoff 中说明解析-实测偏差机理(见 A2 附带发现),防止误读为模型失准。

@@ -92,6 +92,15 @@ def test_tx_lo_leak_loopback_refines():
     path = LoopbackPath(atten_db=40.0, delay_ns=0.0, rx_lo_offset_hz=4.8e6)
     res = calibrate_tx_lo_leak_loopback(tx, rx, path)
     assert res.metrics_after["lo_leak_dbc"] < -45.0, res.metrics_after
+    # a second pass starts at the already-calibrated level: it must skip
+    # (near the measurement floor the iteration only walks on noise),
+    # keep the programmed dc_pre and spend no captures
+    dc_before = tx.dc_pre
+    res2 = calibrate_tx_lo_leak_loopback(tx, rx, path)
+    assert "skipped" in res2.notes, res2.notes
+    assert tx.dc_pre == dc_before
+    assert not res2.cost
+    assert res2.passed
 
 
 def test_tx_power_cal():

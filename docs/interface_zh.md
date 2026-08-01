@@ -133,8 +133,18 @@ FIR 以中心抽头为群时延参考(等效 `np.convolve(mode="same")`)。
   `metrics.cpe.correct_cpe`(逐符号公共相位去除,规范 EVM 测法)
 - `metrics.aclr(x, fs, bw)`(需 fs ≥ 3bw)、`metrics.psd` + `default_wifi_mask`
 - `metrics.irr.tone_image_irr_db / comb_irr_db / lo_leak_dbc`
-- `cal.sequence.tx_evm`(PA 输出、802.11be TX 规范测量点)、
-  `cal.sequence.loopback_evm`(TX+RX 复合)
+- 三个方向的 EVM 口径(逐音 EQ + CPE、内部符号打分,口径一致):
+  - `cal.sequence.tx_evm` / `tx_snapshot`(PA 输出、802.11be TX 规范
+    测量点;独立测试接收机,相噪全额计入)
+  - `cal.sequence.loopback_evm` / `loopback_snapshot`(TX+RX 复合;
+    片上共用综合器,共模相噪对消——**不能用于签核相噪预算**)
+  - `cal.sequence.rx_snapshot` / `link.sensitivity.measured_rx_evm_db`
+    (理想波形灌入 RX,独立 LO;`sensitivity_study` 的
+    `floor_limited` 标记表示该 MCS 门限距强信号底板 <5 dB,实测
+    灵敏度偏离 Friis 解析值属"底板+噪声"联合受限,并非模型误差)
+- `run_full_cal` 的 `final_loopback_evm` 结果同时携带三个口径:
+  `evm_db`(环回)/`tx_evm_db`/`rx_evm_db`,以及
+  `snapshot_before/after/tx/rx` 星座 artifacts
 
 ## 6. 已知建模简化
 

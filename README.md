@@ -29,7 +29,9 @@ python examples/run_blocker_study.py
 python examples/run_mimo_2x2.py
 python examples/run_yield.py --runs 20
 
-# GUI 工作台 (pip install -e .[gui])
+# GUI 工作台 (pip install -e .[gui]):全量校准(含逐步检查模式)、
+# RX EVM/灵敏度扫描、漂移跟踪、阻塞退敏、杂散规划 + cal-state 检查器;
+# 校准类分析支持 11ax/be 与 11ac/n 两种制式、64~4096-QAM
 python app/main.py
 
 # CI: scripts/ci_fast.sh (快速门禁) / scripts/ci_nightly.sh (全量+示例)
@@ -42,7 +44,7 @@ python app/main.py
 | DAC/ADC | 量化、削顶、孔径抖动、满量程 dBm 标定、ZOH droop(可选) |
 | 模拟基带 | 可调 LPF(RC 工艺偏差 ±20% + 调谐码)、VGA/AGC |
 | IQ 调制/解调 | **频率相关** IQ 失衡(I/Q 双实轨 FIR + 增益/相位 + 群时延失配)、TX LO 泄漏、RX DC(随 AGC 档变化) |
-| LO/PLL | 查表/Leeson 相噪剖面时域合成(默认 WiFi7 级 IPN ≈ −44 dBc)、fractional-N 杂散、TX/RX 共用或独立 LO |
+| LO/PLL | 查表/Leeson 相噪剖面时域合成(默认按 PLL 抖动指标锚定:120 fs rms,IPN −46.9 dBc @10 kHz–100 MHz/6 GHz)、fractional-N 杂散、TX/RX 共用或独立 LO |
 | PA | Saleh/GMP 归一化模型的 dBm 封装(Psat=28 dBm、P1dB 导出、PAE 平方根律)|
 | RX 前端 | 分档 LNA(增益/NF/IIP3)、级联噪声一次性注入、无记忆非线性 |
 | 环回 | 耦合衰减、延迟、RX-LO 频偏旋转、包络检波器(平方律)观测路 |
