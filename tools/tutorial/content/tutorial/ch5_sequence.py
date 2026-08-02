@@ -40,7 +40,12 @@ def _order_rows(ctx):
 
 
 def _dep_reason_rows(ctx):
-    """Every ordering edge with the physical reason deps.py carries."""
+    """Every ordering edge with the physical reason deps.py carries.
+
+    The row order (and hence the leading number) must match the badge
+    numbering in figures.depgraph_svg — both walk ``order`` and then
+    each step's STEP_REQUIRES in declaration order.
+    """
     from wifitrx.cal.deps import STEP_REQUIRES, planned_steps
     from wifitrx.cal.sequence import PROFILES
 
@@ -50,7 +55,7 @@ def _dep_reason_rows(ctx):
     for name in order:
         for req, reason in STEP_REQUIRES.get(name, {}).items():
             if req in rank:
-                rows.append([f"{req} → {name}", reason])
+                rows.append([str(len(rows) + 1), f"{req} → {name}", reason])
     return rows
 
 
@@ -123,12 +128,14 @@ CHAPTER = Chapter(
                                   "Calibration dependency graph (generated "
                                   "from STEP_REQUIRES; the numbers on the "
                                   "edges index the reason table below)")),
-                Table(header=(T("依赖边", "edge"), T("物理理由", "reason")),
+                Table(header=(T("#", "#"), T("依赖边", "edge"),
+                              T("物理理由", "reason")),
                       rows_from=_dep_reason_rows,
-                      caption=T("每条边的物理理由(deps.py 原文,英文即"
-                                "代码内注释)",
+                      caption=T("每条边的物理理由(边号即上图线上的圆圈"
+                                "编号;理由为 deps.py 原文)",
                                 "The physical reason behind every edge "
-                                "(verbatim from deps.py)")),
+                                "(the edge # is the badge on the line "
+                                "above; reasons verbatim from deps.py)")),
             )),
         Section(
             id="seq-budget", title=T("5.2 捕获耗时预算:factory 与 poweron", "5.2 The capture budget: factory vs power-on"),
