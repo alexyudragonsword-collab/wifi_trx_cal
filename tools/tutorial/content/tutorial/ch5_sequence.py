@@ -17,6 +17,43 @@ def _budget_values(ctx):
     }
 
 
+def _order_rows(ctx):
+    """The canonical sequence as a table: execution index, step, the
+    prerequisites deps.py declares for it, and the acceptance spec the
+    step itself reports.  Every cell is derived — nothing hand-typed."""
+    from wifitrx.cal.deps import STEP_REQUIRES, planned_steps
+    from wifitrx.cal.sequence import PROFILES
+
+    specs = {r.name: r.spec for r in ctx.full_cal["results"]}
+    rows = []
+    for i, name in enumerate(planned_steps(PROFILES["factory"],
+                                           with_iip2=True, with_dpd=True), 1):
+        reqs = ", ".join(STEP_REQUIRES.get(name, {})) or "—"
+        sp = specs.get(name) or {}
+        # sense semantics per cal/base.py: min -> >=, max -> <=,
+        # abs_max -> |metric| <=
+        fmt = {"min": "{m} ≥ {l:g}", "max": "{m} ≤ {l:g}",
+               "abs_max": "|{m}| ≤ {l:g}"}.get(sp.get("sense"))
+        acc = "—" if not fmt else fmt.format(m=sp["metric"], l=sp["limit"])
+        rows.append([str(i), name, reqs, acc])
+    return rows
+
+
+def _dep_reason_rows(ctx):
+    """Every ordering edge with the physical reason deps.py carries."""
+    from wifitrx.cal.deps import STEP_REQUIRES, planned_steps
+    from wifitrx.cal.sequence import PROFILES
+
+    order = planned_steps(PROFILES["factory"], with_iip2=True, with_dpd=True)
+    rank = {n: i for i, n in enumerate(order)}
+    rows = []
+    for name in order:
+        for req, reason in STEP_REQUIRES.get(name, {}).items():
+            if req in rank:
+                rows.append([f"{req} → {name}", reason])
+    return rows
+
+
 def _step_cost_rows(ctx):
     rows = []
     for r in ctx.full_cal["results"]:
@@ -38,8 +75,8 @@ CHAPTER = Chapter(
                   "LO 泄漏之前跑,测量 bin 被 PA 三阶积占据。因此顺序约束在 "
                   "<code>cal/deps.py</code> 里是<em>数据</em>(每条边带物理"
                   "理由),序列在第一次捕获之前校验计划,测试锁死违例。"
-                  "下图由构建脚本直接从该表生成——悬停边可见理由,图和代码"
-                  "不可能脱节:",
+                  "本节的表与图都由构建脚本直接从该表生成,图和代码不可能"
+                  "脱节。先看顺序本身:",
                   "A mis-ordered calibration does not fail — it "
                   "<em>converges on the wrong answer</em>: RX IQ before TX "
                   "IQ absorbs the TX image into the RX corrector; IIP2 "
@@ -49,12 +86,49 @@ CHAPTER = Chapter(
                   "carries its physical reason), the sequence validates "
                   "the plan before the first capture, and tests pin the "
                   "rules. The graph below is generated straight from that "
-                  "table at build time — hover an edge for its reason; "
-                  "the figure cannot drift from the code:"),
+                  "table at build time — the figure cannot drift from the "
+                  "code. First the sequence itself:"),
+                Table(header=(T("#", "#"), T("步骤", "step"),
+                              T("前置步骤", "prerequisites"),
+                              T("验收规格", "acceptance spec")),
+                      rows_from=_order_rows,
+                      caption=T("factory 档完整校准顺序(生成自 "
+                                "planned_steps + STEP_REQUIRES,验收列取自"
+                                "各步自报的 spec)",
+                                "The full factory-profile sequence "
+                                "(generated from planned_steps + "
+                                "STEP_REQUIRES; the acceptance column is "
+                                "each step's self-reported spec)")),
+                T("表中<b>前置为空的 8 步彼此不排序</b>;但其中 5 步是别人"
+                  "的前置(必须先于自己的下游),只有 <code>tx_lo_leak_"
+                  "envdet</code>、<code>agc_sweep</code>、"
+                  "<code>final_loopback_evm</code> 三步完全不受约束——"
+                  "下图把这两类分开画:分列(stage)的步骤按列先后执行,"
+                  "同列内无依赖可并行;虚线框那一排随时可插。边上的编号"
+                  "对应其后的理由表:",
+                  "The <b>eight steps with no prerequisites are not ordered "
+                  "among themselves</b>; five of them are still someone "
+                  "else's prerequisite (they must precede their own "
+                  "downstream steps), and only <code>tx_lo_leak_envdet</"
+                  "code>, <code>agc_sweep</code> and <code>final_loopback_"
+                  "evm</code> are unconstrained outright. The graph below "
+                  "separates the two: the staged columns run left to right "
+                  "(no dependencies inside a column, so a column may run in "
+                  "parallel), while the dashed band can be scheduled "
+                  "anywhere. Edge numbers index the reason table that "
+                  "follows:"),
                 Diagram(id="dg-deps", build=figures.depgraph_svg,
-                        caption=T("校准依赖图(自动生成自 STEP_REQUIRES)",
+                        caption=T("校准依赖图(自动生成自 STEP_REQUIRES;"
+                                  "边上的编号对应下表理由)",
                                   "Calibration dependency graph (generated "
-                                  "from STEP_REQUIRES)")),
+                                  "from STEP_REQUIRES; the numbers on the "
+                                  "edges index the reason table below)")),
+                Table(header=(T("依赖边", "edge"), T("物理理由", "reason")),
+                      rows_from=_dep_reason_rows,
+                      caption=T("每条边的物理理由(deps.py 原文,英文即"
+                                "代码内注释)",
+                                "The physical reason behind every edge "
+                                "(verbatim from deps.py)")),
             )),
         Section(
             id="seq-budget", title=T("5.2 捕获耗时预算:factory 与 poweron", "5.2 The capture budget: factory vs power-on"),
