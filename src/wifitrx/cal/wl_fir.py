@@ -55,3 +55,15 @@ def fir_response(taps: np.ndarray, f_hz: np.ndarray, fs: float) -> np.ndarray:
     w = 2 * np.pi * np.asarray(f_hz, dtype=float) / fs
     k = np.arange(taps.size)
     return np.sum(taps[None, :] * np.exp(-1j * np.outer(w, k - n0)), axis=1)
+
+
+def center_pad(taps: np.ndarray, n: int) -> np.ndarray:
+    """Zero-pad ``taps`` to length ``n`` about its centre tap.
+
+    Iterative IQ calibration composes corrections first-order as
+    ``w2_total ~= w2_old + w2_new``, and the two designs need not have
+    the same length; the centre tap is the group-delay reference
+    (equivalent to ``np.convolve(mode="same")``), so padding has to stay
+    symmetric about it.
+    """
+    return np.pad(taps, ((n - taps.size) // 2, (n - taps.size + 1) // 2))

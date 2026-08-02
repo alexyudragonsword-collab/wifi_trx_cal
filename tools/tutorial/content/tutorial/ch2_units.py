@@ -7,7 +7,9 @@ CHAPTER = Chapter(
     id="ch2", title=T("2 单位约定", "2 Units convention"),
     sections=(
         Section(
-            id="units", title=T("2.1 sqrt(mW) 基带与数字满量程边界", "2.1 sqrt(mW) baseband and the digital full-scale boundary"),
+            id="units",
+            title=T("2.1 sqrt(mW) 基带与数字满量程边界",
+                    "2.1 sqrt(mW) baseband and the digital full-scale boundary"),
             body=(
                 T("模拟域信号统一用 $\\sqrt{\\mathrm{mW}}$ 为单位的复包络表示:"
                   "这样 $|x|^2$ 直接就是瞬时功率 [mW],平均功率 "

@@ -64,7 +64,6 @@ def predict_spurs(f_lo_hz: float, cfg: FracNConfig, kmax: int = 6,
     """Predicted {offset_hz: dbc} spurs for one LO frequency."""
     frac = frac_of(f_lo_hz, cfg)
     word = int(round(frac * (1 << cfg.acc_bits)))
-    t_ref = 1.0 / cfg.fref_hz
     t_res = cfg.dtc_range_s / (1 << cfg.dtc_bits)
 
     # EFM1 residual ramp (bit-true accumulator), DTC target in seconds

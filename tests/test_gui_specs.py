@@ -98,7 +98,8 @@ def test_mainwindow_offscreen():
 
     import main as app_main
 
-    app = QApplication.instance() or QApplication([])
+    app = QApplication.instance() or QApplication([])  # noqa: F841
+    # the QApplication must outlive the widgets built below
     win = app_main.MainWindow()
     # form rebuilds for every registered analysis without crashing
     for i in range(win.combo.count()):

@@ -1,6 +1,5 @@
 """M4 tests: DPD, AGC sweep, link budget and EVM budget."""
 import numpy as np
-import pytest
 
 from wifitrx.cal.agc_cal import calibrate_agc
 from wifitrx.cal.dpd_cal import calibrate_dpd

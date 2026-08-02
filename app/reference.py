@@ -34,11 +34,13 @@ class RefEntry:
     key: str
     group: str
     title: str
-    # exactly one of these: svg() -> SVG text, or table(results) ->
-    # (columns, rows).  ``results`` is the last run's CalResult list, or
-    # None when no calibration has run in this session.
+    # exactly one of these: svg() -> SVG text, or
+    # table(results, fs_hz) -> (columns, rows).  ``results`` is the last
+    # run's step records (or a loaded cal-state's), None before there is
+    # one; every table takes the same two arguments so the page needs no
+    # signature introspection.
     svg: Callable[[], str] | None = None
-    table: Callable[[object], tuple] | None = None
+    table: Callable[[object, object], tuple] | None = None
     note: str = ""
 
 
@@ -73,7 +75,7 @@ def _dependency_graph() -> str:
     return dependency_graph_svg()
 
 
-def order_table(results):
+def order_table(results, fs_hz=None):
     from wifitrx.cal.reference import calibration_order
 
     cols = ["#", "step", "prerequisites", "acceptance spec"]
@@ -82,7 +84,7 @@ def order_table(results):
     return cols, rows
 
 
-def edge_table(results):
+def edge_table(results, fs_hz=None):
     from wifitrx.cal.reference import dependency_edges
 
     cols = ["#", "edge", "physical reason"]
@@ -90,16 +92,16 @@ def edge_table(results):
                   for r in dependency_edges()]
 
 
-def budget_table(results):
+def budget_table(results, fs_hz=None):
     from wifitrx.cal.reference import capture_cost_rows
 
-    cols = ["step", "captures", "samples"]
-    rows = [[r["step"], r["captures"], r["samples"]]
-            for r in capture_cost_rows(results or ())]
+    cols = ["step", "captures", "samples", "capture time [ms]"]
+    rows = [[r["step"], r["captures"], r["samples"], r["ms"]]
+            for r in capture_cost_rows(results or (), fs_hz=fs_hz)]
     return cols, rows
 
 
-def agc_table(results):
+def agc_table(results, fs_hz=None):
     from wifitrx.chain.agc import CAL_OBSERVATION_STATE, DEFAULT_LNA_STATES
 
     cols = ["state", "gain [dB]", "NF [dB]", "IIP3 [dBm]",
@@ -167,13 +169,13 @@ def _impairment_rows(params_cls, n_seeds: int = 64):
     return rows
 
 
-def tx_impairment_table(results):
+def tx_impairment_table(results, fs_hz=None):
     from wifitrx.chain import TxParams
     return (["parameter", "default", "randomize() spread"],
             _impairment_rows(TxParams))
 
 
-def rx_impairment_table(results):
+def rx_impairment_table(results, fs_hz=None):
     from wifitrx.chain import RxParams
     return (["parameter", "default", "randomize() spread"],
             _impairment_rows(RxParams))

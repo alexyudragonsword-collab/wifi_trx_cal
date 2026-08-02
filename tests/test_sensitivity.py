@@ -7,7 +7,6 @@ the noise/units/EVM plumbing — the chain the analytic budget also models.
 """
 from __future__ import annotations
 
-import numpy as np
 import pytest
 
 from wifitrx.chain import RxChain, RxParams

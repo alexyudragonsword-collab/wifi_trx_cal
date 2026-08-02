@@ -1,6 +1,5 @@
 """O3 tests: cal time profiles, per-state IQ, bit-true RTL vectors."""
 import numpy as np
-import pytest
 
 from wifitrx.cal.rx_iq import calibrate_rx_iq_per_state, measure_rx_irr
 from wifitrx.cal.sequence import run_full_cal
@@ -62,7 +61,6 @@ class TestPerStateIQ:
     def test_per_state_cal_holds_irr(self):
         bw = 80e6
         fs = bw * 4
-        rng = np.random.default_rng(3)
         txp = TxParams(bandwidth_hz=bw, dac=DACParams(enabled=False),
                        lpf=TunableLPF(enabled=False),
                        iq=FreqDepIQImbalance(enabled=False), lo_leak_dbm=None,
@@ -104,7 +102,8 @@ class TestVectors:
     def test_dpd_vectors_roundtrip(self, tmp_path):
         rng = np.random.default_rng(1)
         x = 0.2 * (rng.standard_normal(4096) + 1j * rng.standard_normal(4096))
-        pa_like = lambda u: u - 0.1 * u * np.abs(u) ** 2
+        def pa_like(u):
+            return u - 0.1 * u * np.abs(u) ** 2
         model = GMPModel(order=5, memory_depth=3).fit(x, pa_like(x))
         vec = make_dpd_vectors(model)
         p = save_vectors(vec, tmp_path / "dpd_vec.npz")

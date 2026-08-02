@@ -7,11 +7,9 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import numpy as np
 
 from wifitrx.cal.mimo_align import (calibrate_mimo_align,
                                     calibrate_mimo_decouple)
-from wifitrx.chain import RxParams, TxParams
 from wifitrx.chain.mimo import MimoParams, MimoTrx
 from wifitrx.link.beamforming import beamforming_study
 

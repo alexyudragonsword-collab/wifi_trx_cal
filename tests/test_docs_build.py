@@ -17,7 +17,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools" / "tutorial"))
 
-from model import Diagram, Doc, F, Fig, Section, T, Table, walk_texts  # noqa: E402
+from model import Diagram, Doc, F, Fig, walk_texts  # noqa: E402
 
 
 def _docs() -> list[Doc]:

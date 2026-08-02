@@ -81,6 +81,7 @@ class ReferencePage(QWidget):
     def __init__(self):
         super().__init__()
         self._results = None            # last run's CalResult list, if any
+        self._fs_hz = None              # …and the rate it was captured at
         self._entry = None
         self._svg: _Svg | None = None
 
@@ -123,9 +124,10 @@ class ReferencePage(QWidget):
                 break
 
     # ------------------------------------------------------------ data
-    def set_run_results(self, results) -> None:
+    def set_run_results(self, results, fs_hz=None) -> None:
         """Feed the acceptance-spec and capture-cost columns from a run."""
         self._results = results
+        self._fs_hz = fs_hz
         self._render()
 
     def _viewport(self) -> tuple[int, int]:
@@ -164,7 +166,8 @@ class ReferencePage(QWidget):
                 self._svg.fit(*self._viewport())
                 self.body_layout.addWidget(self._svg)
             else:
-                columns, rows = entry.table(self._results)
+                columns, rows = entry.table(self._results,
+                                            self._fs_hz)
                 self.body_layout.addWidget(_table(columns, rows))
         except Exception as exc:        # a missing asset must not kill the tab
             bad = QLabel(f"cannot render this entry: {exc}")

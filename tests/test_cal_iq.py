@@ -7,7 +7,7 @@ from wifitrx.cal.rx_iq import (
     calibrate_rx_iq, estimate_rx_iq_from_frame, measure_rx_irr,
 )
 from wifitrx.cal.tx_iq import (
-    calibrate_tx_iq, calibrate_tx_iq_envdet, measure_tx_irr, measure_tx_rho,
+    calibrate_tx_iq, calibrate_tx_iq_envdet, measure_tx_rho,
 )
 from wifitrx.cal.wl_fir import design_w2_fir, fir_response
 from wifitrx.chain import LoopbackPath, RxChain, RxParams, TxChain, TxParams

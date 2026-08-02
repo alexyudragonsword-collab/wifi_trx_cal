@@ -26,8 +26,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "app"))
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from wifitrx.cal.reference import (calibration_order, dependency_edges,
-                                   dependency_graph_svg)
+from wifitrx.cal.reference import (calibration_order,  # noqa: E402
+                                   dependency_edges, dependency_graph_svg)
 
 
 def _entries():
@@ -43,7 +43,7 @@ def test_every_entry_builds():
             ET.fromstring(svg)
             assert len(svg) > 2000, entry.key
         else:
-            columns, rows = entry.table(None)
+            columns, rows = entry.table(None, None)
             assert columns
             for row in rows:
                 assert len(row) == len(columns), (entry.key, row)
@@ -52,17 +52,17 @@ def test_every_entry_builds():
 def test_run_dependent_tables_start_empty_and_fill():
     import reference
 
-    _, rows = reference.budget_table(None)
+    _, rows = reference.budget_table(None, None)
     assert rows == []                      # no run yet: nothing to show
-    _, order = reference.order_table(None)
+    _, order = reference.order_table(None, None)
     assert {r[3] for r in order} == {reference.DASH}
 
     results = [{"name": "tx_iq", "cost": {"captures": 4, "samples": 131072},
                 "spec": {"metric": "irr_min_db", "limit": 50.0,
                          "sense": "min"}}]
-    _, rows = reference.budget_table(results)
+    _, rows = reference.budget_table(results, 320e6)
     assert rows[0][0] == "tx_iq" and rows[-1][0] == "total"
-    _, order = reference.order_table(results)
+    _, order = reference.order_table(results, None)
     spec_cell = next(r[3] for r in order if r[1] == "tx_iq")
     assert "irr_min_db" in spec_cell and "50" in spec_cell
 
@@ -232,8 +232,8 @@ def test_a_loaded_cal_state_fills_the_budget_table(tmp_path):
     from reference import budget_table, order_table
 
     assert win.reference._results, "the inspector did not hand the file over"
-    _, budget = budget_table(win.reference._results)
+    _, budget = budget_table(win.reference._results, None)
     assert [r[0] for r in budget] == ["tx_iq", "total"]
-    _, order = order_table(win.reference._results)
+    _, order = order_table(win.reference._results, None)
     assert "irr_min_db" in next(r[3] for r in order if r[1] == "tx_iq")
     del app

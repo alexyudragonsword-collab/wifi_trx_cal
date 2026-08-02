@@ -48,7 +48,8 @@ CHAPTER = Chapter(
     id="ch6", title=T("6 跟踪、温度与端到端结果", "6 Tracking, temperature and end-to-end results"),
     sections=(
         Section(
-            id="res-drift", title=T("6.1 PA 热漂移跟踪(RLS DPD)", "6.1 PA thermal-drift tracking (RLS DPD)"),
+            id="res-drift",
+            title=T("6.1 PA 热漂移跟踪(RLS DPD)", "6.1 PA thermal-drift tracking (RLS DPD)"),
             values=_drift_values,
             value_keys=("track_final", "gap", "frozen_worst"),
             body=(
@@ -75,7 +76,8 @@ CHAPTER = Chapter(
                               "oracle")),
             )),
         Section(
-            id="res-temp", title=T("6.2 温度保持性与失效窗口", "6.2 Temperature hold and the validity window"),
+            id="res-temp",
+            title=T("6.2 温度保持性与失效窗口", "6.2 Temperature hold and the validity window"),
             values=_temp_values,
             value_keys=("hold_min", "hold_max", "recal_n", "recal_ms"),
             body=(
@@ -112,7 +114,8 @@ CHAPTER = Chapter(
                   "measurement prerequisites included)."),
             )),
         Section(
-            id="res-sens", title=T("6.3 灵敏度:模型对拍解析预算", "6.3 Sensitivity: model vs analytic budget"),
+            id="res-sens", title=T("6.3 灵敏度:模型对拍解析预算",
+                                   "6.3 Sensitivity: model vs analytic budget"),
             body=(
                 T("同一个数,两条独立路径:Friis 解析底限 $P_{sens}=kT+"
                   "10\\log_{10}B+NF+SNR_{req}$,与行为模型实测(EVM 过 "
@@ -142,7 +145,8 @@ CHAPTER = Chapter(
                                 "trustworthy quantity)")),
             )),
         Section(
-            id="res-yield", title=T("6.4 工艺良率与旗舰结果", "6.4 Process yield and the flagship numbers"),
+            id="res-yield", title=T("6.4 工艺良率与旗舰结果",
+                                    "6.4 Process yield and the flagship numbers"),
             values=_mc_values, value_keys=("mc_n", "mc_median", "mc_worst"),
             body=(
                 T("小规模 Monte-Carlo({mc_n} 个随机工艺角,poweron 快速档):"

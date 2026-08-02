@@ -21,7 +21,9 @@ jobs:
           python-version: "3.11"
       - name: Qt offscreen system libraries
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libegl1 libgl1 libglib2.0-0 libxkbcommon0
-      - run: pip install -e .[test,gui,docs]
+      - run: pip install -e .[test,gui,docs,dev]
+      - name: lint (pycodestyle + pyflakes)
+        run: ruff check src/ app/ tests/ tools/ examples/
       - name: fast lane (guards + unit + GUI offscreen)
         run: QT_QPA_PLATFORM=offscreen python -m pytest tests/ -m "not slow" -q
 
@@ -35,6 +37,33 @@ jobs:
           python-version: "3.11"
       - name: Qt offscreen system libraries
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libegl1 libgl1 libglib2.0-0 libxkbcommon0
-      - run: pip install -e .[test,gui,docs]
-      - name: full suite (slow included)
-        run: QT_QPA_PLATFORM=offscreen python -m pytest tests/ -q
+      - run: pip install -e .[test,gui,docs,dev]
+      - name: lint
+        run: ruff check src/ app/ tests/ tools/ examples/
+      - name: full suite (slow included) with coverage
+        run: >
+          QT_QPA_PLATFORM=offscreen python -m pytest tests/ -q
+          --cov --cov-report=term:skip-covered --cov-report=xml
+      # The committed HTML is a deliverable, and nothing else notices when
+      # it falls behind the code it is generated from.  A rebuild is
+      # byte-identical apart from the provenance stamp (the schematics
+      # strip matplotlib's per-run timestamp and clip ids), so any other
+      # difference means the committed copy is stale.
+      - name: committed docs match a fresh build
+        run: |
+          QT_QPA_PLATFORM=offscreen MPLBACKEND=Agg \
+            python tools/build_docs.py --out docs/
+          python - <<'PY'
+          import re, subprocess, sys
+          stamp = re.compile(r"\d{4}-\d\d-\d\dT[\d:+\-]+")
+          for name in ("docs/tutorial.html", "docs/devguide.html"):
+              old = subprocess.run(["git", "show", f"HEAD:{name}"],
+                                   capture_output=True, text=True).stdout
+              new = open(name, encoding="utf-8").read()
+              if stamp.sub("", old) != stamp.sub("", new):
+                  sys.exit(f"{name} is stale: rebuild with "
+                           f"python tools/build_docs.py --out docs/")
+          print("committed docs are current")
+          PY
+      - name: schematic assets match their generator
+        run: MPLBACKEND=Agg python tools/build_assets.py --check

@@ -11,7 +11,6 @@ from wifitrx.impairments.iq_imbalance import FreqDepIQImbalance
 from wifitrx.impairments.phase_noise import LOModel
 from wifitrx.pa import (DriftingReferencePA, DriftingScaledPA, ScaledPA,
                         WienerHammersteinPA, load_hb_pa)
-from wifitrx.units import scale_to_dbm
 from wifitrx.waveform import OFDMConfig, generate_ofdm
 
 
@@ -30,7 +29,6 @@ def _clean_rx(bw, **kw):
              lpf=TunableLPF(enabled=False), adc=ADCParams(enabled=False),
              lo=LOModel(enabled=False))
     d.update(kw)
-    rx = RxChain(RxParams(**d), 0)  # fs set by caller
     return d
 
 

@@ -1,6 +1,5 @@
 """N3 tests: blockers, reciprocal mixing, AGC desense, frac-N spur planning."""
 import numpy as np
-import pytest
 
 from wifitrx.impairments.blocker import Blocker, reciprocal_mixing_noise_dbm
 from wifitrx.impairments.phase_noise import (DEFAULT_WIFI7_LO_PROFILE, LOModel,

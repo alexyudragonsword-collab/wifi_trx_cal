@@ -4,7 +4,7 @@ import pytest
 
 from wifitrx.cal.rx_iip2 import calibrate_rx_iip2
 from wifitrx.cal.tracking import ClockTracker
-from wifitrx.chain import LoopbackPath, RxChain, RxParams, TxChain, TxParams
+from wifitrx.chain import RxChain, RxParams, TxChain, TxParams
 from wifitrx.impairments.analog_filter import TunableLPF
 from wifitrx.impairments.clock import ClockError
 from wifitrx.impairments.converters import ADCParams, DACParams
@@ -13,8 +13,8 @@ from wifitrx.impairments.nonlinear import Im2Params
 from wifitrx.impairments.phase_noise import LOModel
 from wifitrx.metrics import evm
 from wifitrx.metrics.cpe import correct_cpe
-from wifitrx.waveform import OFDMConfig, generate_ofdm
-from wifitrx.waveform.pilots import generate_ofdm_with_pilots, pilot_positions
+from wifitrx.waveform import OFDMConfig
+from wifitrx.waveform.pilots import generate_ofdm_with_pilots
 
 FS = 320e6
 BW = 80e6

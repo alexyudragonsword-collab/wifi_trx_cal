@@ -9,7 +9,7 @@ parametrized smoke test in tests/test_gui_specs.py.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable
 
 import numpy as np
@@ -283,7 +283,10 @@ def run_full_cal(p: dict) -> AnalysisResult:
     return AnalysisResult(metrics=_cal_metrics(results, final), figure=fig,
                           cal_state={"tx_state": tx.correction_state(),
                                      "rx_state": rx.correction_state(),
-                                     "results": results})
+                                     "results": results,
+                                     # sample rate: the step costs are in
+                                     # samples, and tester time needs both
+                                     "fs_hz": cfg.sample_rate_hz})
 
 
 def run_full_cal_steps(p: dict) -> AnalysisResult:
@@ -364,7 +367,10 @@ def run_full_cal_steps(p: dict) -> AnalysisResult:
                           figures=tuple(pages),
                           cal_state={"tx_state": tx.correction_state(),
                                      "rx_state": rx.correction_state(),
-                                     "results": results})
+                                     "results": results,
+                                     # sample rate: the step costs are in
+                                     # samples, and tester time needs both
+                                     "fs_hz": cfg.sample_rate_hz})
 
 
 def run_rx_evm_sweep(p: dict) -> AnalysisResult:
@@ -374,7 +380,6 @@ def run_rx_evm_sweep(p: dict) -> AnalysisResult:
     waveform into the impaired RX (independent LO — phase noise counts
     in full, unlike the loopback view)."""
     from wifitrx.cal.sequence import run_full_cal as _run
-    from wifitrx.link.mcs import mcs
     from wifitrx.link.sensitivity import (measured_rx_evm_db,
                                           sensitivity_study)
 
@@ -473,7 +478,10 @@ def run_rx_evm_sweep(p: dict) -> AnalysisResult:
     return AnalysisResult(metrics=metrics, figure=fig, text=text,
                           cal_state={"tx_state": tx.correction_state(),
                                      "rx_state": rx.correction_state(),
-                                     "results": results})
+                                     "results": results,
+                                     # sample rate: the step costs are in
+                                     # samples, and tester time needs both
+                                     "fs_hz": cfg.sample_rate_hz})
 
 
 def run_drift_tracking(p: dict) -> AnalysisResult:

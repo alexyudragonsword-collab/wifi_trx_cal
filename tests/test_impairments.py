@@ -1,6 +1,5 @@
 """M1 tests: impairment blocks against analytic expectations."""
 import numpy as np
-import pytest
 
 from wifitrx.impairments.analog_filter import TunableLPF
 from wifitrx.impairments.converters import ADCParams, DACParams

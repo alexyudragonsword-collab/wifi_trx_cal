@@ -72,7 +72,8 @@ def test_cal_state_json_roundtrip(tmp_path):
     evm_cal = loopback_evm(tx, rx, path, cfg)
 
     p = tmp_path / "cal_state.json"
-    save_cal_state(p, tx.correction_state(), rx.correction_state(), results)
+    save_cal_state(p, tx.correction_state(), rx.correction_state(), results,
+                   fs_hz=fs)
 
     # fresh chains with the same impairments, corrections loaded from JSON
     tx2, rx2 = impaired_trx(bw, fs, seed=3)
@@ -98,3 +99,6 @@ def test_cal_state_json_roundtrip(tmp_path):
     assert live, "no step reported a cost — check the sequence"
     for name, cost in live.items():
         assert spent[name] == cost, (name, spent[name], cost)
+    # …and the sample rate those counts are denominated in, without which
+    # "samples" cannot be turned into tester time
+    assert doc["fs_hz"] == pytest.approx(fs)

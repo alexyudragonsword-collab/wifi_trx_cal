@@ -68,7 +68,8 @@ def main() -> None:
     report = generate_report(results, args.out,
                              title=f"电路数据校准报告 (BW={bw/1e6:.0f} MHz)")
     save_cal_state(args.out / "cal_state.json", tx.correction_state(),
-                   rx.correction_state(), results)
+                   rx.correction_state(), results,
+                   fs_hz=cfg.sample_rate_hz)
     final = {r.name: r for r in results}["final_loopback_evm"]
     print(f"final loopback EVM {final.metrics_after['evm_db']:.1f} dB, "
           f"TX EVM {final.metrics_after['tx_evm_db']:.1f} dB")

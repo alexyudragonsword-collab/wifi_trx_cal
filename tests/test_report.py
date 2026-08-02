@@ -1,5 +1,4 @@
 """M5 tests: report generation and determinism."""
-import numpy as np
 
 from wifitrx.cal.sequence import loopback_evm, run_full_cal
 from wifitrx.chain import LoopbackPath

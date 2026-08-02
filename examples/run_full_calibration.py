@@ -48,7 +48,8 @@ def main() -> None:
                              title=f"WiFi 7 收发器校准报告 (BW={bw/1e6:.0f} MHz, "
                                    f"{args.qam}-QAM, seed={args.seed})")
     save_cal_state(args.out / "cal_state.json", tx.correction_state(),
-                   rx.correction_state(), results)
+                   rx.correction_state(), results,
+                   fs_hz=cfg.sample_rate_hz)
     print(f"report:    {report}")
     print(f"cal state: {args.out / 'cal_state.json'}")
     final = {r.name: r for r in results}["final_loopback_evm"]

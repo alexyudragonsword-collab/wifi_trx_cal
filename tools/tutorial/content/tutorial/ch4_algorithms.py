@@ -300,7 +300,8 @@ CHAPTER = Chapter(
                   "<code>cal/sync.py</code>."),
             )),
         Section(
-            id="cal-txiq", title=T("4.6 TX 频变 IQ(核心)", "4.6 TX frequency-dependent IQ (the core)"), level=3,
+            id="cal-txiq",
+            title=T("4.6 TX 频变 IQ(核心)", "4.6 TX frequency-dependent IQ (the core)"), level=3,
             values=_txiq_values, value_keys=("irr_before", "irr_after"),
             body=(
                 T("这是整套校准里最精巧的一步。<b>难点</b>:环回观测里 TX 镜像、"

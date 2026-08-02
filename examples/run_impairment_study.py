@@ -54,7 +54,6 @@ def main() -> None:
     wf = generate_ofdm(cfg)
     x = wf.x * 0.1  # digital backoff
 
-    fc = bw / 2 * 1.06
     cases: dict[str, tuple[TxParams, RxParams]] = {
         "clean": (clean_tx(bw), clean_rx(bw)),
         "tx_iq_imbalance": (replace(clean_tx(bw), iq=FreqDepIQImbalance(

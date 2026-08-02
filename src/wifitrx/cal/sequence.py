@@ -46,7 +46,7 @@ from .rx_dc import calibrate_rx_dc
 from .rx_iip2 import calibrate_rx_iip2
 from .rx_iq import calibrate_rx_iq
 from .sync import align_delay, compensate_delay
-from .tx_iq import calibrate_tx_iq, measure_tx_rho
+from .tx_iq import calibrate_tx_iq
 from .tx_lo_leak import (calibrate_tx_lo_leak_envdet,
                          calibrate_tx_lo_leak_loopback)
 from .tx_power import calibrate_tx_power

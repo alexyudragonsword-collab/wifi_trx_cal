@@ -56,7 +56,8 @@ CHAPTER = Chapter(
     id="ch5", title=T("5 校准顺序与耗时预算", "5 Ordering and the capture-time budget"),
     sections=(
         Section(
-            id="seq-deps", title=T("5.1 顺序不是习惯,是物理", "5.1 The order is physics, not habit"),
+            id="seq-deps",
+            title=T("5.1 顺序不是习惯,是物理", "5.1 The order is physics, not habit"),
             body=(
                 T("排错顺序的校准不会失败——它会<em>收敛到错误答案</em>:"
                   "RX IQ 在 TX IQ 之前跑会把 TX 镜像吸收进 RX 校正器;IIP2 在 "
@@ -121,7 +122,9 @@ CHAPTER = Chapter(
                                 "above; reasons verbatim from deps.py)")),
             )),
         Section(
-            id="seq-budget", title=T("5.2 捕获耗时预算:factory 与 poweron", "5.2 The capture budget: factory vs power-on"),
+            id="seq-budget",
+            title=T("5.2 捕获耗时预算:factory 与 poweron",
+                    "5.2 The capture budget: factory vs power-on"),
             values=_budget_values,
             value_keys=("ms_factory", "ms_poweron", "cap_factory",
                         "cap_poweron", "evm_factory", "evm_poweron"),

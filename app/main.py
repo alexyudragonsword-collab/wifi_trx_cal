@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 try:
     from PySide6.QtCore import QThread, Signal
     from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox,
-                                   QDoubleSpinBox, QFormLayout, QHBoxLayout,
+                                   QDoubleSpinBox, QFormLayout,
                                    QLabel, QMainWindow, QPlainTextEdit,
                                    QPushButton, QSpinBox, QSplitter,
                                    QTableWidget, QTableWidgetItem, QTabWidget,
@@ -81,7 +81,6 @@ def _widget_for(p: ParamSpec):
         w = QSpinBox()
         w.setRange(int(p.minimum or 0), int(p.maximum or 1_000_000))
         w.setValue(int(p.default))
-        w.value = w.value if False else w.cleanText  # placeholder
         w.value = lambda w=w: int(w.text())
         return w
     w = QDoubleSpinBox()
@@ -205,7 +204,8 @@ class MainWindow(QMainWindow):
         if result.cal_state:
             # the reference tab's acceptance-spec and capture-cost columns
             # are this session's measurements, not stored constants
-            self.reference.set_run_results(result.cal_state.get("results"))
+            self.reference.set_run_results(result.cal_state.get("results"),
+                                           result.cal_state.get("fs_hz"))
         self.table.setRowCount(0)
         for k, v in result.metrics.items():
             row = self.table.rowCount()
@@ -256,7 +256,8 @@ class MainWindow(QMainWindow):
         from wifitrx.cal.base import save_cal_state
         save_cal_state(path, self._cal_state["tx_state"],
                        self._cal_state["rx_state"],
-                       self._cal_state["results"])
+                       self._cal_state["results"],
+                       fs_hz=self._cal_state.get("fs_hz"))
         self.status.setText(f"saved {path}")
         self.inspector.load(Path(path))
         self.tabs.setCurrentWidget(self.inspector)

@@ -125,7 +125,7 @@ class InspectorPage(QWidget):
 
     # step records of the file just opened, for whoever else can use
     # them; one-way, so this page still consumes nothing from anyone
-    loaded = Signal(object)
+    loaded = Signal(object, object)
 
     def __init__(self) -> None:
         super().__init__()
@@ -160,7 +160,7 @@ class InspectorPage(QWidget):
             self._render(doc)
             # the file's step records are also what the reference tab's
             # acceptance and capture-cost columns are made of
-            self.loaded.emit(doc.get("results") or [])
+            self.loaded.emit(doc.get("results") or [], doc.get("fs_hz"))
         except Exception:
             # ANY failure renders as a finding: in a windowed exe there is
             # no console, so a swallowed traceback would just look like a

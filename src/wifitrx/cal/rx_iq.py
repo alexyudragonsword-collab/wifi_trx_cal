@@ -30,7 +30,7 @@ from ..metrics.irr import comb_irr_db
 from ..waveform.ofdm import OFDMWaveform, demodulate_ofdm
 from ..waveform.stimuli import bin_value, iq_cal_comb
 from .base import CalResult
-from .wl_fir import design_w2_fir
+from .wl_fir import center_pad, design_w2_fir
 
 
 def measure_rx_w2(tx: TxChain, rx: RxChain, path: LoopbackPath,
@@ -85,9 +85,7 @@ def calibrate_rx_iq(tx: TxChain, rx: RxChain, path: LoopbackPath | None = None,
             rx.w2 = w2_new
         else:
             m = max(rx.w2.size, w2_new.size)
-            pad = lambda a: np.pad(a, ((m - a.size) // 2,
-                                       (m - a.size + 1) // 2))
-            rx.w2 = pad(rx.w2) + pad(w2_new)
+            rx.w2 = center_pad(rx.w2, m) + center_pad(w2_new, m)
         _, irr_now = measure_rx_irr(rx)
         trace.append(float(np.min(irr_now)))
 

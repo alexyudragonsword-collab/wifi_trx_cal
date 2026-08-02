@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wifitrx"
-version = "0.1.0"
+version = "0.2.0"
 description = "WiFi 7 direct-conversion IQ transceiver behavioral model and calibration suite (320 MHz)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -15,9 +15,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest>=7"]
+test = ["pytest>=7", "pytest-cov>=4"]
 gui = ["PySide6>=6.6"]
-docs = ["schemdraw>=0.20"]
+# schemdraw is pinned: its SVG output format is the committed
+# assets/schematics artifact, and 0.24 may change it under us
+docs = ["schemdraw>=0.23,<0.24"]
+dev = ["ruff>=0.6"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -27,3 +30,27 @@ testpaths = ["tests"]
 markers = [
     "slow: long-running end-to-end tests (deselect with '-m \"not slow\"')",
 ]
+
+[tool.ruff]
+# The convention in code is ~79 columns; the enforced ceiling is 100
+# because the docstrings carry the physics and the tutorial's section
+# titles carry a Chinese and an English string side by side — reflowing
+# those to 79 costs readability and buys nothing.
+line-length = 100
+extend-exclude = ["docs"]
+
+[tool.ruff.lint]
+# pycodestyle + pyflakes only: the value here is catching the unused
+# import, the shadowed name, the leftover variable — not restyling code
+# that four guard tests already constrain
+select = ["E", "F", "W"]
+
+[tool.coverage.run]
+source = ["wifitrx"]
+omit = ["*/__main__.py"]   # measured through subprocess, not import
+
+[tool.coverage.report]
+# baseline at the time the gate went in was 88 %; the floor exists to
+# catch a module arriving with no test at all, not to chase 100 %
+fail_under = 85
+skip_covered = false

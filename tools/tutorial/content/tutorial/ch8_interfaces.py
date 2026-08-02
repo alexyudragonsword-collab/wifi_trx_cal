@@ -7,7 +7,8 @@ CHAPTER = Chapter(
     id="ch8", title=T("8 使用指南与交付接口", "8 User guide and deliverable interfaces"),
     sections=(
         Section(
-            id="use-quickstart", title=T("8.1 安装与最小调用", "8.1 Install and the minimal contract"),
+            id="use-quickstart",
+            title=T("8.1 安装与最小调用", "8.1 Install and the minimal contract"),
             body=(
                 T("<code>pip install -e .</code>(GUI 需要 "
                   "<code>pip install -e '.[gui]'</code>;库、CLI 与独立检查器"
@@ -41,7 +42,9 @@ CHAPTER = Chapter(
                       ),
             )),
         Section(
-            id="use-calstate", title=T("8.2 校准状态文件与独立检查器", "8.2 The cal-state file and the standalone inspector"),
+            id="use-calstate",
+            title=T("8.2 校准状态文件与独立检查器",
+                    "8.2 The cal-state file and the standalone inspector"),
             body=(
                 T("<code>save_cal_state()</code> 产出的 JSON 是核心交付物:"
                   "全部数字校正 + 模拟调谐码(仅凭文件即可恢复芯片编程)、"
@@ -69,7 +72,8 @@ CHAPTER = Chapter(
                   "problems, not the library's evolution."),
             )),
         Section(
-            id="use-handoff", title=T("8.3 波形交接与批量回归", "8.3 Waveform handoff and batch regression"),
+            id="use-handoff", title=T("8.3 波形交接与批量回归",
+                                      "8.3 Waveform handoff and batch regression"),
             body=(
                 T("波形走 <code>wifitrx-wave-v1</code>(.npz:iq + 元数据,"
                   "带采样率/幅度/NaN 校验);单波形与目录级批量:",
@@ -94,7 +98,7 @@ CHAPTER = Chapter(
         Section(
             id="use-gui", title=T("8.4 GUI 工作台", "8.4 The GUI workbench"),
             body=(
-                T("<code>python app/main.py</code>,两个页签。"
+                T("<code>python app/main.py</code>,三个页签。"
                   "<b>Analyses</b>:六个分析(参数表单由声明式 spec 生成)"
                   "——全量校准(结果页 = 四星座:环回前/环回后/TX @ PA 口/"
                   "RX @ 数字口,加 PSD、RX EVM-输入功率曲线与逐步指标;"
@@ -115,7 +119,7 @@ CHAPTER = Chapter(
                   "全部由 <code>wifitrx.cal.reference</code> 与参数类现算,"
                   "与本文档同源;跑完一次校准后,顺序表的验收列与捕获成本表"
                   "自动填入本次实测值。",
-                  "<code>python app/main.py</code>, two tabs. "
+                  "<code>python app/main.py</code>, three tabs. "
                   "<b>Analyses</b>: six analyses (forms generated from "
                   "declarative specs) — full calibration (result page = "
                   "four constellations: loopback before / loopback after "

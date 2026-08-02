@@ -51,7 +51,8 @@ CHAPTER = Chapter(
     id="d1", title=T("D1 架构与分层", "D1 Architecture and layering"),
     sections=(
         Section(
-            id="d1-layers", title=T("D1.1 包分层(测试强制)", "D1.1 Package layering (test-enforced)"),
+            id="d1-layers",
+            title=T("D1.1 包分层(测试强制)", "D1.1 Package layering (test-enforced)"),
             body=(
                 T("下表在构建时直接 import 自 "
                   "<code>tests/test_import_layering.py</code> 的 ALLOWED "

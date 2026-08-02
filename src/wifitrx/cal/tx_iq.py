@@ -33,7 +33,7 @@ from ..chain.tx import TxChain
 from ..metrics.irr import comb_irr_db
 from ..waveform.stimuli import bin_value, grid_freq, iq_cal_comb, single_tone
 from .base import CalResult
-from .wl_fir import design_w2_fir
+from .wl_fir import center_pad, design_w2_fir
 
 
 def _capture_pair(tx: TxChain, rx: RxChain, path: LoopbackPath,
@@ -114,9 +114,7 @@ def calibrate_tx_iq(tx: TxChain, rx: RxChain, path: LoopbackPath | None = None,
         else:
             # first-order composition: w2_total ~= w2_old + w2_new
             m = max(tx.w2.size, w2_new.size)
-            pad = lambda a: np.pad(a, ((m - a.size) // 2,
-                                       (m - a.size + 1) // 2))
-            tx.w2 = pad(tx.w2) + pad(w2_new)
+            tx.w2 = center_pad(tx.w2, m) + center_pad(w2_new, m)
         _, irr_now = measure_tx_irr(tx)
         trace.append(float(np.min(irr_now)))
 
@@ -180,9 +178,7 @@ def calibrate_tx_iq_envdet(tx: TxChain, det: EnvelopeDetector | None = None,
             tx.w2 = w2_new
         else:
             m = max(tx.w2.size, w2_new.size)
-            pad = lambda a: np.pad(a, ((m - a.size) // 2,
-                                       (m - a.size + 1) // 2))
-            tx.w2 = pad(tx.w2) + pad(w2_new)
+            tx.w2 = center_pad(tx.w2, m) + center_pad(w2_new, m)
         _, irr_now = measure_tx_irr(tx)
         trace.append(float(np.min(irr_now)))
 

@@ -67,7 +67,9 @@ CHAPTER = Chapter(
                   "defaults."),
             )),
         Section(
-            id="d2-guards", title=T("D2.2 护栏测试:防的是哪类腐烂", "D2.2 Guard tests: which decay class each blocks"),
+            id="d2-guards",
+            title=T("D2.2 护栏测试:防的是哪类腐烂",
+                    "D2.2 Guard tests: which decay class each blocks"),
             body=(
                 T("这些测试不验证功能,验证<em>工程不变量</em>——每条都对应一类"
                   "在姊妹项目事后分析里真实发生过的腐烂。改代码撞上护栏时,"

@@ -7,7 +7,8 @@ CHAPTER = Chapter(
     id="ch7", title=T("7 设计洞察", "7 Design insights"),
     sections=(
         Section(
-            id="insights", title=T("7.1 模型换来的电路结论", "7.1 Circuit conclusions the model paid for"),
+            id="insights",
+            title=T("7.1 模型换来的电路结论", "7.1 Circuit conclusions the model paid for"),
             body=(
                 T("<b>① 4096-QAM 必须配低相噪综合器。</b>IPN ≈ −38 dBc 的 LO "
                   "单独就吃掉整个 −38 dB EVM 预算——CPE 去除救不了子载波间"

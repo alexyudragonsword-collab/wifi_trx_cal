@@ -25,7 +25,8 @@ CHAPTER = Chapter(
                       "1 Transceiver architecture and modeling approach"),
     sections=(
         Section(
-            id="arch", title=T("1.1 直接变频 IQ 收发器", "1.1 The direct-conversion IQ transceiver"),
+            id="arch",
+            title=T("1.1 直接变频 IQ 收发器", "1.1 The direct-conversion IQ transceiver"),
             body=(
                 T("本教程围绕一颗 CMOS WiFi 7 收发器展开:TX 与 RX 均为直接变频"
                   "(zero-IF)IQ 结构,信道带宽最高 320 MHz,TX 采用模拟 PA"
@@ -66,7 +67,8 @@ CHAPTER = Chapter(
                   "each one alone can blow the entire error budget."),
             )),
         Section(
-            id="baseband", title=T("1.2 复基带等效建模", "1.2 Complex-baseband equivalent modeling"),
+            id="baseband",
+            title=T("1.2 复基带等效建模", "1.2 Complex-baseband equivalent modeling"),
             body=(
                 T("模型不在射频载波上仿真。载频 6 GHz 下直接仿 RF 需要 >12 GHz "
                   "采样率,而所有我们关心的物理量(失配、泄漏、非线性、相噪)在"
@@ -98,7 +100,9 @@ CHAPTER = Chapter(
                   "calibration in chapter 4 works on FFT bins."),
             )),
         Section(
-            id="why-cal", title=T("1.3 为什么必须校准:损伤逐项点名", "1.3 Why calibrate: naming each impairment's cost"),
+            id="why-cal",
+            title=T("1.3 为什么必须校准:损伤逐项点名",
+                    "1.3 Why calibrate: naming each impairment's cost"),
             values=_overview_values,
             value_keys=("evm_clean", "evm_txiq", "evm_leak"),
             body=(

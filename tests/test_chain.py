@@ -1,6 +1,5 @@
 """M1 tests: TX/RX chains, loopback and dBm bookkeeping."""
 import numpy as np
-import pytest
 
 from wifitrx.chain import (
     LoopbackPath, RxChain, RxParams, TxChain, TxParams, run_loopback,
@@ -81,7 +80,7 @@ class TestBookkeeping:
         nodes = {}
         # drive at 12 dB digital backoff from DAC FS
         x = wf.x / np.sqrt(np.mean(np.abs(wf.x) ** 2)) * 10 ** (-12 / 20)
-        y = tx(x, nodes=nodes)
+        tx(x, nodes=nodes)
         assert np.isclose(nodes["dac_out_dbm"], 4.0 - 12.0, atol=0.3)
         # PA output ~ bb - lpf loss + 26, well below psat
         assert nodes["pa_out_dbm"] < 28.0

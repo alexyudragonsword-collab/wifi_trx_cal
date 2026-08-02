@@ -7,7 +7,8 @@ CHAPTER = Chapter(
     id="ch9", title=T("9 已知简化与边界", "9 Known simplifications and boundaries"),
     sections=(
         Section(
-            id="bounds", title=T("9.1 模型明确不覆盖什么", "9.1 What the model deliberately does not cover"),
+            id="bounds",
+            title=T("9.1 模型明确不覆盖什么", "9.1 What the model deliberately does not cover"),
             body=(
                 T("诚实的边界清单,引用前请核对:"
                   "① DAC/ADC 镜像与 replica 不建模(单一仿真采样率;ZOH droop "

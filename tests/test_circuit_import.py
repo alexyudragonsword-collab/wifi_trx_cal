@@ -71,7 +71,7 @@ class TestPaTemplate:
 def test_full_cal_on_circuit_templates():
     """The whole sequence still converges with imported circuit data."""
     from wifitrx.cal.sequence import run_full_cal
-    from wifitrx.chain import (LoopbackPath, RxChain, RxParams, TxChain,
+    from wifitrx.chain import (RxChain, RxParams, TxChain,
                                TxParams)
     from wifitrx.impairments.phase_noise import LOModel
     from wifitrx.waveform import OFDMConfig

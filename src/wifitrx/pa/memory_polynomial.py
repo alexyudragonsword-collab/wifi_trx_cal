@@ -1,4 +1,5 @@
-# Vendored from PA_DPD:src/padpd/pa/memory_polynomial.py (internal sibling repo), adapted for wifitrx.
+# Vendored from PA_DPD:src/padpd/pa/memory_polynomial.py (internal sibling
+# repo), adapted for wifitrx.
 # Upstream changes should be ported manually; see PROVENANCE.md.
 """Memory Polynomial (MP) model with least-squares fitting.
 

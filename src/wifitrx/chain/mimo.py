@@ -14,7 +14,7 @@ Architecture assumptions (2x2 default, structure scales to 4x4):
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
 

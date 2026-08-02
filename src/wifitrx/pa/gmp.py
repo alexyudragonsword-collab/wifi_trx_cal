@@ -51,14 +51,14 @@ class GMPModel(PAModel):
                 cols.append(xm * am**k)
         for m in range(self.lag_memory):
             xm = delayed(x, m)
-            for l in range(1, self.lag_span + 1):
-                al = delayed(a, m + l)
+            for q in range(1, self.lag_span + 1):
+                al = delayed(a, m + q)
                 for k in range(1, self.lag_order + 1):
                     cols.append(xm * al**k)
         for m in range(self.lead_memory):
             xm = delayed(x, m)
-            for l in range(1, self.lead_span + 1):
-                al = delayed(a, m - l)
+            for q in range(1, self.lead_span + 1):
+                al = delayed(a, m - q)
                 for k in range(1, self.lead_order + 1):
                     cols.append(xm * al**k)
         return np.stack(cols, axis=1)

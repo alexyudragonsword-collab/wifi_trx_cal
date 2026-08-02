@@ -74,13 +74,21 @@ def dependency_edges(profile: str = "factory") -> list[dict]:
     return rows
 
 
-def capture_cost_rows(results) -> list[dict]:
+def capture_cost_rows(results, fs_hz: float | None = None,
+                      extra_ms: dict | None = None) -> list[dict]:
     """Per-step capture cost from a finished run, plus a total row.
 
     ``results`` is the CalResult list a sequence run returns, or the
     step records a cal-state file carries (``summary`` serializes
     ``cost``, so a delivered bundle reports its own test cost).  Steps
-    that spend no captures are omitted, as in the tutorial's table.
+    that spend no captures are omitted.
+
+    With ``fs_hz`` each row also carries the capture time in ms (samples
+    / fs, DSP excluded).  ``extra_ms`` adds rows that cost time but no
+    captures — the power-on PLL lock — and they land in the total.
+
+    The GUI's reference tab, the tutorial's budget table and the report
+    generator all render this one derivation.
     """
     rows, cap_tot, samp_tot = [], 0, 0
     for r in results:
@@ -91,10 +99,18 @@ def capture_cost_rows(results) -> list[dict]:
         captures, samples = cost.get("captures", 0), cost.get("samples", 0)
         cap_tot, samp_tot = cap_tot + captures, samp_tot + samples
         rows.append({"step": name, "captures": f"{captures:,}",
-                     "samples": f"{samples:,}"})
-    if rows:
-        rows.append({"step": "total", "captures": f"{cap_tot:,}",
-                     "samples": f"{samp_tot:,}"})
+                     "samples": f"{samples:,}",
+                     "ms": f"{samples / fs_hz * 1e3:.2f}" if fs_hz else _DASH})
+    if not rows:
+        return []
+    ms_tot = samp_tot / fs_hz * 1e3 if fs_hz else None
+    for name, ms in (extra_ms or {}).items():
+        rows.append({"step": name, "captures": _DASH, "samples": _DASH,
+                     "ms": f"{ms:.3f}"})
+        ms_tot = (ms_tot or 0.0) + ms
+    rows.append({"step": "total", "captures": f"{cap_tot:,}",
+                 "samples": f"{samp_tot:,}",
+                 "ms": f"{ms_tot:.2f}" if ms_tot is not None else _DASH})
     return rows
 
 

@@ -84,12 +84,17 @@ def _jsonable(obj: Any) -> Any:
 
 def save_cal_state(path: str | Path, tx_state: dict, rx_state: dict,
                    results: list[CalResult] | None = None,
-                   expiry: dict | None = None) -> None:
+                   expiry: dict | None = None,
+                   fs_hz: float | None = None) -> None:
     """Persist the full correction state (and optional result summaries).
 
     ``expiry``: validity metadata for the corrections (e.g. the measured
     temperature hold range from ``link.temp_study``) — corrections are not
     forever, and the file should say so.
+
+    ``fs_hz``: the sample rate the steps were captured at.  Each step
+    reports its cost in samples; without the rate the recipient cannot
+    turn that into tester time, which is the only unit it is useful in.
     """
     from ..provenance import provenance
     doc = {
@@ -99,6 +104,8 @@ def save_cal_state(path: str | Path, tx_state: dict, rx_state: dict,
         "results": [r.summary() for r in (results or [])],
         "provenance": provenance(),
     }
+    if fs_hz:
+        doc["fs_hz"] = float(fs_hz)
     if expiry:
         doc["expiry"] = _jsonable(expiry)
     Path(path).write_text(json.dumps(doc, indent=2))

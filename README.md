@@ -79,6 +79,7 @@ python app/main.py
 - `docs/cal_order_zh.md` — 校准顺序依据
 - `docs/handoff_zh.md` — 交付/联合验证流程;`docs/circuit_data_zh.md` — 电路数据导入格式
 - `docs/backlog_zh.md` — 待办与已落地项的决策记录
+- `CHANGELOG.md` — 版本变更(交付格式的改动在这里显式标注)
 - `PROVENANCE.md` — 拷贝代码来源
 
 ## 模型给出的设计洞察

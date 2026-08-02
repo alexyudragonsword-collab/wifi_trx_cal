@@ -5,7 +5,6 @@ import pytest
 from wifitrx.cal.mimo_align import (calibrate_mimo_align,
                                     calibrate_mimo_decouple,
                                     measure_coupling_matrix)
-from wifitrx.chain import LoopbackPath
 from wifitrx.chain.mimo import MimoParams, MimoTrx
 from wifitrx.impairments.analog_filter import TunableLPF
 from wifitrx.impairments.converters import ADCParams, DACParams

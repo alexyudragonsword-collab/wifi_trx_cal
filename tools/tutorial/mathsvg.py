@@ -8,7 +8,8 @@ mathtext limitations (author accordingly):
 - supported: \\frac, \\sqrt, sub/superscripts, Greek, \\sum \\int,
   \\hat \\bar \\overline, \\mathrm \\mathbf \\mathcal, \\left( \\right),
   \\langle \\rangle, |...|.
-- NOT supported: \\le (use \\leq), \\tfrac (use \\frac), amsmath environments (align/cases/matrix) — author
+- NOT supported: \\le (use \\leq), \\tfrac (use \\frac), amsmath environments
+  (align/cases/matrix) — author
   multi-line derivations as consecutive F items; \\text{} — use
   \\mathrm{}; \\operatorname; \\boldsymbol.
 """

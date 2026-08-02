@@ -116,27 +116,23 @@ def generate_report(results: list[CalResult], out_dir: str | Path,
 
     # ---- capture-time budget (when any step reports cost)
     if any(r.cost for r in results):
-        lines += ["## 校准耗时预算(捕获时间)", "",
-                  "| 步骤 | 捕获次数 | 样本数 | 捕获时间 (ms) |",
-                  "|---|---|---|---|"]
-        tot_c = tot_s = 0
-        for r in results:
-            if not r.cost:
-                continue
-            c = int(r.cost.get("captures", 0))
-            s = int(r.cost.get("samples", 0))
-            tot_c += c
-            tot_s += s
-            t = f"{s / fs_hz * 1e3:.2f}" if fs_hz else "—"
-            lines.append(f"| {r.name} | {c} | {s:,} | {t} |")
+        # one derivation, three renderings: this table, the GUI's
+        # reference tab and the tutorial all call capture_cost_rows
+        from ..cal.reference import capture_cost_rows
         lock_ms = None
+        extra = {}
         if pll is not None:
             from ..link.spur_planning import lock_time_s
             lock_ms = lock_time_s(pll) * 1e3
-            lines.append(f"| pll_lock(上电一次) | — | — | {lock_ms:.3f} |")
-        t_tot = (f"{tot_s / fs_hz * 1e3 + (lock_ms or 0.0):.2f}"
-                 if fs_hz else "—")
-        lines += [f"| **合计** | {tot_c} | {tot_s:,} | {t_tot} |", "",
+            extra["pll_lock(上电一次)"] = lock_ms
+        lines += ["## 校准耗时预算(捕获时间)", "",
+                  "| 步骤 | 捕获次数 | 样本数 | 捕获时间 (ms) |",
+                  "|---|---|---|---|"]
+        for row in capture_cost_rows(results, fs_hz=fs_hz, extra_ms=extra):
+            name = ("**合计**" if row["step"] == "total" else row["step"])
+            lines.append(f"| {name} | {row['captures']} | {row['samples']} "
+                         f"| {row['ms']} |")
+        lines += ["",
                   "> 捕获时间 = 样本数 / fs,不含 DSP 处理时间;"
                   "上电快速档 (profile='poweron') 用二分码搜索与短捕获压缩此预算。"
                   + ("PLL 锁定时间为二阶环路包络估计,PLL 组给出实测锁定规格后"

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import numpy as np
 
 from ..impairments.phase_noise import TabulatedPhase
 
@@ -32,7 +31,8 @@ def load_pll_pn_csv(path: str | Path, name: str = "imported_lo",
         if len(parts) < 2:
             continue
         try:
-            f, l = float(parts[header_freq_col]), float(parts[header_level_col])
+            f, lvl = (float(parts[header_freq_col]),
+                      float(parts[header_level_col]))
         except ValueError:
             # header row: try to locate the columns by name
             low = [p.lower().replace(" ", "_") for p in parts]
@@ -43,11 +43,11 @@ def load_pll_pn_csv(path: str | Path, name: str = "imported_lo",
                     header_level_col = i
             continue
         if f >= min_offset_hz:
-            rows.append((f, l))
+            rows.append((f, lvl))
     if len(rows) < 3:
         raise ValueError(f"{path}: 有效相噪数据点不足({len(rows)} < 3)")
     rows.sort()
     f_pts, l_pts = zip(*rows)
-    if any(l > 0 or l < -200 for l in l_pts):
+    if any(lvl > 0 or lvl < -200 for lvl in l_pts):
         raise ValueError(f"{path}: dBc/Hz 数值超出合理范围 [-200, 0]")
     return TabulatedPhase(name, f_pts=tuple(f_pts), l_dbc_pts=tuple(l_pts))
