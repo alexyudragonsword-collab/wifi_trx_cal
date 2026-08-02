@@ -201,3 +201,39 @@ def test_assets_render_in_qt_without_warnings():
                   if img.pixelColor(x, y) != QColor("white"))
         assert ink > 200, (path.name, ink)      # not a blank page
     del app
+
+
+def test_a_loaded_cal_state_fills_the_budget_table(tmp_path):
+    """Opening a delivered bundle populates the reference tables too —
+    the file carries each step's cost, so the capture budget is readable
+    without re-running the calibration."""
+    pytest.importorskip("PySide6")
+    try:
+        from PySide6.QtWidgets import QApplication
+    except ImportError as exc:
+        pytest.skip(str(exc))
+    import json
+
+    app = QApplication.instance() or QApplication([])
+    import main
+
+    doc = {"format": "wifitrx-cal-state-v1", "tx": {}, "rx": {},
+           "results": [{"name": "tx_iq", "passed": True, "saturated": None,
+                        "spec": {"metric": "irr_min_db", "limit": 50.0,
+                                 "sense": "min"},
+                        "cost": {"captures": 4, "samples": 131072},
+                        "metrics_before": {"irr_min_db": 28.0},
+                        "metrics_after": {"irr_min_db": 55.0}}]}
+    path = tmp_path / "cal_state.json"
+    path.write_text(json.dumps(doc))
+
+    win = main.MainWindow()
+    win.inspector.load(path)                 # emits loaded -> reference
+    from reference import budget_table, order_table
+
+    assert win.reference._results, "the inspector did not hand the file over"
+    _, budget = budget_table(win.reference._results)
+    assert [r[0] for r in budget] == ["tx_iq", "total"]
+    _, order = order_table(win.reference._results)
+    assert "irr_min_db" in next(r[3] for r in order if r[1] == "tx_iq")
+    del app

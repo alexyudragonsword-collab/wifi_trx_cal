@@ -87,3 +87,14 @@ def test_cal_state_json_roundtrip(tmp_path):
     assert rx2.im2_trim_code == rx.im2_trim_code
     evm_loaded = loopback_evm(tx2, rx2, path, cfg)
     assert abs(evm_loaded - evm_cal) < 1.0, (evm_loaded, evm_cal)
+
+    # the bundle also states what the calibration cost to measure: the
+    # recipient is a production-test audience budgeting tester time, and
+    # the capture counts are not recoverable from anything else in it
+    import json
+    doc = json.loads(p.read_text())
+    spent = {r["name"]: r.get("cost") for r in doc["results"]}
+    live = {r.name: r.cost for r in results if r.cost}
+    assert live, "no step reported a cost — check the sequence"
+    for name, cost in live.items():
+        assert spent[name] == cost, (name, spent[name], cost)

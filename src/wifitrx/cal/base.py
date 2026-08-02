@@ -56,6 +56,11 @@ class CalResult:
             "saturated": None if self.saturated is None
                          else bool(self.saturated),
             "spec": _jsonable(self.spec),
+            # what the step cost to measure: the recipient is a
+            # production-test audience, and a bundle that states what it
+            # measured but not what the measurement cost cannot be
+            # budgeted against a tester's time
+            "cost": _jsonable(self.cost),
             "notes": self.notes,
         }
 

@@ -77,10 +77,10 @@ def dependency_edges(profile: str = "factory") -> list[dict]:
 def capture_cost_rows(results) -> list[dict]:
     """Per-step capture cost from a finished run, plus a total row.
 
-    ``results`` is the CalResult list a sequence run returns; steps that
-    spend no captures are omitted, as in the tutorial's budget table.
-    (Dicts are accepted too, but note ``CalResult.summary`` does not
-    serialize ``cost`` — a cal-state file on disk cannot feed this.)
+    ``results`` is the CalResult list a sequence run returns, or the
+    step records a cal-state file carries (``summary`` serializes
+    ``cost``, so a delivered bundle reports its own test cost).  Steps
+    that spend no captures are omitted, as in the tutorial's table.
     """
     rows, cap_tot, samp_tot = [], 0, 0
     for r in results:

@@ -82,6 +82,9 @@ Schema(`wifitrx-cal-state-v1`):
                                   //   spec       该步当时生效的验收规格
                                   //              {metric, limit, sense},
                                   //              随文件走,校验时以此为准
+                                  //   cost       该步的捕获开销
+                                  //              {captures, samples};
+                                  //              产测时间 = samples / fs
   "provenance": { ... },          // 生成溯源:git commit、dirty、时间、版本
   "expiry": {                     // 可选:校正有效性窗口(link.temp_study 实测)
     "calibrated_at_c": 25.0,      //   校准温度
@@ -123,10 +126,10 @@ FIR 以中心抽头为群时延参考(等效 `np.convolve(mode="same")`)。
 | `TxParams.iq.rail_ripple_db / rail_gd_ripple_ns` | dB / ns | 0.1–0.5 / 0.05–0.2 | 双轨频响失配(反对称分配) |
 | `TxParams.lo_leak_dbm` | dBm | −32…−22 | 调制器输出处 LO 泄漏绝对功率 |
 | `TxParams.lpf.rc_error` | — | ±0.2 | LPF corner 工艺偏差 |
-| `TxParams.lo.profile` | dBc/Hz | WiFi7 级(IPN≈−44dBc) | 相噪剖面(查表) |
+| `TxParams.lo.profile` | dBc/Hz | WiFi7 级(IPN −46.9 dBc,即 120 fs rms jitter @6 GHz) | 相噪剖面(查表) |
 | `psat_dbm / pa_gain_db / pae_max` | dBm/dB/— | 28 / 26 / 0.35 | PA |
-| `RxParams.dc_offset` | sqrt(mW) | 逐档 ~0.003–0.02 | 基带节点 DC(LO 自混频) |
-| `RxParams.lna_states` | — | 4 档 | 增益/NF/IIP3/切换门限 |
+| `RxParams.dc_offset` | sqrt(mW) | 逐档,先验幅度 0.02(高增益档)→0.002(末档) | 基带节点 DC(LO 自混频) |
+| `RxParams.lna_states` | — | **8 档**(增益 37→−5 dB、NF 3.5→34 dB、IIP3 −20→+12 dBm) | 增益/NF/IIP3/切换门限;门限按噪声-IM3 平衡解出,见 `chain/agc.py:rebalance_thresholds` |
 | `RxParams.adc.bits / fullscale_dbm / jitter_ps_rms` | — | 11 / 2 / 0 | ADC |
 
 每个损伤块都有 `enabled` 开关;`params.injected()` 返回注入真值(校准算法

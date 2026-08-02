@@ -163,6 +163,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.inspector, "Cal-state inspector")
         self.reference = ReferencePage()
         self.tabs.addTab(self.reference, "Reference")
+        self.inspector.loaded.connect(self.reference.set_run_results)
         self.setCentralWidget(self.tabs)
         self._rebuild_form()
 

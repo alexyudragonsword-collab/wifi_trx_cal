@@ -29,9 +29,13 @@ python examples/run_blocker_study.py
 python examples/run_mimo_2x2.py
 python examples/run_yield.py --runs 20
 
-# GUI 工作台 (pip install -e .[gui]):全量校准(含逐步检查模式)、
-# RX EVM/灵敏度扫描、漂移跟踪、阻塞退敏、杂散规划 + cal-state 检查器;
-# 校准类分析支持 11ax/be 与 11ac/n 两种制式、64~4096-QAM
+# GUI 工作台 (pip install -e .[gui]):三个页签 ——
+#   Analyses  全量校准(含逐步检查模式)、RX EVM/灵敏度扫描、漂移跟踪、
+#             阻塞退敏、杂散规划;校准类分析支持 11ax/be 与 11ac/n
+#             两种制式、64~4096-QAM
+#   Cal-state inspector  打开交付 JSON,读检查器结论
+#   Reference 信号链框图、校准顺序与依赖图(逐边物理理由)、AGC 档位表、
+#             损伤参数表;跑完校准后自动填入本次验收与捕获成本
 python app/main.py
 
 # CI: scripts/ci_fast.sh (快速门禁) / scripts/ci_nightly.sh (全量+示例)
@@ -46,7 +50,7 @@ python app/main.py
 | IQ 调制/解调 | **频率相关** IQ 失衡(I/Q 双实轨 FIR + 增益/相位 + 群时延失配)、TX LO 泄漏、RX DC(随 AGC 档变化) |
 | LO/PLL | 查表/Leeson 相噪剖面时域合成(默认按 PLL 抖动指标锚定:120 fs rms,IPN −46.9 dBc @10 kHz–100 MHz/6 GHz)、fractional-N 杂散、TX/RX 共用或独立 LO |
 | PA | Saleh/GMP 归一化模型的 dBm 封装(Psat=28 dBm、P1dB 导出、PAE 平方根律)|
-| RX 前端 | 分档 LNA(增益/NF/IIP3)、级联噪声一次性注入、无记忆非线性 |
+| RX 前端 | **8 档** LNA+混频器(增益 37→−5 dB、NF 3.5→34 dB、IIP3 −20→+12 dBm,门限按噪声-IM3 平衡解出)、级联噪声一次性注入、无记忆非线性 |
 | 环回 | 耦合衰减、延迟、RX-LO 频偏旋转、包络检波器(平方律)观测路 |
 
 ## 校准算法(`wifitrx.cal`,规范顺序见 `docs/cal_order_zh.md`)
@@ -67,9 +71,14 @@ python app/main.py
 
 ## 文档
 
+- **`docs/tutorial.html`** — 图文教程(中英双语可切换,单文件离线):建模原理、
+  逐项校准推导与运行结果、设计洞察;`docs/devguide.html` 为开发说明。
+  两者由 `python tools/build_docs.py` 构建,正文数字全部来自构建时实跑
 - `docs/interface_zh.md` — 面向通信算法工程师的接口文档(调用契约、单位、JSON schema、外部波形接入)
 - `docs/units.md` — 全链路单位约定
 - `docs/cal_order_zh.md` — 校准顺序依据
+- `docs/handoff_zh.md` — 交付/联合验证流程;`docs/circuit_data_zh.md` — 电路数据导入格式
+- `docs/backlog_zh.md` — 待办与已落地项的决策记录
 - `PROVENANCE.md` — 拷贝代码来源
 
 ## 模型给出的设计洞察

@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (QFileDialog, QHBoxLayout, QLabel,
                                QPushButton, QScrollArea, QTableWidget,
                                QTableWidgetItem, QVBoxLayout, QWidget)
@@ -123,6 +123,10 @@ def _step_rows(doc: dict) -> list[dict]:
 class InspectorPage(QWidget):
     """Pick a cal_state.json, then read the verdict on it."""
 
+    # step records of the file just opened, for whoever else can use
+    # them; one-way, so this page still consumes nothing from anyone
+    loaded = Signal(object)
+
     def __init__(self) -> None:
         super().__init__()
         outer = QVBoxLayout(self)
@@ -154,6 +158,9 @@ class InspectorPage(QWidget):
         try:
             doc = json.loads(Path(path).read_text(encoding="utf-8"))
             self._render(doc)
+            # the file's step records are also what the reference tab's
+            # acceptance and capture-cost columns are made of
+            self.loaded.emit(doc.get("results") or [])
         except Exception:
             # ANY failure renders as a finding: in a windowed exe there is
             # no console, so a swallowed traceback would just look like a

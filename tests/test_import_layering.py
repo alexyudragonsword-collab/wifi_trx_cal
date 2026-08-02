@@ -15,7 +15,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-SRC = Path(__file__).resolve().parent.parent / "src" / "wifitrx"
+ROOT = Path(__file__).resolve().parent.parent
+SRC = ROOT / "src" / "wifitrx"
 
 # unit/dsp are leaf utility modules; impairments sits on them; chains
 # compose impairments + PA; cal drives chains and reads metrics; handoff /
@@ -104,3 +105,74 @@ def test_allowed_table_is_acyclic():
             remaining.pop(leaf)
             for v in remaining.values():
                 v.discard(leaf)
+
+
+# ---------------------------------------------------------------- reach
+# Modules nobody imports are a different decay class from a bad edge:
+# they still parse, still look maintained, and their docstrings keep
+# making claims.  cal/loops.py sat here for the project's whole life
+# asserting "convergence time constants asserted x3 in tests" — true of
+# the sibling repo it was vendored from, false here.  A module that no
+# test, example or tool can reach is either dead or untested; both need
+# a decision, not silence.
+UNREACHED_OK = {
+    "wifitrx.plotting",         # figure helpers for notebook/ad-hoc use
+    "wifitrx.handoff.__main__",  # CLI entry: exercised as a subprocess
+}
+
+ENTRY_DIRS = ("tests", "examples", "tools", "app")
+
+
+def _module_name(p: Path) -> str:
+    rel = p.relative_to(SRC).with_suffix("")
+    # note the parens: the top-level __init__ must become "wifitrx", not
+    # "wifitrx.__init__"
+    return ("wifitrx." + ".".join(rel.parts)).replace(".__init__", "")
+
+
+def _wifitrx_imports(path: Path, pkg: str) -> set[str]:
+    out: set[str] = set()
+    for n in ast.walk(ast.parse(path.read_text())):
+        if isinstance(n, ast.ImportFrom):
+            base = n.module or ""
+            if n.level:                      # relative import
+                parts = pkg.split(".")
+                stem = ".".join(parts[:len(parts) - n.level + 1])
+                base = f"{stem}.{base}" if base else stem
+            if base.startswith("wifitrx"):
+                out.add(base)
+                out.update(f"{base}.{a.name}" for a in n.names)
+        elif isinstance(n, ast.Import):
+            out.update(a.name for a in n.names if a.name.startswith("wifitrx"))
+    return out
+
+
+def test_every_module_is_reachable_from_an_entry_point():
+    mods = {_module_name(p): p for p in SRC.rglob("*.py")
+            if "__pycache__" not in str(p)}
+    graph = {m: _wifitrx_imports(p, m if p.name == "__init__.py"
+                                 else m.rsplit(".", 1)[0])
+             for m, p in mods.items()}
+    queue = []
+    for d in ENTRY_DIRS:
+        for p in (ROOT / d).rglob("*.py"):
+            if "__pycache__" not in str(p):
+                queue.extend(_wifitrx_imports(p, "entry"))
+    assert len(queue) >= 20, "import scan looks broken"
+    seen: set[str] = set()
+    while queue:
+        m = queue.pop()
+        if m in seen:
+            continue
+        seen.add(m)
+        queue.extend(graph.get(m, ()))
+    # importing wifitrx.cal.sequence executes wifitrx/cal/__init__.py, so
+    # a package counts as reached once any of its submodules is
+    for m in list(seen):
+        parts = m.split(".")
+        seen.update(".".join(parts[:i]) for i in range(1, len(parts)))
+    unreached = {m for m in mods if m not in seen} - UNREACHED_OK
+    assert not unreached, (
+        f"no test, example or tool reaches {sorted(unreached)}: give each a "
+        f"caller, a test, or delete it — or excuse it in UNREACHED_OK with a "
+        f"reason")
