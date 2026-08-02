@@ -19,7 +19,10 @@ CHAPTER = Chapter(
                   "⑤ MIMO 解耦按平坦耦合矩阵处理(频变互耦留待后续);"
                   "⑥ PLL 内部校准(VCO band select、KVCO 等)不在范围——"
                   "对系统层可见的是相噪剖面 + 杂散 + 锁定时间,这三者已覆盖;"
-                  "⑦ 灵敏度的 SNR 需求列是预算近似,未经译码仿真复核。",
+                  "⑦ 灵敏度的 SNR 需求列是预算近似,未经译码仿真复核;"
+                  "⑧ 模拟基带的噪声与压缩默认合并在逐档 NF/IIP3 里,显式建模"
+                  "(`RxParams.baseband`)要先 de-embed 档位表,且其默认参数"
+                  "(6 nV/√Hz、1.0 Vpp)是为与现表自洽而推导的占位值,不是电路数据。",
                   "The honest boundary list — check before quoting: "
                   "① DAC/ADC images and replicas are not modeled (single "
                   "simulation rate; optional ZOH droop); ② no channel "

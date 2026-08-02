@@ -58,6 +58,13 @@ def measured_rx_evm_db(rx: RxChain, cfg: OFDMConfig, p_in_dbm: float,
     return evm(syms, wf.tx_symbols, equalize="per_tone").db
 
 
+def _state_nf_db(rx, idx: int, vga_db: float = 0.0) -> float:
+    """Input-referred NF of one gain state, baseband stage included."""
+    from .budget import effective_nf_db
+    return effective_nf_db(rx.params.lna_states[idx],
+                           getattr(rx.params, "baseband", None), vga_db)
+
+
 def sensitivity_study(rx: RxChain, cfg: OFDMConfig, mcs_indices,
                       impl_loss_db: float = 0.0, seed: int = 0,
                       probe_span_db: float = 4.0) -> list[dict]:
@@ -79,11 +86,13 @@ def sensitivity_study(rx: RxChain, cfg: OFDMConfig, mcs_indices,
     rows = []
     for idx in mcs_indices:
         m = mcs(idx)
-        # NF of the state the AGC would sit in near sensitivity
-        guess = sensitivity_dbm(rx.params.lna_states[0].nf_db,
-                                cfg.bandwidth_hz, m.snr_req_db, impl_loss_db)
+        # NF of the state the AGC would sit in near sensitivity — via
+        # the cascade, so an enabled baseband stage is included at the
+        # VGA setting the AGC actually lands on
+        guess = sensitivity_dbm(_state_nf_db(rx, 0), cfg.bandwidth_hz,
+                                m.snr_req_db, impl_loss_db)
         rx.agc(guess)
-        nf = rx.params.lna_states[rx.lna_idx].nf_db
+        nf = _state_nf_db(rx, rx.lna_idx, rx.vga_db)
         analytic = sensitivity_dbm(nf, cfg.bandwidth_hz, m.snr_req_db,
                                    impl_loss_db)
 

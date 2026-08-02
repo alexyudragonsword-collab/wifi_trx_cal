@@ -9,8 +9,12 @@ Signal flow (input in sqrt(mW) at the antenna/loopback port):
       -> RX LO phase noise  exp(-j phi_rx)
       -> frequency-dependent IQ imbalance
       -> DC offset (gain-state dependent, LO self-mixing)
+      -> baseband stage noise (input-referred, before the channel filter
+         shapes it — off by default, see impairments/baseband.py)
       -> tunable LPF
       -> VGA (AGC-computed gain to the ADC target level)
+      -> baseband stage compression (output-referred: the VGA output /
+         ADC driver is what clips, at a fixed output level)
       -> ADC (jitter/quantize/clip, sqrt(mW) -> full-scale digital)
       -> digital corrections: DC subtraction, widely-linear (w1, w2),
          fractional-delay trim
@@ -139,8 +143,15 @@ class RxChain:
         y = y + p.dc_for_state(self.lna_idx)
         if self.dc_ana:
             y = y - _snap_trim(self.dc_ana.get(self.lna_idx, 0.0 + 0.0j))
+        # the baseband stage's own noise enters ahead of the channel
+        # filter, so the LPF shapes it exactly as it does in hardware
+        if self.noise_enabled and p.baseband.enabled:
+            y = y + p.baseband.noise(y.size, self.fs, rng)
         y = p.lpf.apply(y, self.fs)
         y = y * db_to_amp(self.vga_db)
+        # …and its compression after the VGA, because the ceiling is an
+        # output level: raising the VGA drives the signal into it
+        y = p.baseband.nonlin().apply(y)
         if nodes is not None:
             nodes["adc_in_dbm"] = power_dbm(y)
 

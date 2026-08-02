@@ -13,6 +13,7 @@ import numpy as np
 
 from ..impairments.analog_filter import TunableLPF
 from ..impairments.clock import ClockError
+from ..impairments.baseband import BasebandStage
 from ..impairments.converters import ADCParams, DACParams
 from ..impairments.iq_imbalance import FreqDepIQImbalance
 from ..impairments.nonlinear import Im2Params, MemorylessNonlin
@@ -107,6 +108,10 @@ class RxParams:
     # dominant physical source (LO self-mixing) changes with front-end gain.
     dc_offset: tuple = ()
     lpf: TunableLPF = field(default_factory=lambda: TunableLPF(fc_nominal_hz=170e6))
+    # analog baseband (LPF + VGA + ADC driver) noise and compression,
+    # specified in V/sqrt(Hz) and Vpp; off by default, in which case the
+    # lna_states table keeps its meaning as the cascade total
+    baseband: BasebandStage = field(default_factory=BasebandStage)
     adc: ADCParams = field(default_factory=ADCParams)
     adc_backoff_db: float = 12.0          # AGC target below ADC full scale
     lo: LOModel = field(default_factory=LOModel)
@@ -159,6 +164,7 @@ class RxParams:
             "iq": self.iq.injected(),
             "dc_offset": self.dc_offset,
             "lpf": self.lpf.injected(),
+            "baseband": self.baseband.injected(),
             "lo": self.lo.injected(),
             "im2": self.im2.injected(),
             "clock": self.clock.injected(),

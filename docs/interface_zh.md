@@ -130,10 +130,19 @@ FIR 以中心抽头为群时延参考(等效 `np.convolve(mode="same")`)。
 | `psat_dbm / pa_gain_db / pae_max` | dBm/dB/— | 28 / 26 / 0.35 | PA |
 | `RxParams.dc_offset` | sqrt(mW) | 逐档,先验幅度 0.02(高增益档)→0.002(末档) | 基带节点 DC(LO 自混频) |
 | `RxParams.lna_states` | — | **8 档**(增益 37→−5 dB、NF 3.5→34 dB、IIP3 −20→+12 dBm) | 增益/NF/IIP3/切换门限;门限按噪声-IM3 平衡解出,见 `chain/agc.py:rebalance_thresholds` |
+| `RxParams.baseband.noise_v_sqrthz / out_swing_vpp` | V/√Hz / Vpp | 6e-9 / 1.0(**默认关**) | 模拟基带(LPF+VGA+ADC 驱动):按电压噪声密度与输出摆幅描述,不用 NF/IIP3 |
 | `RxParams.adc.bits / fullscale_dbm / jitter_ps_rms` | — | 11 / 2 / 0 | ADC |
 
 每个损伤块都有 `enabled` 开关;`params.injected()` 返回注入真值(校准算法
 的对照标准);`params.randomize(rng)` 生成随机工艺样本(Monte-Carlo)。
+
+**基带段的口径**:`lna_states` 的 NF/IIP3 是**级联总值**(含基带贡献),这也是
+`baseband.enabled=False` 时模型自洽的原因。要显式建模基带,先用
+`link.budget.deembed_states(states, baseband)` 把总值拆成 RF-only 档位,
+否则噪声重复计算;基带自身按电路口径给参数(电压噪声密度 + 输出摆幅),
+NF 只在级联计算里作为派生量出现(`link.budget.baseband_equivalent_stage`)。
+注意基带压缩是**输出参考**的:AGC 把 VGA 输出钉在固定电平,所以它的 EVM 代价
+与天线功率无关,只能靠加大 `adc_backoff_db` 缓解。
 
 RX DC 校正为两级:`dc_ana`(逐档模拟微调 DAC,基带节点减除,±0.064 √mW、
 2e-3 步进量化——高增益下保护 VGA/ADC 动态范围)+ `dc_post`(逐档数字细调,
@@ -165,3 +174,5 @@ RX DC 校正为两级:`dc_ana`(逐档模拟微调 DAC,基带节点减除,±0.064
 - 无信道编码/完整 11be 帧——全链路调制解调由你们的 PHY 负责。
 - PA 为无记忆 Saleh(可换 GMP/记忆多项式,`ScaledPA` 支持任意 `PAModel`)。
 - RX 镜像抑制混频器、谐波混频等未建模。
+- 模拟基带的噪声与压缩默认合并在逐档 NF/IIP3 里;需要显式区分时
+  打开 `RxParams.baseband`(见第 4 节的口径说明)。

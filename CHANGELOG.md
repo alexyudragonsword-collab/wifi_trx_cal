@@ -4,6 +4,23 @@
 或 `wifitrx.*` 公开签名的条目都在下面显式标注,交付方按此判断是否需要
 重新取包。日期为落地日期。
 
+## 0.3.0 — 2026-08-02
+
+### 模型
+
+- **模拟基带(LPF/VGA/ADC 驱动)可显式建模**(B5,默认关):
+  `RxParams.baseband` 按电路口径描述——输入参考噪声电压密度(V/√Hz)与
+  输出摆幅(Vpp),而不是 NF/IIP3。噪声注入在 LPF 之前、压缩施加在 VGA 之后
+  (输出参考天花板)。开启前须用 `link.budget.deembed_states` 把官方档位表
+  (级联总值)拆成 RF-only 值,否则噪声重复计算。
+- 新增 `link.budget` 的 `baseband_equivalent_stage / effective_nf_db /
+  effective_iip3_dbm / deembed_states`,以及 `link/baseband_study.py`
+  (VGA 摆动与 ADC backoff 两个扫描)。
+- `units` 增加 `R_REF_OHM` 与电压↔dBm 换算(此前参考阻抗是隐含的)。
+- **结论**:`adc_backoff_db` 从自由参数变成有价参数——1.0 Vpp 输出摆幅下
+  最优 backoff 从 ~10 dB 推到 ≥18 dB,当前 12 dB 要多付约 2.6 dB EVM。
+  详见 `docs/backlog_zh.md` B5 的实测记录。
+
 ## 0.2.0 — 2026-08-02
 
 ### 交付格式(需要接收方留意)

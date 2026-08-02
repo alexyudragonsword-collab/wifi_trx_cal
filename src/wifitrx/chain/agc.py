@@ -48,7 +48,9 @@ CAL_OBSERVATION_STATE = 4
 
 
 def rebalance_thresholds(states: tuple[LNAState, ...],
-                         bandwidth_hz: float = 320e6) -> tuple[LNAState, ...]:
+                         bandwidth_hz: float = 320e6,
+                         effective: dict | None = None
+                         ) -> tuple[LNAState, ...]:
     """Re-solve every hand-over threshold at its noise-vs-IM3 balance
     point, t_i = (2*IIP3_i + NF_{i+1} + (-174 + 10log10(BW))) / 3 —
     staying in state i costs 2 dB/dB of IM3 while entering state i+1
@@ -56,15 +58,23 @@ def rebalance_thresholds(states: tuple[LNAState, ...],
     two.  The last state's ceiling is kept.  Anchored at 320 MHz by the
     same convention as the official table; use this after any NF/IIP3
     what-if transform (e.g. the GUI's RX high-performance knob) so the
-    thresholds track the modified ladder."""
+    thresholds track the modified ladder.
+
+    ``effective`` optionally supplies ``{"nf_db": [...], "iip3_dbm":
+    [...]}`` per state — the cascade values including an enabled
+    baseband stage, computed by ``link.budget`` (this package may not
+    import ``link``).  Without it the state's own numbers are used, as
+    before."""
     from math import log10
     const = -174.0 + 10.0 * log10(bandwidth_hz)
+    nfs = (effective or {}).get("nf_db") or [s.nf_db for s in states]
+    ip3s = (effective or {}).get("iip3_dbm") or [s.iip3_dbm for s in states]
     out = []
     for i, s in enumerate(states):
         if i == len(states) - 1:
             out.append(s)
             continue
-        t = (2.0 * s.iip3_dbm + states[i + 1].nf_db + const) / 3.0
+        t = (2.0 * ip3s[i] + nfs[i + 1] + const) / 3.0
         out.append(LNAState(gain_db=s.gain_db, nf_db=s.nf_db,
                             iip3_dbm=s.iip3_dbm,
                             max_input_dbm=round(t, 1)))

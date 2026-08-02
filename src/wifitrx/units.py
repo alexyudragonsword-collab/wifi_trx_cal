@@ -15,6 +15,44 @@ import numpy as np
 
 KT_DBM_HZ = -173.975  # thermal noise density at 290 K [dBm/Hz]
 
+# The sqrt(mW) convention implies one reference impedance for the whole
+# chain; name it rather than leaving it implicit, because the analog
+# baseband is specified in volts (noise density in V/sqrt(Hz), swing in
+# Vpp) and those numbers only convert to dBm against a stated impedance.
+R_REF_OHM = 50.0
+
+
+def v_sqrthz_to_dbm_hz(e_n, r_ohm: float = R_REF_OHM) -> np.ndarray | float:
+    """Voltage noise density [V/sqrt(Hz)] -> power density [dBm/Hz].
+
+    P = e_n^2 / R  [W/Hz], times 1000 for mW.  Check value: 10 nV/sqrt(Hz)
+    at 50 ohm is -147.0 dBm/Hz (27 dB above kT, as a 50-ohm-referred
+    baseband block should be).
+    """
+    e_n = np.asarray(e_n, dtype=float)
+    return mw_to_dbm(1000.0 * e_n ** 2 / r_ohm)
+
+
+def dbm_hz_to_v_sqrthz(p_dbm_hz, r_ohm: float = R_REF_OHM) -> np.ndarray | float:
+    """Inverse of :func:`v_sqrthz_to_dbm_hz`."""
+    return np.sqrt(dbm_to_mw(p_dbm_hz) / 1000.0 * r_ohm)
+
+
+def vpp_to_dbm(v_pp, r_ohm: float = R_REF_OHM) -> np.ndarray | float:
+    """Sine-wave peak-to-peak swing [V] -> mean power [dBm].
+
+    An output swing is how a baseband amplifier's compression point is
+    quoted.  Check value: 1.0 Vpp at 50 ohm is +3.98 dBm.
+    """
+    v_rms = np.asarray(v_pp, dtype=float) / (2.0 * np.sqrt(2.0))
+    return mw_to_dbm(1000.0 * v_rms ** 2 / r_ohm)
+
+
+def dbm_to_vpp(p_dbm, r_ohm: float = R_REF_OHM) -> np.ndarray | float:
+    """Inverse of :func:`vpp_to_dbm`."""
+    v_rms = np.sqrt(dbm_to_mw(p_dbm) / 1000.0 * r_ohm)
+    return 2.0 * np.sqrt(2.0) * v_rms
+
 
 def dbm_to_mw(p_dbm) -> np.ndarray | float:
     return 10.0 ** (np.asarray(p_dbm, dtype=float) / 10.0)

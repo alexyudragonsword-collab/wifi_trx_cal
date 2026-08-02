@@ -12,11 +12,12 @@ from specs import ALL_ANALYSES  # noqa: E402
 
 FAST_PARAMS = {
     "full_cal": {"bw_mhz": 80, "qam": 256, "seed": 5, "with_dpd": False,
-                 "std": "11ax/be", "rx_hp": False},
+                 "std": "11ax/be", "rx_hp": False, "baseband": False},
     "full_cal_steps": {"bw_mhz": 80, "qam": 256, "seed": 5,
-                       "with_dpd": False, "std": "11ax/be", "rx_hp": False},
+                       "with_dpd": False, "std": "11ax/be",
+                       "rx_hp": False, "baseband": False},
     "rx_evm_sweep": {"bw_mhz": 80, "qam": 256, "seed": 5,
-                     "std": "11ax/be", "rx_hp": False},
+                     "std": "11ax/be", "rx_hp": False, "baseband": False},
     "drift_tracking": {"bw_mhz": 80, "n_states": 3},
     "blocker_desense": {"bw_mhz": 160, "offset_mhz": 200.0,
                         "p_sig_dbm": -60.0},

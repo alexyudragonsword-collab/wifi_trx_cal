@@ -217,6 +217,30 @@ def _cal_setup(p: dict):
         rx.params.lna_states = rebalance_thresholds(tuple(
             _replace(s, nf_db=s.nf_db - 1.0, iip3_dbm=s.iip3_dbm + 2.0)
             for s in rx.params.lna_states))
+    if p.get("baseband", False):
+        # explicit analog baseband: an input-referred noise voltage and
+        # an output swing, replacing the share of both that the ladder
+        # carries today — the states are de-embedded so the cascade
+        # total is unchanged and only the new physics (an output-referred
+        # ceiling) shows up
+        from wifitrx.chain.agc import rebalance_thresholds, vga_gain_db
+        from wifitrx.impairments.baseband import BasebandStage
+        from wifitrx.link.budget import (deembed_states, effective_iip3_dbm,
+                                         effective_nf_db)
+        bb = BasebandStage(enabled=True)
+        rx.params.baseband = bb
+        states = deembed_states(rx.params.lna_states, bb)
+        # the ceiling is output-referred, so each state's effective IIP3
+        # has to be read at the VGA the AGC actually lands on there —
+        # evaluated at the state's own hand-over edge, its worst case
+        target = rx.params.adc.fullscale_dbm - rx.params.adc_backoff_db
+        rx.params.lna_states = rebalance_thresholds(
+            states, bandwidth_hz=bw, effective={
+                "nf_db": [effective_nf_db(s, bb) for s in states],
+                "iip3_dbm": [
+                    effective_iip3_dbm(s, bb, vga_gain_db(s.max_input_dbm,
+                                                          s.gain_db, target))
+                    for s in states]})
     from wifitrx.chain.loopback import recommended_loopback_atten_db
     return cfg, tx, rx, LoopbackPath(
         atten_db=recommended_loopback_atten_db(bw), delay_ns=6.0)
@@ -612,6 +636,11 @@ ALL_ANALYSES: tuple[AnalysisSpec, ...] = (
             ParamSpec("rx_hp", "RX high-performance", "bool", False,
                       tooltip="Every LNA gain state: NF -1 dB, IIP3 +2 dB "
                               "(hand-over thresholds unchanged)"),
+            ParamSpec("baseband", "Explicit baseband stage", "bool", False,
+                      tooltip="Model the LPF/VGA/ADC-driver separately "
+                              "(6 nV/sqrt(Hz) input-referred noise, 1.0 Vpp "
+                              "output swing); the ladder is de-embedded so "
+                              "the cascade total is unchanged"),
             ParamSpec("seed", "Process seed", "int", 5, minimum=0),
             ParamSpec("with_dpd", "Run DPD", "bool", False),
         ),
@@ -633,6 +662,11 @@ ALL_ANALYSES: tuple[AnalysisSpec, ...] = (
             ParamSpec("rx_hp", "RX high-performance", "bool", False,
                       tooltip="Every LNA gain state: NF -1 dB, IIP3 +2 dB "
                               "(hand-over thresholds unchanged)"),
+            ParamSpec("baseband", "Explicit baseband stage", "bool", False,
+                      tooltip="Model the LPF/VGA/ADC-driver separately "
+                              "(6 nV/sqrt(Hz) input-referred noise, 1.0 Vpp "
+                              "output swing); the ladder is de-embedded so "
+                              "the cascade total is unchanged"),
             ParamSpec("seed", "Process seed", "int", 5, minimum=0),
             ParamSpec("with_dpd", "Run DPD", "bool", False),
         ),
@@ -654,6 +688,11 @@ ALL_ANALYSES: tuple[AnalysisSpec, ...] = (
             ParamSpec("rx_hp", "RX high-performance", "bool", False,
                       tooltip="Every LNA gain state: NF -1 dB, IIP3 +2 dB "
                               "(hand-over thresholds unchanged)"),
+            ParamSpec("baseband", "Explicit baseband stage", "bool", False,
+                      tooltip="Model the LPF/VGA/ADC-driver separately "
+                              "(6 nV/sqrt(Hz) input-referred noise, 1.0 Vpp "
+                              "output swing); the ladder is de-embedded so "
+                              "the cascade total is unchanged"),
             ParamSpec("seed", "Process seed", "int", 5, minimum=0),
         ),
         run=run_rx_evm_sweep),
