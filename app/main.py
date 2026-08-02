@@ -33,6 +33,7 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from PySide6.QtGui import QIcon
 
 from inspector_page import InspectorPage
+from reference_page import ReferencePage
 from specs import ALL_ANALYSES, AnalysisResult, AnalysisSpec, ParamSpec
 
 
@@ -153,11 +154,15 @@ class MainWindow(QMainWindow):
 
         # two audiences, one window: a developer runs analyses, a cal-state
         # recipient opens a JSON and reads the verdict — neither should
-        # scroll past the other's page
+        # scroll past the other's page.  Both need the same reference
+        # material (what runs before what, and why), which used to live
+        # only in the built tutorial.
         self.tabs = QTabWidget()
         self.tabs.addTab(split, "Analyses")
         self.inspector = InspectorPage()
         self.tabs.addTab(self.inspector, "Cal-state inspector")
+        self.reference = ReferencePage()
+        self.tabs.addTab(self.reference, "Reference")
         self.setCentralWidget(self.tabs)
         self._rebuild_form()
 
@@ -196,6 +201,10 @@ class MainWindow(QMainWindow):
         self.status.setText("done")
         self._cal_state = result.cal_state
         self.save_btn.setEnabled(result.cal_state is not None)
+        if result.cal_state:
+            # the reference tab's acceptance-spec and capture-cost columns
+            # are this session's measurements, not stored constants
+            self.reference.set_run_results(result.cal_state.get("results"))
         self.table.setRowCount(0)
         for k, v in result.metrics.items():
             row = self.table.rowCount()
@@ -263,12 +272,22 @@ def main() -> None:
     # frozen-build diagnostics: a windowed exe has no console, so these
     # env hooks let a build be exercised without interaction —
     #   WIFITRX_INSPECT=<json>  auto-load into the inspector tab
+    #   WIFITRX_TAB=reference   open a named tab (the reference diagrams
+    #                           are the only feature that needs the Qt SVG
+    #                           plugin, so a screenshot of that tab is what
+    #                           proves the plugin got bundled)
     #   WIFITRX_SHOT=<png>      screenshot the window ~2 s later and exit
     import os
     inspect_file = os.environ.get("WIFITRX_INSPECT")
     if inspect_file:
         win.tabs.setCurrentWidget(win.inspector)
         win.inspector.load(Path(inspect_file))
+    tab = os.environ.get("WIFITRX_TAB", "").lower()
+    if tab:
+        for i in range(win.tabs.count()):
+            if win.tabs.tabText(i).lower().startswith(tab):
+                win.tabs.setCurrentIndex(i)
+                break
     shot = os.environ.get("WIFITRX_SHOT")
     if shot:
         from PySide6.QtCore import QTimer

@@ -109,7 +109,12 @@ CHAPTER = Chapter(
                   "不减掉会在低功率端把 IM3 误读成卡在底板上)、"
                   "漂移跟踪、阻塞退敏、杂散规划。"
                   "<b>Cal-state inspector</b>:打开 JSON,渲染检查器结论/"
-                  "逐步表/溯源——页面自身不做任何判断,measured by test。",
+                  "逐步表/溯源——页面自身不做任何判断,measured by test。"
+                  "<b>Reference</b>:本教程的信号链框图(随包交付的 SVG)、"
+                  "校准顺序表、依赖图与逐边理由表、AGC 档位表与损伤参数表——"
+                  "全部由 <code>wifitrx.cal.reference</code> 与参数类现算,"
+                  "与本文档同源;跑完一次校准后,顺序表的验收列与捕获成本表"
+                  "自动填入本次实测值。",
                   "<code>python app/main.py</code>, two tabs. "
                   "<b>Analyses</b>: six analyses (forms generated from "
                   "declarative specs) — full calibration (result page = "
@@ -138,6 +143,14 @@ CHAPTER = Chapter(
                   "<b>Cal-state inspector</b>: open a JSON and read the "
                   "inspector's findings / step table / provenance — the "
                   "page itself decides nothing, and a test enforces "
-                  "that)."),
+                  "that. <b>Reference</b>: this tutorial's signal-chain "
+                  "diagrams (shipped as SVG assets), the calibration "
+                  "order, the dependency graph with its per-edge reason "
+                  "table, the AGC ladder and the impairment parameters — "
+                  "all derived live from <code>wifitrx.cal.reference</code> "
+                  "and the parameter classes, the same sources this "
+                  "document uses; after a calibration run the order "
+                  "table's acceptance column and the capture-cost table "
+                  "fill in with that run's own measurements)."),
             )),
     ))

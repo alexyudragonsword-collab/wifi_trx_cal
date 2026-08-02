@@ -1,6 +1,10 @@
 # Windows executables of the GUI workbench, built two ways on purpose:
 # PyInstaller (fast build, battle-tested hooks) and Nuitka (compiled,
 # faster startup) — ship whichever proves more reliable on real machines.
+# Both bundle assets/schematics (the Reference tab's block diagrams —
+# they are pre-rendered because schemdraw is a build-time-only extra)
+# and need the Qt SVG plugin, which no earlier build exercised: check
+# the Reference tab renders on the first exe built after this change.
 # Heavy (Nuitka compiles PySide6+scipy, ~30+ min), so it runs on version
 # tags and manual dispatch only, never on every push.
 name: windows-build
@@ -25,6 +29,8 @@ jobs:
           --name wifitrx-workbench
           --icon assets/icon.ico
           --add-data "assets/icon.png;assets"
+          --add-data "assets/schematics;assets/schematics"
+          --hidden-import PySide6.QtSvgWidgets
           --paths src --paths app
           --collect-submodules wifitrx
           app/main.py
@@ -34,6 +40,20 @@ jobs:
           $exe = "dist/wifitrx-workbench.exe"
           if (!(Test-Path $exe)) { throw "missing $exe" }
           if ((Get-Item $exe).Length -lt 20MB) { throw "suspiciously small" }
+      - name: smoke check (the Reference tab paints — Qt SVG plugin)
+        shell: pwsh
+        run: |
+          $env:WIFITRX_TAB = "reference"
+          $env:WIFITRX_SHOT = "reference.png"
+          & "dist/wifitrx-workbench.exe" | Out-Null
+          if (!(Test-Path "reference.png")) { throw "no screenshot" }
+          if ((Get-Item "reference.png").Length -lt 20KB) {
+            throw "reference tab looks blank — Qt SVG plugin missing?"
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wifitrx-reference-screenshot-pyinstaller
+          path: reference.png
       - uses: actions/upload-artifact@v4
         with:
           name: wifitrx-workbench-pyinstaller
@@ -54,6 +74,7 @@ jobs:
           --enable-plugin=pyside6
           --windows-icon-from-ico=assets/icon.ico
           --include-data-files=assets/icon.png=assets/icon.png
+          --include-data-dir=assets/schematics=assets/schematics
           --include-package=wifitrx
           --output-filename=wifitrx-workbench-nuitka.exe
           --output-dir=build-nuitka
@@ -64,6 +85,17 @@ jobs:
           $exe = "build-nuitka/wifitrx-workbench-nuitka.exe"
           if (!(Test-Path $exe)) { throw "missing $exe" }
           if ((Get-Item $exe).Length -lt 20MB) { throw "suspiciously small" }
+          $env:WIFITRX_TAB = "reference"
+          $env:WIFITRX_SHOT = "reference-nuitka.png"
+          & $exe | Out-Null
+          if (!(Test-Path "reference-nuitka.png")) { throw "no screenshot" }
+          if ((Get-Item "reference-nuitka.png").Length -lt 20KB) {
+            throw "reference tab looks blank — Qt SVG plugin missing?"
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wifitrx-reference-screenshot-nuitka
+          path: reference-nuitka.png
       - uses: actions/upload-artifact@v4
         with:
           name: wifitrx-workbench-nuitka

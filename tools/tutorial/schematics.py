@@ -6,6 +6,8 @@ plug into Diagram.build like every other builder.
 """
 from __future__ import annotations
 
+import re
+
 import schemdraw
 from schemdraw import dsp, elements as elm
 
@@ -19,7 +21,29 @@ FILL = "white"
 def _svg(d: schemdraw.Drawing) -> str:
     svg = d.get_imagedata("svg").decode()
     svg = svg[svg.index("<svg"):]
+    svg = _deterministic(svg)
     return svg.replace("<svg ", '<svg style="max-width:100%;height:auto" ', 1)
+
+
+_METADATA = re.compile(r"<metadata>.*?</metadata>", re.S)
+_CLIP_ID = re.compile(r"\bp[0-9a-f]{10}\b")
+
+
+def _deterministic(svg: str) -> str:
+    """Strip what matplotlib randomizes per run.
+
+    The SVG backend stamps a <dc:date> and gives every clip path a
+    random id, so two builds of the same diagram differ — the committed
+    HTML then churns on every rebuild and a real change is impossible to
+    spot in the diff.  Renumber the ids in order of appearance instead.
+    """
+    svg = _METADATA.sub("", svg)
+    seen: dict[str, str] = {}
+    for name in _CLIP_ID.findall(svg):
+        seen.setdefault(name, f"clip{len(seen)}")
+    for old, new in seen.items():
+        svg = svg.replace(old, new)
+    return svg
 
 
 def _gain_arrow(d, amp, dx=0.55, dy=0.7):

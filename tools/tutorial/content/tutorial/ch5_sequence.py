@@ -20,43 +20,26 @@ def _budget_values(ctx):
 def _order_rows(ctx):
     """The canonical sequence as a table: execution index, step, the
     prerequisites deps.py declares for it, and the acceptance spec the
-    step itself reports.  Every cell is derived — nothing hand-typed."""
-    from wifitrx.cal.deps import STEP_REQUIRES, planned_steps
-    from wifitrx.cal.sequence import PROFILES
+    step itself reports.  Every cell is derived — nothing hand-typed.
+
+    The derivation lives in the library (``wifitrx.cal.reference``) so
+    the GUI's Reference tab shows the same rows."""
+    from wifitrx.cal.reference import calibration_order
 
     specs = {r.name: r.spec for r in ctx.full_cal["results"]}
-    rows = []
-    for i, name in enumerate(planned_steps(PROFILES["factory"],
-                                           with_iip2=True, with_dpd=True), 1):
-        reqs = ", ".join(STEP_REQUIRES.get(name, {})) or "—"
-        sp = specs.get(name) or {}
-        # sense semantics per cal/base.py: min -> >=, max -> <=,
-        # abs_max -> |metric| <=
-        fmt = {"min": "{m} ≥ {l:g}", "max": "{m} ≤ {l:g}",
-               "abs_max": "|{m}| ≤ {l:g}"}.get(sp.get("sense"))
-        acc = "—" if not fmt else fmt.format(m=sp["metric"], l=sp["limit"])
-        rows.append([str(i), name, reqs, acc])
-    return rows
+    return [[str(r["n"]), r["step"], r["requires"], r["spec"]]
+            for r in calibration_order(specs_by_name=specs)]
 
 
 def _dep_reason_rows(ctx):
-    """Every ordering edge with the physical reason deps.py carries.
+    """Every ordering edge with the physical reason deps.py carries;
+    the leading number is the badge on the corresponding line in the
+    dependency figure (both come from the same walk in
+    ``wifitrx.cal.reference``)."""
+    from wifitrx.cal.reference import dependency_edges
 
-    The row order (and hence the leading number) must match the badge
-    numbering in figures.depgraph_svg — both walk ``order`` and then
-    each step's STEP_REQUIRES in declaration order.
-    """
-    from wifitrx.cal.deps import STEP_REQUIRES, planned_steps
-    from wifitrx.cal.sequence import PROFILES
-
-    order = planned_steps(PROFILES["factory"], with_iip2=True, with_dpd=True)
-    rank = {n: i for i, n in enumerate(order)}
-    rows = []
-    for name in order:
-        for req, reason in STEP_REQUIRES.get(name, {}).items():
-            if req in rank:
-                rows.append([str(len(rows) + 1), f"{req} → {name}", reason])
-    return rows
+    return [[str(r["n"]), r["edge"], r["reason"]]
+            for r in dependency_edges()]
 
 
 def _step_cost_rows(ctx):
