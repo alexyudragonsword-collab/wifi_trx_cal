@@ -153,6 +153,36 @@ def test_more_adc_backoff_relieves_the_ceiling():
     assert evm[0] > evm[1] > evm[2]       # more backoff, better EVM
 
 
+def test_the_global_nonlinearity_switch_also_removes_the_ceiling():
+    """``nonlin_enabled`` gates the per-state IM3, and the baseband
+    ceiling has to follow it.
+
+    Otherwise a contribution split that turns "the nonlinearity" off
+    leaves the ceiling behind and books it as residual — which is
+    exactly how it was first measured, with the ceiling showing up in a
+    curve labelled PN + ISI + IQ + ADC.
+    """
+    from dataclasses import replace as _replace
+
+    rng = np.random.default_rng(11)
+    x = 0.01 * (rng.standard_normal(4096)      # -40 dBm mean, so the
+                + 1j * rng.standard_normal(4096))   # peaks reach the ceiling
+
+    def out(nonlin: bool, swing: float) -> np.ndarray:
+        rx = _rx(BasebandStage(enabled=True), seed=7)
+        rx.noise_enabled = False           # keep the test about distortion
+        rx.params.nonlin_enabled = nonlin
+        rx.params.baseband = _replace(rx.params.baseband,
+                                      out_swing_vpp=swing)
+        rx.agc(-40.0)
+        return rx(x, rng=np.random.default_rng(1))
+
+    # switch off: indistinguishable from a chain whose ceiling is out of reach
+    assert np.array_equal(out(False, 1.0), out(False, 1e6))
+    # switch on: the ceiling still bites, so the test above is not vacuous
+    assert not np.array_equal(out(True, 1.0), out(True, 1e6))
+
+
 # -------------------------------------------------------------- default off
 def test_disabled_by_default_and_bit_identical():
     """Every delivered number was measured with the lumped ladder; the

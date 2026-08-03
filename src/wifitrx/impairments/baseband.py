@@ -90,9 +90,19 @@ class BasebandStage:
             return np.zeros(n, dtype=complex)
         return noise_at_density(n, fs, self.psd_dbm_hz(), rng)
 
-    def nonlin(self) -> MemorylessNonlin:
-        """Output-referred compression, applied after the VGA."""
-        return MemorylessNonlin(iip3_dbm=self.oip3_dbm(), enabled=self.enabled)
+    def nonlin(self, enabled: bool = True) -> MemorylessNonlin:
+        """Output-referred compression, applied after the VGA.
+
+        ``enabled`` is the chain's global nonlinearity switch
+        (``RxParams.nonlin_enabled``): a study that turns off "the RX
+        nonlinearity" has to lose this ceiling along with the per-state
+        IM3, or a contribution split reads the ceiling as part of the
+        residual.  Note the primitive's field is named ``iip3_dbm`` but
+        the number handed to it is the *output* IP3 — it is applied at
+        the node the ceiling lives on, where input and output coincide.
+        """
+        return MemorylessNonlin(iip3_dbm=self.oip3_dbm(),
+                                enabled=self.enabled and enabled)
 
     def injected(self) -> dict:
         return {"noise_v_sqrthz": self.noise_v_sqrthz,

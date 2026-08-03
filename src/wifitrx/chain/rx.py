@@ -150,8 +150,10 @@ class RxChain:
         y = p.lpf.apply(y, self.fs)
         y = y * db_to_amp(self.vga_db)
         # …and its compression after the VGA, because the ceiling is an
-        # output level: raising the VGA drives the signal into it
-        y = p.baseband.nonlin().apply(y)
+        # output level: raising the VGA drives the signal into it.  It
+        # follows the same global nonlinearity switch as the per-state
+        # IM3 so that "nonlinearity off" means all of it.
+        y = p.baseband.nonlin(p.nonlin_enabled).apply(y)
         if nodes is not None:
             nodes["adc_in_dbm"] = power_dbm(y)
 

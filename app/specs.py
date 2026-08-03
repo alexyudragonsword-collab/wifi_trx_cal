@@ -415,22 +415,50 @@ def run_rx_evm_sweep(p: dict) -> AnalysisResult:
     results = _run(tx, rx, cfg, path, with_dpd=False)
     evm_cal = [measured_rx_evm_db(rx, cfg, float(pi)) for pi in p_in]
 
-    # contribution split on the calibrated chain: toggle each stochastic
-    # source off (read-only runtime switches, corrections untouched)
-    def _split(noise, nonlin):
-        rx.noise_enabled = noise
-        rx.params.nonlin_enabled = nonlin
+    # Contribution split by ISOLATION: each curve is the chain with only
+    # the named sources active, read directly.  The alternative — running
+    # the full chain, removing one source and subtracting in the power
+    # domain — charges that source with the cross term
+    # 2*Re<e_source, e_rest>, which is not small for the deterministic
+    # sources (IM3, the baseband ceiling, LPF ISI all derive from the
+    # same signal).  Measured on the baseband ceiling: the cross term is
+    # 48% of the extracted contribution at 1.0 Vpp, and it flattens the
+    # term's OIP3 slope from the analytic -2.0 to -1.5 dB/dB.
+    #
+    # IQ, DC and the LPF stay on in every curve: their corrections are
+    # subtractive, so removing the injection while keeping the correction
+    # would inject an equal and opposite error.  What is left with
+    # everything switchable off is the isolation floor.
+    def _only(*, noise=False, nonlin=False, pn=False, adc=False):
+        pr = rx.params
+        saved = (rx.noise_enabled, pr.nonlin_enabled, pr.lo.enabled,
+                 pr.adc.enabled)
+        rx.noise_enabled, pr.nonlin_enabled = noise, nonlin
+        pr.lo.enabled, pr.adc.enabled = pn, adc
         out = [measured_rx_evm_db(rx, cfg, float(pi)) for pi in p_in]
-        rx.noise_enabled = True
-        rx.params.nonlin_enabled = True
+        (rx.noise_enabled, pr.nonlin_enabled, pr.lo.enabled,
+         pr.adc.enabled) = saved
         return out
 
-    # NOTE these toggles only remove thermal noise / nonlinearity — the
-    # residual (RX LO phase noise, LPF-corner ISI, IQ/ADC leftovers)
-    # stays in every curve, so each split reads contribution ⊕ residual
-    evm_noise = _split(True, False)    # IM3 off  -> thermal ⊕ residual
-    evm_im3 = _split(False, True)      # noise off -> IM3 ⊕ residual
-    evm_det = _split(False, False)     # residual alone
+    evm_thermal = _only(noise=True)                # thermal only
+    evm_nonlin = _only(nonlin=True)                # IM3 (+ BB ceiling) only
+    evm_det = _only(pn=True, adc=True)             # PN + ADC + floor
+    evm_floor = _only()                            # IQ/DC residue + LPF ISI
+
+    # with the explicit baseband on, "nonlinearity" is two mechanisms —
+    # separate them by making each one unreachable in turn
+    evm_im3_rf = evm_ceiling = None
+    if p.get("baseband", False):
+        from dataclasses import replace as _replace
+        saved_states, saved_bb = rx.params.lna_states, rx.params.baseband
+        rx.params.baseband = _replace(saved_bb, out_swing_vpp=1e6)
+        evm_im3_rf = _only(nonlin=True)            # RF per-state IM3 alone
+        rx.params.baseband = saved_bb
+        rx.params.lna_states = tuple(_replace(s, iip3_dbm=200.0)
+                                     for s in saved_states)
+        evm_ceiling = _only(nonlin=True)           # baseband ceiling alone
+        rx.params.lna_states = saved_states
+
     mcs_rows = sensitivity_study(rx, cfg, (7, 9, 11, 13))
 
     # the split curves only mean something where the receiver locks;
@@ -442,30 +470,25 @@ def run_rx_evm_sweep(p: dict) -> AnalysisResult:
     def _mask(v):
         return np.where(ok, np.asarray(v), np.nan)
 
-    # isolate a single source by power-domain subtraction of the
-    # residual; once the raw curve is within ~0.5 dB of the residual the
-    # difference is below the measurement resolution — the source is
-    # simply "below residual" there and the point is blanked
-    def _pure(v):
-        lin = (10.0 ** (np.asarray(v) / 10.0)
-               - 10.0 ** (np.asarray(evm_det) / 10.0))
-        resolved = (np.asarray(v) - np.asarray(evm_det)) > 0.5
-        return np.where(resolved & ok,
-                        10.0 * np.log10(np.maximum(lin, 1e-30)), np.nan)
-
     fig = new_figure(figsize=(9.5, 6))
     ax = fig.add_subplot(1, 1, 1)
     ax.plot(p_in, evm_uncal, "o--", color="lightgray", ms=4,
             label="uncalibrated")
     ax.plot(p_in, evm_cal, "o-", color="tab:red", label="calibrated (all)")
-    ax.plot(p_in, _pure(evm_noise), "s-", color="tab:blue", ms=3,
-            label="thermal alone (subtracted)")
-    ax.plot(p_in, _mask(evm_im3), "^-", color="tab:green", ms=3,
-            label="thermal off (IM3 + residual)")
+    ax.plot(p_in, _mask(evm_thermal), "s-", color="tab:blue", ms=3,
+            label="thermal only")
+    if evm_ceiling is None:
+        ax.plot(p_in, _mask(evm_nonlin), "v-", color="darkgreen", ms=3,
+                label="nonlinearity only (per-state IM3)")
+    else:
+        ax.plot(p_in, _mask(evm_im3_rf), "v-", color="darkgreen", ms=3,
+                label="RF IM3 only (per-state IIP3)")
+        ax.plot(p_in, _mask(evm_ceiling), "P-", color="saddlebrown", ms=4,
+                label="baseband ceiling only (output swing)")
     ax.plot(p_in, _mask(evm_det), "--", color="gray", lw=1,
-            label="residual (PN + ISI + IQ + ADC)")
-    ax.plot(p_in, _pure(evm_im3), "v:", color="darkgreen", ms=4, lw=1,
-            label="IM3 alone (subtracted; blank = below residual)")
+            label="PN + ADC + IQ/DC residue + ISI")
+    ax.plot(p_in, _mask(evm_floor), ":", color="darkgray", lw=1,
+            label="isolation floor (IQ/DC residue + ISI)")
     for row in mcs_rows:
         ax.axhline(-row["snr_req_db"], ls="--", lw=0.7, color="gray")
         ax.axvline(row["measured_dbm"], ls=":", lw=0.7, color="tab:green")
@@ -481,15 +504,21 @@ def run_rx_evm_sweep(p: dict) -> AnalysisResult:
                         color="tab:purple")
     ax.set_xlabel("RF input power [dBm]")
     ax.set_ylabel("EVM [dB]")
-    ax.set_title("RX EVM vs input power (dashed: MCS SNR requirement, "
-                 "dotted: measured sensitivity, dash-dot: AGC hand-over)",
-                 fontsize=10)
+    ax.set_title("RX EVM vs input power — contributions by isolation "
+                 "(not power-additive)\ndashed: MCS SNR requirement · "
+                 "dotted: measured sensitivity · dash-dot: AGC hand-over",
+                 fontsize=9)
     ax.set_ylim(-60, 5)
-    ax.legend(fontsize=9)
+    ax.legend(fontsize=8)
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
 
-    text = "sensitivity, measured vs analytic (Friis):\n" + "\n".join(
+    text = ("contribution curves are isolations — the chain with only "
+            "that source active, read directly. They do NOT add up to "
+            "the total: the deterministic sources (IM3, baseband "
+            "ceiling, ISI) correlate, and every isolated curve also "
+            "carries the isolation floor.\n\n"
+            "sensitivity, measured vs analytic (Friis):\n") + "\n".join(
         f"  MCS{r['mcs']:2d} {r['modulation']:>9s}: "
         f"{r['measured_dbm']:7.1f} dBm  (analytic {r['analytic_dbm']:7.1f}, "
         f"delta {r['delta_db']:+.1f} dB)"
