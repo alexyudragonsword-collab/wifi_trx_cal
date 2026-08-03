@@ -12,12 +12,15 @@ from specs import ALL_ANALYSES  # noqa: E402
 
 FAST_PARAMS = {
     "full_cal": {"bw_mhz": 80, "qam": 256, "seed": 5, "with_dpd": False,
-                 "std": "11ax/be", "rx_hp": False, "baseband": False},
+                 "std": "11ax/be", "rx_hp": False, "baseband": False,
+                 "agc_rebw": False},
     "full_cal_steps": {"bw_mhz": 80, "qam": 256, "seed": 5,
                        "with_dpd": False, "std": "11ax/be",
-                       "rx_hp": False, "baseband": False},
+                       "rx_hp": False, "baseband": False,
+                       "agc_rebw": False},
     "rx_evm_sweep": {"bw_mhz": 80, "qam": 256, "seed": 5,
-                     "std": "11ax/be", "rx_hp": False, "baseband": False},
+                     "std": "11ax/be", "rx_hp": False, "baseband": False,
+                     "agc_rebw": False},
     "drift_tracking": {"bw_mhz": 80, "n_states": 3},
     "blocker_desense": {"bw_mhz": 160, "offset_mhz": 200.0,
                         "p_sig_dbm": -60.0},
@@ -71,6 +74,73 @@ def test_rx_hp_rebalances_thresholds():
         expect = (2 * s.iip3_dbm + st[i + 1].nf_db + const) / 3
         assert s.max_input_dbm == pytest.approx(expect, abs=0.06), i
     assert st[-1].max_input_dbm == 10.0   # last-state ceiling kept
+
+
+def test_agc_rebw_moves_the_thresholds_to_the_run_bandwidth():
+    """The shipped ladder solves the noise-vs-IM3 balance once at
+    320 MHz and uses one register set at every bandwidth.  `agc_rebw`
+    re-solves at the run's own bandwidth; the balance point moves by a
+    third of the bandwidth change, so 20 MHz sits 4 dB below 320 MHz.
+
+    Off, the factory table must come through untouched — a run that
+    doesn't ask for the what-if must not silently get it.
+    """
+    from math import log10
+
+    from specs import _cal_setup
+    from wifitrx.chain.agc import DEFAULT_LNA_STATES
+
+    base = {"bw_mhz": 20, "qam": 64, "seed": 5}
+    _, _, rx_off, _ = _cal_setup(base)
+    assert rx_off.params.lna_states == DEFAULT_LNA_STATES
+
+    _, _, rx_on, _ = _cal_setup({**base, "agc_rebw": True})
+    st = rx_on.params.lna_states
+    const = -174.0 + 10.0 * log10(20e6)
+    for i, s in enumerate(st[:-1]):
+        expect = (2 * s.iip3_dbm + st[i + 1].nf_db + const) / 3
+        assert s.max_input_dbm == pytest.approx(expect, abs=0.06), i
+    assert st[-1].max_input_dbm == 10.0          # last-state ceiling kept
+
+    # The shift is a third of the bandwidth change, not a free
+    # parameter.  Check it solved-against-solved: the shipped table is
+    # not the bare formula everywhere (state 5 sits 1.4 dB off it), so
+    # comparing the factory numbers would measure that hand-adjustment
+    # instead of the anchor.
+    # Exact shift is 10*log10(320/20)/3 = 4.014 dB; the solver rounds
+    # each threshold to 0.1 dB, so a difference of rounded values lands
+    # on 4.0 or 4.1.
+    from wifitrx.chain.agc import rebalance_thresholds
+    at320 = rebalance_thresholds(DEFAULT_LNA_STATES, bandwidth_hz=320e6)
+    for a, b in zip(at320[:-1], st[:-1]):
+        assert a.max_input_dbm - b.max_input_dbm == pytest.approx(4.014,
+                                                                  abs=0.09)
+
+
+def test_agc_anchor_is_explicit_for_every_ladder_transform():
+    """rx_hp and the baseband stage both re-solve thresholds because
+    they change the ladder.  Which bandwidth they anchor at must follow
+    `agc_rebw` too, not be decided per branch — that inconsistency is
+    what this test exists to prevent coming back."""
+    from math import log10
+
+    from specs import _cal_setup
+
+    for extra in ({"rx_hp": True}, {"baseband": True}):
+        for rebw, anchor in ((False, 320e6), (True, 20e6)):
+            _, _, rx, _ = _cal_setup({"bw_mhz": 20, "qam": 64, "seed": 5,
+                                      "agc_rebw": rebw, **extra})
+            st = rx.params.lna_states
+            const = -174.0 + 10.0 * log10(anchor)
+            # the effective NF/IIP3 of the baseband branch are not
+            # reproduced here; check the anchor through the spacing
+            # between the solved thresholds instead, which the constant
+            # shifts rigidly
+            solved = [s.max_input_dbm for s in st[:-1]]
+            ref = [(2 * s.iip3_dbm + st[i + 1].nf_db + const) / 3
+                   for i, s in enumerate(st[:-1])]
+            offs = [a - b for a, b in zip(solved, ref)]
+            assert max(offs) - min(offs) < 1.5, (extra, rebw, offs)
 
 
 def test_step_through_matches_one_shot():

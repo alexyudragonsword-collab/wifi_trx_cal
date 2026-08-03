@@ -206,24 +206,40 @@ def _cal_setup(p: dict):
         cfg = OFDMConfig(bandwidth_hz=bw, qam_order=int(p["qam"]),
                          n_symbols=6, oversampling=4)
     tx, rx = _chains(bw, int(p["seed"]), cfg.sample_rate_hz)
+    from dataclasses import replace as _replace
+
+    from wifitrx.chain.agc import rebalance_thresholds
+
+    # Anchor bandwidth for the hand-over thresholds.  The official table
+    # solves the noise-vs-IM3 balance once at 320 MHz and ships one
+    # register set for every bandwidth; the balance point moves with the
+    # noise floor, i.e. by a third of the bandwidth change, so at 20 MHz
+    # the factory thresholds sit ~4 dB high and each state is held past
+    # its own balance point.  `agc_rebw` re-solves at the run's own
+    # bandwidth instead — a what-if for a bandwidth-aware AGC, not the
+    # shipping behaviour.
+    rebw = bool(p.get("agc_rebw", False))
+    anchor_bw = bw if rebw else 320e6
+
     if p.get("rx_hp", False):
         # "RX high-performance" study knob: every LNA/mixer gain state
-        # gets NF -1 dB and IIP3 +2 dB, and the hand-over thresholds are
-        # re-solved at the noise-vs-IM3 balance points of the modified
-        # ladder (same 320 MHz anchor convention as the official table)
-        from dataclasses import replace as _replace
-
-        from wifitrx.chain.agc import rebalance_thresholds
-        rx.params.lna_states = rebalance_thresholds(tuple(
+        # gets NF -1 dB and IIP3 +2 dB.  A modified ladder always needs
+        # its thresholds re-solved, whatever the anchor.
+        rx.params.lna_states = tuple(
             _replace(s, nf_db=s.nf_db - 1.0, iip3_dbm=s.iip3_dbm + 2.0)
-            for s in rx.params.lna_states))
+            for s in rx.params.lna_states)
+    if not p.get("baseband", False) and (p.get("rx_hp", False) or rebw):
+        # the baseband branch re-solves below with its own effective
+        # NF/IIP3, so don't solve twice
+        rx.params.lna_states = rebalance_thresholds(rx.params.lna_states,
+                                                    bandwidth_hz=anchor_bw)
     if p.get("baseband", False):
         # explicit analog baseband: an input-referred noise voltage and
         # an output swing, replacing the share of both that the ladder
         # carries today — the states are de-embedded so the cascade
         # total is unchanged and only the new physics (an output-referred
         # ceiling) shows up
-        from wifitrx.chain.agc import rebalance_thresholds, vga_gain_db
+        from wifitrx.chain.agc import vga_gain_db
         from wifitrx.impairments.baseband import BasebandStage
         from wifitrx.link.budget import (deembed_states, effective_iip3_dbm,
                                          effective_nf_db)
@@ -235,7 +251,7 @@ def _cal_setup(p: dict):
         # evaluated at the state's own hand-over edge, its worst case
         target = rx.params.adc.fullscale_dbm - rx.params.adc_backoff_db
         rx.params.lna_states = rebalance_thresholds(
-            states, bandwidth_hz=bw, effective={
+            states, bandwidth_hz=anchor_bw, effective={
                 "nf_db": [effective_nf_db(s, bb) for s in states],
                 "iip3_dbm": [
                     effective_iip3_dbm(s, bb, vga_gain_db(s.max_input_dbm,
@@ -665,6 +681,14 @@ ALL_ANALYSES: tuple[AnalysisSpec, ...] = (
             ParamSpec("rx_hp", "RX high-performance", "bool", False,
                       tooltip="Every LNA gain state: NF -1 dB, IIP3 +2 dB "
                               "(hand-over thresholds unchanged)"),
+            ParamSpec("agc_rebw", "AGC thresholds at run BW", "bool", False,
+                      tooltip="Re-solve the hand-over thresholds at this "
+                              "run's bandwidth. The shipped table solves "
+                              "the noise-vs-IM3 balance once at 320 MHz "
+                              "and uses one register set everywhere; the "
+                              "balance point moves by a third of the "
+                              "bandwidth change, so at 20 MHz the factory "
+                              "thresholds sit ~4 dB high."),
             ParamSpec("baseband", "Explicit baseband stage", "bool", False,
                       tooltip="Model the LPF/VGA/ADC-driver separately "
                               "(6 nV/sqrt(Hz) input-referred noise, 1.0 Vpp "
@@ -691,6 +715,14 @@ ALL_ANALYSES: tuple[AnalysisSpec, ...] = (
             ParamSpec("rx_hp", "RX high-performance", "bool", False,
                       tooltip="Every LNA gain state: NF -1 dB, IIP3 +2 dB "
                               "(hand-over thresholds unchanged)"),
+            ParamSpec("agc_rebw", "AGC thresholds at run BW", "bool", False,
+                      tooltip="Re-solve the hand-over thresholds at this "
+                              "run's bandwidth. The shipped table solves "
+                              "the noise-vs-IM3 balance once at 320 MHz "
+                              "and uses one register set everywhere; the "
+                              "balance point moves by a third of the "
+                              "bandwidth change, so at 20 MHz the factory "
+                              "thresholds sit ~4 dB high."),
             ParamSpec("baseband", "Explicit baseband stage", "bool", False,
                       tooltip="Model the LPF/VGA/ADC-driver separately "
                               "(6 nV/sqrt(Hz) input-referred noise, 1.0 Vpp "
@@ -717,6 +749,14 @@ ALL_ANALYSES: tuple[AnalysisSpec, ...] = (
             ParamSpec("rx_hp", "RX high-performance", "bool", False,
                       tooltip="Every LNA gain state: NF -1 dB, IIP3 +2 dB "
                               "(hand-over thresholds unchanged)"),
+            ParamSpec("agc_rebw", "AGC thresholds at run BW", "bool", False,
+                      tooltip="Re-solve the hand-over thresholds at this "
+                              "run's bandwidth. The shipped table solves "
+                              "the noise-vs-IM3 balance once at 320 MHz "
+                              "and uses one register set everywhere; the "
+                              "balance point moves by a third of the "
+                              "bandwidth change, so at 20 MHz the factory "
+                              "thresholds sit ~4 dB high."),
             ParamSpec("baseband", "Explicit baseband stage", "bool", False,
                       tooltip="Model the LPF/VGA/ADC-driver separately "
                               "(6 nV/sqrt(Hz) input-referred noise, 1.0 Vpp "
