@@ -1,8 +1,9 @@
-"""CLI:  python -m wifitrx.handoff run|regress|inspect ...
+"""CLI:  python -m wifitrx.handoff run|regress|inspect|replay ...
 
 run:      单个波形过链路,输出结果波形 + 指标 JSON
 regress:  目录级批量回归,输出对账单 handoff_report.md
 inspect:  独立检查 cal_state.json(纯标准库,可脱离本库运行)
+replay:   照残差表字面重放,对上文件自己的实测 EVM(需 numpy)
 """
 from __future__ import annotations
 
@@ -47,9 +48,18 @@ def main(argv=None) -> None:
                            "(stdlib-only, works without this library)")
     p_ins.add_argument("state", type=Path)
 
+    p_rep = sub.add_parser("replay", help="apply the residuals literally "
+                           "and compare against the file's own EVM")
+    p_rep.add_argument("state", type=Path)
+
     args = ap.parse_args(argv)
     if args.cmd == "inspect":
         sys.exit(inspect_main([str(args.state)]))
+    if args.cmd == "replay":
+        from .replay import replay
+        result = replay(args.state)
+        print(result.summary())
+        sys.exit(0 if result.verdict == "consistent" else 1)
     fs = args.fs or args.bw * 4
     tx, rx = build_calibrated_trx(args.bw, fs, seed=args.seed,
                                   cal_state_json=args.cal_state)

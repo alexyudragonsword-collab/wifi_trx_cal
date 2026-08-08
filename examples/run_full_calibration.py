@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 
 from wifitrx.cal.base import save_cal_state
+from wifitrx.cal.residuals import run_conditions
 from wifitrx.cal.sequence import run_full_cal
 from wifitrx.chain import LoopbackPath, RxChain, RxParams, TxChain, TxParams
 from wifitrx.report.generator import generate_report
@@ -49,7 +50,8 @@ def main() -> None:
                                    f"{args.qam}-QAM, seed={args.seed})")
     save_cal_state(args.out / "cal_state.json", tx.correction_state(),
                    rx.correction_state(), results,
-                   fs_hz=cfg.sample_rate_hz)
+                   fs_hz=cfg.sample_rate_hz,
+                   conditions=run_conditions(cfg, tx, rx, with_dpd=True))
     print(f"report:    {report}")
     print(f"cal state: {args.out / 'cal_state.json'}")
     final = {r.name: r for r in results}["final_loopback_evm"]

@@ -194,10 +194,30 @@
 - **验证**:`tests/test_baseband_stage.py`(10 项,含单位换算对拍手算值、
   拆解往返、"NF 不因此获得 VGA 相关性"的反向断言、默认关时逐位一致)。
 
-## B. 可立即做
+## B9/B10/B11. 交付件三件套:残差说明书 + replay 对拍 + 自生成 README —— ✅ 已落地(2026-08-08,0.4.0)
+
+- **落地内容**:`cal/residuals.py`(RESIDUAL_SPEC 20 条,`unit/meaning/better/role/apply`;
+  `run_conditions` 统一各写入方的测量条件块;`duplicates` 以数据声明 LO 泄漏双观测);
+  `handoff/replay.py`(注入原语:widely-linear 镜像、DC/泄漏、I 轨分数延迟、Butterworth
+  droop、加性误差;闭合目标 `final_loopback_evm.tx_evm_db`;CLI
+  `python -m wifitrx.handoff replay`,gap 超 1.0 dB 退出码 1);`cal_state_readme`
+  由 JSON 全量渲染;检查器新增残差自洽检查;GUI 检查器页渲染残差表(照旧不判断)。
+- **验收实测**(40M/256 与 80M/256):诚实文件 explained −42.58 / measured −43.14 /
+  gap **+0.55 dB → consistent**;cal-only 行 −48.92(在带失真项主导整个闭合,
+  印证同类工程缺这一条目值 14.4 dB 的教训);DPD 残差伪造成 −60 dB → gap
+  **−8.51 dB → gap**,并报出未解释项 −43.80 dB;无 DPD 文件必报 gap(遗漏可测);
+  19 键逐项归位:8 applied / 1 closure_target / 1 dropped_duplicate 点名 /
+  9 skipped 带原因 / 0 静默。反漂移测试落地当天抓到 `group_delay.estimated_ps`
+  无 spec 条目一例。测试 +8(`tests/test_residual_replay.py`)。
+- **口径纪律(记录在案)**:闭合项中无任何由实测反解的量;`dpd.evm_db` 是 DPD 步
+  在 PA 输出的独立实测,合法进闭合,但因其主导另报 cal-only 行;闭合检查的分辨率
+  即容差 1.0 dB——亚主导项的伪造在和的层面不可见,靠逐项列表暴露,这是所有
+  和式检查的物理边界,不是实现缺陷。
+
+### B9/B10/B11(原始记录,保留作对照)
 
 ### B9. Replay 对拍环节:照单施加交付残差,对上交付实测 EVM
-- **状态**:可立即做(2026-08-08 记录,来源:对同类工程 wifi_rf_calibration 交付件的分析)。
+- **状态**:~~可立即做~~ 已落地,见上(2026-08-08 记录,来源:对同类工程 wifi_rf_calibration 交付件的分析)。
 - **动机**:现有检查器只判"每步是否达到其内嵌 spec",**抓不到遗漏**——一个根本
   没被交付的损伤项它永远看不见。同类工程靠这一环节发现了 14.4 dB 的在带失真
   无条目,那是逐项评审在结构上抓不到的缺陷类别。
@@ -237,6 +257,10 @@
 - **做法**:`save_cal_state` 顺手写 README.md:文件清单、测量条件及其为什么
   重要、逐步结果表(passed/saturated/spec)、expiry、消费方式(检查器命令 +
   恢复代码片段,注明为什么要用完整状态而不是某个子集)。
+
+## B. 可立即做
+
+(当前无待做项;唯一未完成项为 A2,等链路仿真组输入。)
 
 ### B5(原始记录,保留作对照)
 - **状态**:待用户排期(2026-08-01 记录,暂不实现)。

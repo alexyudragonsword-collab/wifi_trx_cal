@@ -4,6 +4,34 @@
 或 `wifitrx.*` 公开签名的条目都在下面显式标注,交付方按此判断是否需要
 重新取包。日期为落地日期。
 
+## 0.4.0 — 2026-08-08
+
+### 交付件(B9/B10/B11,来源:对同类工程交付包的分析)
+
+- **cal-state JSON 新增 `residuals` 块**(schema 扩展,向后兼容:旧字段全部
+  不动):平铺的交付残差面,每个 `步名.指标名` 键带自己的说明书——
+  `unit / meaning / better / role / apply`。`apply` 给公式级注入配方
+  (如镜像抑制 → `y = u + g·conj(u)`,`|g| = 10^(−IRR/20)`);`role` 机器可读地
+  区分 impairment(可注入)/ figure / condition / total(实测整体,绝不可回注)。
+  同一物理量的两次观测(包络检波 vs 环回的 LO 泄漏)以 `duplicates` 数据声明,
+  不写散文。新增 `conditions` 块:波形配方 + `adc_backoff_db` + LPF 阶数,
+  没有它们收方无法从文件外部重生成激励做核验。
+- **新增 replay 对拍**:`python -m wifitrx.handoff replay cal_state.json` 把
+  残差表按 `apply` 字面施加到干净波形,与文件自己的 `tx_evm_db` 闭合,输出
+  解释 / 实测 / 未解释三个数。**闭合项中禁止任何由实测反解的兜底量**;每个
+  键的去向(applied / skipped 带原因 / dropped_duplicate 点名 / no_recipe
+  响亮报错)逐项列出。实测:诚实文件 gap +0.55 dB(consistent);把 DPD 残差
+  伪造成 −60 dB → gap −8.5 dB 且报出未解释项 −43.8 dB;无 DPD 文件(在带
+  失真无条目)必然报 gap——遗漏类缺陷首次可测。
+- **cal-state 旁自生成 README.md**:文件清单、测量条件、逐步结果表、残差表、
+  消费方式,全部由 JSON 渲染,与数据在结构上不可能漂移。
+- 独立检查器(仍 stdlib-only)新增残差面自洽检查:值缺说明 = error、说明缺值
+  = warning、重复对提示至多施加其一;GUI 检查器页新增残差表(照旧只渲染
+  不判断)。
+- 反漂移护栏:任何步骤新增标量指标而不给 spec 条目,
+  `tests/test_residual_replay.py` 立即失败(落地当天即抓到
+  `group_delay.estimated_ps` 一例)。
+
 ## 0.3.2 — 2026-08-03
 
 ### 模型 / GUI

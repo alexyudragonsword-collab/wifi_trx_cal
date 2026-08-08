@@ -85,6 +85,20 @@ Schema(`wifitrx-cal-state-v1`):
                                   //   cost       该步的捕获开销
                                   //              {captures, samples};
                                   //              产测时间 = samples / fs
+  "residuals": {                  // 平铺的交付残差面(键 = 步名.指标名)
+    "values": {"tx_iq.irr_min_db": 55.7, ...},
+    "specification": {            //   每个数字自己的说明书,与数字同文件
+      "tx_iq.irr_min_db": {       //   unit / meaning / better / role /
+        "apply": "y = u + g*conj(u), |g| = 10^(-irr/20) ..."
+      }                           //   apply = 链路仿真怎么消费这个数
+    },                            //   role: impairment(可注入)/ figure /
+                                  //         condition / total(实测整体,
+                                  //         绝不可回注——回注即恒等闭合)
+    "duplicates": [[...]]         //   同一物理量的两次观测,至多施加其一
+  },
+  "conditions": { ... },          // 测量条件:波形配方(bw/qam/符号数/seed)
+                                  // + adc_backoff_db + LPF 阶数/家族——
+                                  // 没有它们,收方无法重生成激励做外部核验
   "provenance": { ... },          // 生成溯源:git commit、dirty、时间、版本
   "expiry": {                     // 可选:校正有效性窗口(link.temp_study 实测)
     "calibrated_at_c": 25.0,      //   校准温度
@@ -107,7 +121,20 @@ Cal-state inspector(打开本文件读结论)、Reference(信号链框图、校�
 **独立检查器**:`python -m wifitrx.handoff inspect cal_state.json`;
 `src/wifitrx/handoff/inspector.py` 只依赖标准库,可直接拷到 JSON 旁边
 `python inspector.py cal_state.json` 运行(无需安装本库)。检查以文件内嵌的
-spec 为准——旧文件按其校准当时的规格判定,而不是按本库当前的表。
+spec 为准——旧文件按其校准当时的规格判定,而不是按本库当前的表;残差面
+同理只和文件自身对拍(值缺说明 = error,说明缺值 = warning)。
+
+**Replay 对拍**:`python -m wifitrx.handoff replay cal_state.json`(需
+numpy)。把 `residuals` 逐项按其 `apply` 配方字面注入干净波形,与文件自己的
+`final_loopback_evm.tx_evm_db` 闭合,输出三个数:**解释 / 实测 / 未解释**。
+闭合和不闭合都是结论:少了 DPD 残差项的文件必然报 gap——这正是逐项评审
+抓不到的"遗漏"类缺陷。闭合项里没有任何由实测反解的兜底量(有则闭合是
+恒等式,篡改也过);每个键的去向(applied / skipped 带原因 /
+dropped_duplicate 点名)逐项列出,不静默。
+
+**自生成 README**:`save_cal_state` 在 JSON 旁写 README.md,全部内容由
+JSON 渲染(文件清单、测量条件、逐步结果表、残差表、消费方式)——生成式
+说明不可能和数据漂移。
 
 widely-linear 校正定义:`x_c = w1*x + w2*conj(x)`(w1 为 null 时取 1)。
 FIR 以中心抽头为群时延参考(等效 `np.convolve(mode="same")`)。

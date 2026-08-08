@@ -68,3 +68,19 @@ print(res.metrics)       # pa_out_dbm / pa_avg_pae / aclr / 复合增益 / 时�
 
 注意:`loopback` 输出已做时延对齐与预热截除,但**未做**均衡/CPE 去除——那是
 解调器的职责,保持与真实接收一致。
+
+## 5. 拿到 cal_state.json 后先做的两件事
+
+```bash
+python -m wifitrx.handoff inspect cal_state.json   # 结论级检查(仅标准库)
+python -m wifitrx.handoff replay  cal_state.json   # 残差表 vs 文件自己的 EVM
+```
+
+replay 把 `residuals` 里的每个数按其内嵌 `apply` 配方字面注入干净波形,与
+文件自己的实测 TX EVM 闭合,输出三个数:**解释 / 实测 / 未解释**。gap 超过
+1 dB 时退出码为 1——意味着残差表解释不了这块芯片的实测,照单搭建的链路仿真
+会给出不存在的余量,先来找我们对表,不要往下游传。
+
+往你们仿真里注入残差时**只用 `role: impairment` 的键**,并按 `apply` 文本
+的公式来;`duplicates` 里的成对键至多施加其一(取后者);`total` 类是实测
+整体,回注一次就是重复计数。JSON 旁的 README.md 由数据自生成,可当速查表。

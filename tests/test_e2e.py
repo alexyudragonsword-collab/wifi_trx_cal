@@ -3,6 +3,7 @@ import numpy as np
 import pytest
 
 from wifitrx.cal.base import load_cal_state, save_cal_state
+from wifitrx.cal.residuals import run_conditions
 from wifitrx.cal.sequence import loopback_evm, run_full_cal
 from wifitrx.chain import LoopbackPath, RxChain, RxParams, TxChain, TxParams
 from wifitrx.waveform import OFDMConfig
@@ -73,7 +74,8 @@ def test_cal_state_json_roundtrip(tmp_path):
 
     p = tmp_path / "cal_state.json"
     save_cal_state(p, tx.correction_state(), rx.correction_state(), results,
-                   fs_hz=fs)
+                   fs_hz=fs,
+                   conditions=run_conditions(cfg, tx, rx, with_dpd=False))
 
     # fresh chains with the same impairments, corrections loaded from JSON
     tx2, rx2 = impaired_trx(bw, fs, seed=3)

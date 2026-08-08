@@ -15,6 +15,8 @@ from typing import Callable
 import numpy as np
 from matplotlib.figure import Figure
 
+from wifitrx.cal.residuals import run_conditions
+
 
 @dataclass(frozen=True)
 class ParamSpec:
@@ -326,7 +328,10 @@ def run_full_cal(p: dict) -> AnalysisResult:
                                      "results": results,
                                      # sample rate: the step costs are in
                                      # samples, and tester time needs both
-                                     "fs_hz": cfg.sample_rate_hz})
+                                     "fs_hz": cfg.sample_rate_hz,
+                                     "conditions": run_conditions(
+                                         cfg, tx, rx,
+                                         with_dpd=bool(p["with_dpd"]))})
 
 
 def run_full_cal_steps(p: dict) -> AnalysisResult:
@@ -410,7 +415,10 @@ def run_full_cal_steps(p: dict) -> AnalysisResult:
                                      "results": results,
                                      # sample rate: the step costs are in
                                      # samples, and tester time needs both
-                                     "fs_hz": cfg.sample_rate_hz})
+                                     "fs_hz": cfg.sample_rate_hz,
+                                     "conditions": run_conditions(
+                                         cfg, tx, rx,
+                                         with_dpd=bool(p["with_dpd"]))})
 
 
 def run_rx_evm_sweep(p: dict) -> AnalysisResult:
@@ -550,7 +558,9 @@ def run_rx_evm_sweep(p: dict) -> AnalysisResult:
                                      "results": results,
                                      # sample rate: the step costs are in
                                      # samples, and tester time needs both
-                                     "fs_hz": cfg.sample_rate_hz})
+                                     "fs_hz": cfg.sample_rate_hz,
+                                     "conditions": run_conditions(
+                                         cfg, tx, rx, with_dpd=False)})
 
 
 def run_drift_tracking(p: dict) -> AnalysisResult:

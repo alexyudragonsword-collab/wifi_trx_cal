@@ -94,6 +94,34 @@ def inspect_cal_state(doc: dict) -> list[dict]:
         add("info", "-", "no expiry metadata: the file does not state the "
             "conditions under which these corrections stay valid")
 
+    # The residual surface is checked against ITSELF — values against
+    # their own specification block, pairs against the file's own
+    # duplicates list — never against this library's current table, for
+    # the same reason the spec checks below use the embedded spec.
+    residuals = doc.get("residuals") or {}
+    values = residuals.get("values") or {}
+    spec_block = residuals.get("specification") or {}
+    for key in sorted(set(values) - set(spec_block)):
+        add("error", key, "residual shipped with no specification entry: "
+            "the consumer has no statement of what it means or how to "
+            "apply it")
+    for key in sorted(set(spec_block) - set(values)):
+        add("warning", key, "described in the specification but not "
+            "shipped; a consumer reading the spec will look for it")
+    for pair in residuals.get("duplicates") or []:
+        if all(k in values for k in pair):
+            add("info", " + ".join(pair), "two observations of one "
+                "physical quantity; apply at most one (the second is "
+                "the finer instrument)")
+    if doc.get("results") and not values:
+        add("info", "-", "no residuals block: the file predates the "
+            "embedded residual spec, so the replay cross-check "
+            "(python -m wifitrx.handoff replay) is unavailable")
+    if doc.get("results") and not doc.get("conditions"):
+        add("info", "-", "no conditions block: the measurement context "
+            "(waveform recipe, ADC backoff) is not recorded, so the "
+            "stimulus cannot be regenerated from the file alone")
+
     results = doc.get("results") or []
     if not results:
         add("info", "-", "no per-step results recorded: corrections can be "

@@ -85,7 +85,8 @@ def _jsonable(obj: Any) -> Any:
 def save_cal_state(path: str | Path, tx_state: dict, rx_state: dict,
                    results: list[CalResult] | None = None,
                    expiry: dict | None = None,
-                   fs_hz: float | None = None) -> None:
+                   fs_hz: float | None = None,
+                   conditions: dict | None = None) -> None:
     """Persist the full correction state (and optional result summaries).
 
     ``expiry``: validity metadata for the corrections (e.g. the measured
@@ -95,20 +96,189 @@ def save_cal_state(path: str | Path, tx_state: dict, rx_state: dict,
     ``fs_hz``: the sample rate the steps were captured at.  Each step
     reports its cost in samples; without the rate the recipient cannot
     turn that into tester time, which is the only unit it is useful in.
+
+    ``conditions``: everything a consumer needs to reproduce the
+    measurement context from the file alone — bandwidth/QAM/symbol
+    count/seed of the scoring waveform, and the chain constants some
+    ``apply`` recipes convert through (``adc_backoff_db``).  Without the
+    waveform recipe the replay harness cannot regenerate the stimulus,
+    so the residuals cannot be checked against the file's own EVM.
+
+    When ``results`` are given, the file also carries a flat
+    ``residuals`` block: each specced ``step.metric`` beside its own
+    specification (unit / meaning / better / apply / role), so the
+    number and the instruction for consuming it cannot travel apart.
     """
     from ..provenance import provenance
+    from .residuals import extract_residuals
+    summaries = [r.summary() for r in (results or [])]
     doc = {
         "format": "wifitrx-cal-state-v1",
         "tx": tx_state,
         "rx": rx_state,
-        "results": [r.summary() for r in (results or [])],
+        "results": summaries,
         "provenance": provenance(),
     }
+    if summaries:
+        doc["residuals"] = extract_residuals(summaries)
     if fs_hz:
         doc["fs_hz"] = float(fs_hz)
+    if conditions:
+        doc["conditions"] = _jsonable(conditions)
     if expiry:
         doc["expiry"] = _jsonable(expiry)
     Path(path).write_text(json.dumps(doc, indent=2))
+    readme = Path(path).with_name("README.md")
+    readme.write_text(cal_state_readme(doc))
+
+
+def cal_state_readme(doc: dict) -> str:
+    """The state file's own README, rendered from the file it sits beside.
+
+    Generated rather than written, so it cannot drift from the JSON — a
+    hand-written handoff note that disagrees with the data next to it is
+    worse than no note.  Everything here is derived from ``doc``; adding
+    prose that is not in the file would recreate the drift this exists
+    to remove.
+    """
+    cond = doc.get("conditions") or {}
+    results = doc.get("results") or []
+    res = doc.get("residuals") or {}
+    values = res.get("values") or {}
+    spec = res.get("specification") or {}
+    prov = doc.get("provenance") or {}
+
+    lines = [
+        "# wifitrx calibration state: handoff",
+        "",
+        "This directory's `cal_state.json` is the deliverable: every "
+        "digital correction plus the analog tuning codes, the per-step "
+        "verdicts against the acceptance specs in force when they ran, "
+        "and the residual figures a link simulation consumes.",
+        "",
+    ]
+    ident = [f"format `{doc.get('format')}`"]
+    if cond.get("bandwidth_hz"):
+        ident.append(f"{cond['bandwidth_hz'] / 1e6:g} MHz")
+    if cond.get("qam_order"):
+        ident.append(f"{cond['qam_order']}-QAM")
+    if doc.get("fs_hz"):
+        ident.append(f"fs {doc['fs_hz'] / 1e6:g} MS/s")
+    if prov.get("version"):
+        ident.append(f"wifitrx {prov['version']}")
+    lines += [" · ".join(ident), ""]
+
+    lines += [
+        "## How to consume it",
+        "",
+        "```bash",
+        "python -m wifitrx.handoff inspect cal_state.json   # verdicts, "
+        "stdlib-only",
+        "python -m wifitrx.handoff replay  cal_state.json   # residuals "
+        "applied literally vs the file's own EVM",
+        "```",
+        "",
+        "To restore this exact part in the model:",
+        "",
+        "```python",
+        "from wifitrx.cal.base import load_cal_state",
+        "tx_state, rx_state = load_cal_state('cal_state.json')",
+        "tx.load_correction_state(tx_state)",
+        "rx.load_correction_state(rx_state)",
+        "# analog tuning codes travel with the params: rerun the two",
+        "# cheap corner searches (see wifitrx.handoff.runner)",
+        "```",
+        "",
+    ]
+
+    if cond:
+        lines += [
+            "## Measurement conditions",
+            "",
+            "Everything below changes the numbers; a consumer who cannot "
+            "state these cannot reproduce them.",
+            "",
+        ]
+        lines += [f"* `{k}` = {v}" for k, v in sorted(cond.items())]
+        lines.append("")
+
+    if results:
+        lines += [
+            "## Steps",
+            "",
+            "| # | step | passed | trim railed | spec |",
+            "|---|---|---|---|---|",
+        ]
+        for i, r in enumerate(results, 1):
+            s = r.get("spec") or {}
+            spec_txt = (f"{s.get('metric')} {s.get('sense', '')} "
+                        f"{s.get('limit')}" if s else "—")
+            lines.append(
+                f"| {i} | `{r.get('name')}` | "
+                f"{_verdict(r.get('passed'))} | "
+                f"{_verdict(r.get('saturated'))} | {spec_txt} |")
+        lines.append("")
+
+    if values:
+        lines += [
+            "## Residuals",
+            "",
+            "Each figure ships with its own specification in the JSON "
+            "(`residuals.specification`): unit, meaning, whether larger "
+            "or smaller is better, and **the recipe for injecting it "
+            "into a link simulation** (`apply`). Read that rather than "
+            "inferring from the names — an image-rejection figure "
+            "applied as a gain imbalance does not give the same "
+            "constellation as the same dB applied as a quadrature "
+            "error. `role` says how each key is meant to be consumed: "
+            "`impairment` entries are injectable, `figure` and "
+            "`condition` entries are context, `total` entries are "
+            "measured wholes and must never be re-injected.",
+            "",
+            "| key | value | unit | better | role |",
+            "|---|---|---|---|---|",
+        ]
+        for key in sorted(values):
+            entry = spec.get(key, {})
+            lines.append(
+                f"| `{key}` | {_fmt(values[key])} | "
+                f"{entry.get('unit', '')} | {entry.get('better', '')} | "
+                f"{entry.get('role', '')} |")
+        lines.append("")
+        dups = res.get("duplicates") or []
+        if dups:
+            lines += ["Pairs describing one physical quantity measured "
+                      "two ways — apply at most one of each:", ""]
+            lines += [f"* `{a}` / `{b}` (keep the second)"
+                      for a, b in dups]
+            lines.append("")
+
+    if doc.get("expiry"):
+        lines += [
+            "## Validity",
+            "",
+            "Corrections are not forever. The `expiry` block records "
+            "the measured hold window and the minimal recalibration "
+            "plan:",
+            "",
+        ]
+        lines += [f"* `{k}` = {v}"
+                  for k, v in sorted(doc["expiry"].items())]
+        lines.append("")
+
+    return "\n".join(lines) + "\n"
+
+
+def _verdict(flag) -> str:
+    return "—" if flag is None else ("yes" if flag else "no")
+
+
+def _fmt(value) -> str:
+    if isinstance(value, float):
+        return f"{value:.4g}"
+    if isinstance(value, list):
+        return f"[{len(value)} entries]"
+    return str(value)
 
 
 def load_cal_state(path: str | Path) -> tuple[dict, dict]:

@@ -257,7 +257,8 @@ class MainWindow(QMainWindow):
         save_cal_state(path, self._cal_state["tx_state"],
                        self._cal_state["rx_state"],
                        self._cal_state["results"],
-                       fs_hz=self._cal_state.get("fs_hz"))
+                       fs_hz=self._cal_state.get("fs_hz"),
+                       conditions=self._cal_state.get("conditions"))
         self.status.setText(f"saved {path}")
         self.inspector.load(Path(path))
         self.tabs.setCurrentWidget(self.inspector)

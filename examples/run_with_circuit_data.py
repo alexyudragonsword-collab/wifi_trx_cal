@@ -15,6 +15,7 @@ from pathlib import Path
 import numpy as np
 
 from wifitrx.cal.base import save_cal_state
+from wifitrx.cal.residuals import run_conditions
 from wifitrx.cal.sequence import run_full_cal
 from wifitrx.chain import LoopbackPath, RxChain, RxParams, TxChain, TxParams
 from wifitrx.circuit_import import fit_lpf_from_ac, load_pll_pn_csv
@@ -69,7 +70,8 @@ def main() -> None:
                              title=f"电路数据校准报告 (BW={bw/1e6:.0f} MHz)")
     save_cal_state(args.out / "cal_state.json", tx.correction_state(),
                    rx.correction_state(), results,
-                   fs_hz=cfg.sample_rate_hz)
+                   fs_hz=cfg.sample_rate_hz,
+                   conditions=run_conditions(cfg, tx, rx, with_dpd=True))
     final = {r.name: r for r in results}["final_loopback_evm"]
     print(f"final loopback EVM {final.metrics_after['evm_db']:.1f} dB, "
           f"TX EVM {final.metrics_after['tx_evm_db']:.1f} dB")

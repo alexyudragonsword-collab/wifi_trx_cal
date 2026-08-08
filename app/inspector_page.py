@@ -192,6 +192,23 @@ class InspectorPage(QWidget):
                                            "after", "passed", "saturated",
                                            "spec"])))
 
+        # The residual surface, each number beside its own description.
+        # Everything shown is the file's: the page names no key and
+        # decides nothing, same rule as the findings above.
+        res = doc.get("residuals") or {}
+        values, spec = res.get("values") or {}, res.get("specification") or {}
+        if values:
+            add(section(
+                "Residuals (each with its shipped specification)",
+                fixed_table(
+                    [{"key": k, "value": _fmt(values[k]),
+                      "unit": (spec.get(k) or {}).get("unit", ""),
+                      "better": (spec.get(k) or {}).get("better", ""),
+                      "role": (spec.get(k) or {}).get("role", ""),
+                      "apply": (spec.get(k) or {}).get("apply", "")}
+                     for k in sorted(values)],
+                    ["key", "value", "unit", "better", "role", "apply"])))
+
         prov = doc.get("provenance") or {}
         if prov:
             add(section("Provenance", fixed_table(
