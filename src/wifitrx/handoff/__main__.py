@@ -57,9 +57,13 @@ def main(argv=None) -> None:
         sys.exit(inspect_main([str(args.state)]))
     if args.cmd == "replay":
         from .replay import replay
-        result = replay(args.state)
-        print(result.summary())
-        sys.exit(0 if result.verdict == "consistent" else 1)
+        ok = True
+        for view in ("tx", "rx"):
+            result = replay(args.state, view=view)
+            print(result.summary())
+            print()
+            ok = ok and result.verdict == "consistent"
+        sys.exit(0 if ok else 1)
     fs = args.fs or args.bw * 4
     tx, rx = build_calibrated_trx(args.bw, fs, seed=args.seed,
                                   cal_state_json=args.cal_state)

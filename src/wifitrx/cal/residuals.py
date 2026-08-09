@@ -27,6 +27,12 @@ Every entry carries:
   - ``total``: a measured whole.  Never injected: a total re-applied as
     a term would make any closure check circular by construction.
 
+* ``plane`` — which measurement plane the figure lives on: ``tx`` (PA
+  output), ``rx`` (through the receiver), ``loopback`` (the composite
+  path).  The replay filters on it, so transmit keys stay out of the
+  receive closure and vice versa — v0.4.0 applied the receive image to
+  a PA-output target for want of exactly this field.
+
 **The spec is the lift list.**  ``extract_residuals`` ships exactly the
 keys named here; everything else stays inside its step summary.  The
 guard against this table drifting from what the sequence measures is a
@@ -49,6 +55,7 @@ DUPLICATES: tuple[tuple[str, str], ...] = (
 
 RESIDUAL_SPEC: dict[str, dict[str, str]] = {
     "tx_lpf_corner.fc_hz": {
+        "plane": "tx",
         "unit": "Hz",
         "meaning": "TX baseband corner as tuned (target 1.3 x BW/2, the "
                    "DPD bandwidth)",
@@ -60,6 +67,7 @@ RESIDUAL_SPEC: dict[str, dict[str, str]] = {
                  "consumers or absolute-power work.",
     },
     "tx_lpf_corner.fc_err_pct": {
+        "plane": "tx",
         "unit": "%",
         "meaning": "corner tuning error relative to its target",
         "better": "smaller magnitude",
@@ -68,6 +76,7 @@ RESIDUAL_SPEC: dict[str, dict[str, str]] = {
                  "contains this error.",
     },
     "rx_lpf_corner.fc_hz": {
+        "plane": "rx",
         "unit": "Hz",
         "meaning": "RX channel-select corner as tuned (target 1.12 x BW/2)",
         "better": "n/a — a design target, not a defect",
@@ -77,6 +86,7 @@ RESIDUAL_SPEC: dict[str, dict[str, str]] = {
                  "per-tone-EQ caveat as the TX corner.",
     },
     "rx_lpf_corner.fc_err_pct": {
+        "plane": "rx",
         "unit": "%",
         "meaning": "corner tuning error relative to its target",
         "better": "smaller magnitude",
@@ -84,6 +94,7 @@ RESIDUAL_SPEC: dict[str, dict[str, str]] = {
         "apply": "do not inject — fc_hz already contains it.",
     },
     "rx_dc_offset.worst_dc_dbfs": {
+        "plane": "rx",
         "unit": "dBFS",
         "meaning": "residual DC at the ADC input after analog coarse + "
                    "digital fine correction, worst across the 8 AGC states",
@@ -99,6 +110,7 @@ RESIDUAL_SPEC: dict[str, dict[str, str]] = {
                  "not constellation error.",
     },
     "rx_dc_offset.worst_dc_dbfs_after_analog": {
+        "plane": "rx",
         "unit": "dBFS",
         "meaning": "residual DC after the analog coarse stage alone, "
                    "worst state — the headroom the digital fine stage "
@@ -109,6 +121,7 @@ RESIDUAL_SPEC: dict[str, dict[str, str]] = {
                  "the shipped end state.",
     },
     "tx_lo_leak_envdet.lo_leak_dbc": {
+        "plane": "tx",
         "unit": "dBc",
         "meaning": "TX carrier leakage at the PA output relative to "
                    "signal power, measured by the envelope detector",
@@ -121,6 +134,7 @@ RESIDUAL_SPEC: dict[str, dict[str, str]] = {
                  "measurement — apply at most one of the pair.",
     },
     "tx_lo_leak_loopback.lo_leak_dbc": {
+        "plane": "tx",
         "unit": "dBc",
         "meaning": "TX carrier leakage at the PA output relative to "
                    "signal power, measured through the loopback receiver "
@@ -131,6 +145,7 @@ RESIDUAL_SPEC: dict[str, dict[str, str]] = {
                  "the one to keep when applying.",
     },
     "rx_iip2.iip2_dbm": {
+        "plane": "rx",
         "unit": "dBm",
         "meaning": "receive IIP2 after trim (mixer even-order null)",
         "better": "larger",
@@ -143,6 +158,7 @@ RESIDUAL_SPEC: dict[str, dict[str, str]] = {
                  "this reason.",
     },
     "loopback_delay.delay_ns": {
+        "plane": "loopback",
         "unit": "ns",
         "meaning": "measured loopback path delay, used to align "
                    "calibration captures",
@@ -152,6 +168,7 @@ RESIDUAL_SPEC: dict[str, dict[str, str]] = {
                  "compensated inside every measurement in this file.",
     },
     "tx_iq.irr_min_db": {
+        "plane": "tx",
         "unit": "dB",
         "meaning": "TX image rejection after the frequency-dependent "
                    "correction, worst tone across the occupied band",
@@ -163,6 +180,7 @@ RESIDUAL_SPEC: dict[str, dict[str, str]] = {
                  "worst point, so a flat figure is conservative.",
     },
     "rx_iq.irr_min_db": {
+        "plane": "rx",
         "unit": "dB",
         "meaning": "RX image rejection after the frequency-dependent "
                    "correction, worst tone, at the calibrated AGC state",
@@ -172,6 +190,7 @@ RESIDUAL_SPEC: dict[str, dict[str, str]] = {
                  "the channel rather than before it.",
     },
     "group_delay.estimated_ps": {
+        "plane": "tx",
         "unit": "ps",
         "meaning": "the I/Q rail group-delay mismatch the estimator "
                    "measured and the wideband w2 FIR absorbed",
@@ -181,6 +200,7 @@ RESIDUAL_SPEC: dict[str, dict[str, str]] = {
                  "this; what it missed is error_ps, the entry below.",
     },
     "group_delay.error_ps": {
+        "plane": "tx",
         "unit": "ps",
         "meaning": "residual I/Q rail group-delay estimate error (the "
                    "wideband w2 FIR absorbs the mismatch itself; this is "
@@ -192,6 +212,7 @@ RESIDUAL_SPEC: dict[str, dict[str, str]] = {
                  "worst-case reading of an unsigned residual.",
     },
     "dpd.evm_db": {
+        "plane": "tx",
         "unit": "dB",
         "meaning": "PA-output EVM after predistortion at the calibration "
                    "drive level — the in-band distortion the amplifier "
@@ -207,6 +228,7 @@ RESIDUAL_SPEC: dict[str, dict[str, str]] = {
                  "before using it far from that operating point.",
     },
     "dpd.aclr_worst_dbc": {
+        "plane": "tx",
         "unit": "dBc",
         "meaning": "worst adjacent-channel leakage ratio after DPD",
         "better": "more negative",
@@ -215,6 +237,7 @@ RESIDUAL_SPEC: dict[str, dict[str, str]] = {
                  "not by an in-band EVM replay.",
     },
     "agc_sweep.worst_landing_err_db": {
+        "plane": "rx",
         "unit": "dB",
         "meaning": "worst ADC landing-level error across the AGC ladder "
                    "sweep",
@@ -224,6 +247,7 @@ RESIDUAL_SPEC: dict[str, dict[str, str]] = {
                  "is already inside every receive-side figure.",
     },
     "agc_sweep.min_snr_db_above_-50dBm": {
+        "plane": "rx",
         "unit": "dB",
         "meaning": "minimum post-chain SNR over inputs above -50 dBm "
                    "during the AGC verification sweep",
@@ -233,6 +257,7 @@ RESIDUAL_SPEC: dict[str, dict[str, str]] = {
                  "sweep, not a single operating point.",
     },
     "final_loopback_evm.evm_db": {
+        "plane": "loopback",
         "unit": "dB",
         "meaning": "composite TX+RX loopback EVM, shared LO (phase noise "
                    "cancels in this view)",
@@ -242,6 +267,7 @@ RESIDUAL_SPEC: dict[str, dict[str, str]] = {
                  "any closure check pass by construction.",
     },
     "final_loopback_evm.tx_evm_db": {
+        "plane": "tx",
         "unit": "dB",
         "meaning": "PA-output EVM at the 802.11be TX measurement point "
                    "(per-tone EQ + CPE removal) — the closure target the "
@@ -252,6 +278,7 @@ RESIDUAL_SPEC: dict[str, dict[str, str]] = {
                  "impairment entries are supposed to explain.",
     },
     "final_loopback_evm.rx_evm_db": {
+        "plane": "rx",
         "unit": "dB",
         "meaning": "ideal waveform through the impaired RX at the "
                    "loopback's coupled level, independent LO (phase "
@@ -259,6 +286,75 @@ RESIDUAL_SPEC: dict[str, dict[str, str]] = {
         "better": "more negative",
         "role": "total",
         "apply": "never inject — measured whole of the receive view.",
+    },
+    "final_loopback_evm.rx_input_dbm": {
+        "plane": "rx",
+        "unit": "dBm",
+        "meaning": "the RF input level rx_evm_db (and the two figures "
+                   "below) were measured at — the level the loopback "
+                   "path actually delivers",
+        "better": "n/a — an operating point, not a defect",
+        "role": "condition",
+        "apply": "not injected itself; the noise recipe below converts "
+                 "through it. Receive figures far from this level need "
+                 "a re-measurement, not a scaling.",
+    },
+    "final_loopback_evm.rx_gain_state": {
+        "plane": "rx",
+        "unit": "index",
+        "meaning": "the AGC gain state that level lands on — the "
+                   "receive figures are properties of this state, not "
+                   "of the die",
+        "better": "n/a",
+        "role": "condition",
+        "apply": "not injected; it names which state the NF and phase "
+                 "figures describe.",
+    },
+    "final_loopback_evm.rx_nf_db": {
+        "plane": "rx",
+        "unit": "dB",
+        "meaning": "effective noise figure at that state, measured "
+                   "idle-channel through the whole chain (LNA to "
+                   "digital out) — absorbs thermal, quantization and "
+                   "correction residue, which is why it is the number "
+                   "to replay rather than the ladder's Friis entry",
+        "better": "smaller",
+        "role": "impairment",
+        "apply": "add complex AWGN at SNR = rx_input_dbm - (-174 + "
+                 "rx_nf_db + 10log10(BW)) dB relative to signal power.",
+    },
+    "final_loopback_evm.rx_im3_dbc": {
+        "plane": "rx",
+        "unit": "dBc",
+        "meaning": "two-tone third-order product at that state and "
+                   "total level, per tone, worst of 2f1-f2 / 2f2-f1 — "
+                   "the receive view's in-band distortion, the term "
+                   "whose absence the replay closure exposed",
+        "better": "more negative",
+        "role": "impairment",
+        "apply": "apply the memoryless cubic y + c*y*|y|^2 with "
+                 "c = (8/3) * 10^(rx_im3_dbc/20) on the unit-power "
+                 "waveform: c is chosen so two equal tones at the same "
+                 "total power reproduce the measured ratio, and the "
+                 "OFDM statistics do the rest. Valid near "
+                 "rx_input_dbm; distortion scales 2 dB per dB of "
+                 "drive, so far from that level re-measure.",
+    },
+    "final_loopback_evm.rx_phase_err_dbc": {
+        "plane": "rx",
+        "unit": "dBc",
+        "meaning": "integrated post-tracking phase error at that state "
+                   "and level: what the angle costs after per-symbol "
+                   "common-phase and frequency tracking. Not pure LO "
+                   "phase noise — whatever the delivered state puts in "
+                   "the angle (residual per-state IQ, spurs) is "
+                   "included, deliberately",
+        "better": "more negative",
+        "role": "impairment",
+        "apply": "multiply by exp(j*phi), phi zero-mean Gaussian with "
+                 "variance 10^(dBc/10). The spectral shape is not "
+                 "shipped; a consumer needing the profile takes it "
+                 "from circuit data, not from this figure.",
     },
 }
 

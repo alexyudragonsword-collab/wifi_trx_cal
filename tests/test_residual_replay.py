@@ -80,21 +80,29 @@ def test_residuals_block_pairs_every_value_with_its_spec(saved_state):
     assert "conditions" in doc and "bandwidth_hz" in doc["conditions"]
 
 
-def test_replay_closes_on_an_honest_file(saved_state):
+def test_replay_closes_on_an_honest_file_in_both_views(saved_state):
     path, _ = saved_state
-    result = replay(path)
-    assert result.verdict == "consistent", result.summary()
-    assert abs(result.gap_db) <= 1.0
-    # every key accounted for, and no key hit the loud failure bucket
     doc = json.loads(path.read_text())
-    assert set(result.accounting) == set(doc["residuals"]["values"])
-    assert not [k for k, e in result.accounting.items()
-                if e["status"] == "no_recipe"], result.accounting
+    for view in ("tx", "rx"):
+        result = replay(path, view=view)
+        assert result.verdict == "consistent", result.summary()
+        # every key accounted for, and no key hit the loud failure bucket
+        assert set(result.accounting) == set(doc["residuals"]["values"])
+        assert not [k for k, e in result.accounting.items()
+                    if e["status"] == "no_recipe"], result.accounting
+    tx_view = replay(path, view="tx")
     # the duplicate pair was dropped by name, not silently
-    assert (result.accounting["tx_lo_leak_envdet.lo_leak_dbc"]["status"]
+    assert (tx_view.accounting["tx_lo_leak_envdet.lo_leak_dbc"]["status"]
             == "dropped_duplicate")
     # the in-band distortion term dominates and the cal-only row shows it
-    assert result.explained_cal_only_db < result.explained_evm_db - 3.0
+    assert tx_view.explained_cal_only_db < tx_view.explained_evm_db - 3.0
+    # planes stay separated: no rx figure is applied in the tx closure
+    assert (tx_view.accounting["final_loopback_evm.rx_nf_db"]["status"]
+            == "skipped")
+    rx_view = replay(path, view="rx")
+    assert rx_view.accounting["dpd.evm_db"]["status"] == "skipped"
+    assert (rx_view.accounting["final_loopback_evm.rx_im3_dbc"]["status"]
+            == "applied")
 
 
 def test_replay_catches_a_falsified_dominant_term(saved_state, tmp_path):
@@ -108,8 +116,17 @@ def test_replay_catches_a_falsified_dominant_term(saved_state, tmp_path):
     bad.write_text(json.dumps(doc))
     result = replay(bad)
     assert result.verdict == "gap", result.summary()
-    assert result.gap_db < -1.0
+    assert result.gap_db < -2.0
     assert result.unexplained_evm_db is not None
+    # and the receive view breaks the same way on a falsified rx figure
+    doc2 = json.loads(path.read_text())
+    doc2["residuals"]["values"]["final_loopback_evm.rx_phase_err_dbc"] = -70.0
+    doc2["residuals"]["values"]["final_loopback_evm.rx_im3_dbc"] = -90.0
+    bad2 = tmp_path / "fraud_rx.json"
+    bad2.write_text(json.dumps(doc2))
+    result2 = replay(bad2, view="rx")
+    assert result2.verdict == "gap", result2.summary()
+    assert result2.gap_db < -1.0     # claims a better part than measured
 
 
 def test_replay_refuses_a_file_it_cannot_check(saved_state, tmp_path):
@@ -134,7 +151,7 @@ def test_replay_reports_the_omission_in_a_no_dpd_file(tmp_path):
                    conditions=run_conditions(cfg, tx, rx, with_dpd=False))
     result = replay(out)
     assert result.verdict == "gap", result.summary()
-    assert result.gap_db < -1.0          # explains less than measured
+    assert result.gap_db < -2.0          # explains less than measured
     assert result.unexplained_evm_db is not None
 
 

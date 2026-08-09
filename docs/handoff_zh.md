@@ -82,5 +82,6 @@ replay 把 `residuals` 里的每个数按其内嵌 `apply` 配方字面注入干
 会给出不存在的余量,先来找我们对表,不要往下游传。
 
 往你们仿真里注入残差时**只用 `role: impairment` 的键**,并按 `apply` 文本
-的公式来;`duplicates` 里的成对键至多施加其一(取后者);`total` 类是实测
+的公式来;搭 TX 链路仿真用 `plane: tx` 的键,搭 RX 链路仿真用 `plane: rx`
+的键(实测 NF、跟踪后相位误差、双音 IM3 都在,连同它们的测量电平与档位);`duplicates` 里的成对键至多施加其一(取后者);`total` 类是实测
 整体,回注一次就是重复计数。JSON 旁的 README.md 由数据自生成,可当速查表。

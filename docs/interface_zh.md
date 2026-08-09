@@ -125,8 +125,11 @@ spec 为准——旧文件按其校准当时的规格判定,而不是按本库�
 同理只和文件自身对拍(值缺说明 = error,说明缺值 = warning)。
 
 **Replay 对拍**:`python -m wifitrx.handoff replay cal_state.json`(需
-numpy)。把 `residuals` 逐项按其 `apply` 配方字面注入干净波形,与文件自己的
-`final_loopback_evm.tx_evm_db` 闭合,输出三个数:**解释 / 实测 / 未解释**。
+numpy)。把 `residuals` 逐项按其 `apply` 配方字面注入干净波形,**双视图**闭合:
+TX 视图只施加 `plane: tx` 的键、闭合到 `tx_evm_db`;RX 视图施加 `plane: rx`
+的键(含实测 NF / 跟踪后相位误差 / 双音 IM3)、闭合到 `rx_evm_db`。每个视图
+输出三个数:**解释 / 实测 / 未解释**。容差带由 10-seed 扫描实测确定;RX 带
+正侧展宽 +2.5 dB,公开携带一个已知遗漏项(调制下失真,B13 排期)。
 闭合和不闭合都是结论:少了 DPD 残差项的文件必然报 gap——这正是逐项评审
 抓不到的"遗漏"类缺陷。闭合项里没有任何由实测反解的兜底量(有则闭合是
 恒等式,篡改也过);每个键的去向(applied / skipped 带原因 /

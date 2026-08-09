@@ -341,8 +341,18 @@ def run_full_cal(tx: TxChain, rx: RxChain, cfg: OFDMConfig,
     snap_tx = tx_snapshot(tx, cfg, drive_scale=final_drive_scale)
     # RX-direction EVM at the level the loopback actually delivers, so
     # the three views (loopback / TX / RX) share one operating point
-    snap_rx = rx_snapshot(rx, cfg,
-                          power_dbm(snap_after["pa_out"]) - path.atten_db)
+    p_rx_dbm = power_dbm(snap_after["pa_out"]) - path.atten_db
+    snap_rx = rx_snapshot(rx, cfg, p_rx_dbm)
+    # The receive-side deliverable figures, measured at that same
+    # operating point: effective NF (idle channel through the whole
+    # chain) and post-tracking phase error.  Without them the residual
+    # surface is transmit-heavy and the receive view's dominant error
+    # sources travel nowhere.
+    from .rx_figures import (measure_rx_im3_dbc, measure_rx_nf_db,
+                             measure_rx_phase_err_dbc)
+    rx_nf_db = measure_rx_nf_db(rx, cfg, p_rx_dbm)
+    rx_phase_err_dbc = measure_rx_phase_err_dbc(rx, cfg, p_rx_dbm, rx_nf_db)
+    rx_im3_dbc = measure_rx_im3_dbc(rx, cfg, p_rx_dbm)
     total_samples = sum(r.cost.get("samples", 0) for r in results)
     total_captures = sum(r.cost.get("captures", 0) for r in results)
     _emit(CalResult(
@@ -351,6 +361,11 @@ def run_full_cal(tx: TxChain, rx: RxChain, cfg: OFDMConfig,
         metrics_after={"evm_db": evm_after,
                        "tx_evm_db": snap_tx["evm_db"],
                        "rx_evm_db": snap_rx["evm_db"],
+                       "rx_input_dbm": p_rx_dbm,
+                       "rx_gain_state": rx.lna_idx,
+                       "rx_nf_db": rx_nf_db,
+                       "rx_phase_err_dbc": rx_phase_err_dbc,
+                       "rx_im3_dbc": rx_im3_dbc,
                        "capture_time_ms": total_samples / tx.fs * 1e3,
                        "total_captures": total_captures},
         passed=evm_after < evm_before,
