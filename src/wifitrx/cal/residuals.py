@@ -333,11 +333,16 @@ RESIDUAL_SPEC: dict[str, dict[str, str]] = {
         "better": "more negative",
         "role": "impairment",
         "apply": "apply the memoryless cubic y + c*y*|y|^2 with "
-                 "c = (8/3) * 10^(rx_im3_dbc/20) on the unit-power "
-                 "waveform: c is chosen so two equal tones at the same "
-                 "total power reproduce the measured ratio, and the "
-                 "OFDM statistics do the rest. Valid near "
-                 "rx_input_dbm; distortion scales 2 dB per dB of "
+                 "c = 2 * 10^(rx_im3_dbc/20) on the unit-power "
+                 "COMPLEX-ENVELOPE waveform — that constant makes two "
+                 "equal tones at the same total power reproduce the "
+                 "measured ratio, and the OFDM statistics do the rest. "
+                 "State your simulator's convention: a real-passband "
+                 "cubic uses the classic 3/4 IM3 factor (c = 8/3 * "
+                 "10^(dBc/20)) instead, and mixing the two overstates "
+                 "the term by 2.5 dB. Apply oversampled and band-limit "
+                 "after (out-of-band products alias in at 1x). Valid "
+                 "near rx_input_dbm; distortion scales 2 dB per dB of "
                  "drive, so far from that level re-measure.",
     },
     "final_loopback_evm.rx_phase_err_dbc": {

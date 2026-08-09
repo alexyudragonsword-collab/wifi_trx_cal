@@ -48,18 +48,15 @@ from ..waveform.ofdm import OFDMConfig, generate_ofdm
 #: from a 10-seed sweep (40 MHz / 256-QAM, DPD on) rather than guessed.
 #: TX measured mean -0.45, std 0.51, absmax 1.17: the spread is the
 #: check's real resolution (the DPD term is measured at the cal drive
-#: and re-scored on a fresh waveform), so the band is symmetric +-2.0.
-#: RX measured mean +1.28, std 0.41 — a one-sided bias that is a KNOWN
-#: MISSING TERM, not noise: distortion under modulation (ADC clipping
-#: of OFDM peaks, nonlinearity on the Gaussian tails).  The NF
-#: instrument runs idle-channel and the IM3 instrument runs two tones
-#: at 3 dB PAPR, so neither can see what an 11 dB-PAPR waveform does.
-#: The band's positive side is widened to carry that documented bias
-#: instead of hiding it behind a solved term (the failure mode the
-#: whole harness exists to avoid); shipping the term shrinks the gap
-#: toward zero and stays in band.  Backlog B13 tracks the two-level
-#: separation measurement that would ship it.
-GAP_BAND_DB = {"tx": (-2.0, 2.0), "rx": (-1.0, 2.5)}
+#: and re-scored on a fresh waveform).  RX after the B13 coefficient
+#: fix measured mean +0.42, std 0.45, absmax 1.18 — the v0.5.0
+#: "systematic rx bias" of +1.28 dB was not a missing modulation-
+#: distortion term but the replay's own IM3 recipe overstating itself:
+#: the real-passband 3/4 IM3 factor was applied to a complex-envelope
+#: cubic (+2.5 dB in the term).  An isolation study (backlog B13)
+#: pinned every isolated source to within 0.7 dB of its shipped
+#: figure.  Both bands are symmetric; the sweep is the provenance.
+GAP_BAND_DB = {"tx": (-2.0, 2.0), "rx": (-2.0, 2.0)}
 
 #: Per-view closure target.  Everything with role="total" is refused as
 #: an input; these keys are what each view's sum is compared against.
@@ -114,13 +111,7 @@ class ReplayResult:
             lines.append(
                 f"unexplained residual       "
                 f"{self.unexplained_evm_db:8.2f} dB")
-        if self.view == "rx":
-            lines.append(
-                "note: the rx closure under-explains by +1.3 +-0.4 dB "
-                "across process seeds — modulation-induced distortion "
-                "(ADC clipping, nonlinearity on OFDM tails) has no "
-                "residual entry yet; the acceptance band carries the "
-                "bias openly instead of a solved term hiding it")
+
         lines.append("")
         lines.append("per-term (each applied alone):")
         for key, value in sorted(self.terms_db.items(),
@@ -223,7 +214,14 @@ def _injectors(cond: dict, values: dict) -> dict:
         # channel filter strips the out-of-band third-order products
         # before they can alias; applied at 1x the whole 2c^2 lands
         # in-band and the term overstates itself by ~2.5 dB.
-        c = (8.0 / 3.0) * 10.0 ** (float(dbc) / 20.0)
+        #
+        # The coefficient is the COMPLEX-ENVELOPE one: for y + c*y*|y|^2
+        # two equal tones give IM3/tone = c^2 * A^4 with unit
+        # combinatorial factor, so c = 2 * 10^(dBc/20).  The classic
+        # real-passband 3/4 factor (c = 8/3 * sqrt(r)) does not apply
+        # here — using it overstates the injected distortion by 2.5 dB,
+        # which was the whole "systematic rx bias" of v0.5.0.
+        c = 2.0 * 10.0 ** (float(dbc) / 20.0)
         n = y.size
         spec_lo = np.fft.fft(y)
         spec_hi = np.zeros(2 * n, dtype=complex)
