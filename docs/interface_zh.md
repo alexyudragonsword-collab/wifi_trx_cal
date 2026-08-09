@@ -160,7 +160,7 @@ FIR 以中心抽头为群时延参考(等效 `np.convolve(mode="same")`)。
 | `psat_dbm / pa_gain_db / pae_max` | dBm/dB/— | 28 / 26 / 0.35 | PA |
 | `RxParams.dc_offset` | sqrt(mW) | 逐档,先验幅度 0.02(高增益档)→0.002(末档) | 基带节点 DC(LO 自混频) |
 | `RxParams.lna_states` | — | **8 档**(增益 37→−5 dB、NF 3.5→34 dB、IIP3 −20→+12 dBm) | 增益/NF/IIP3/切换门限;门限按噪声-IM3 平衡解出,见 `chain/agc.py:rebalance_thresholds` |
-| `RxParams.baseband.noise_v_sqrthz / out_swing_vpp` | V/√Hz / Vpp | 6e-9 / 1.0(**默认关**) | 模拟基带(LPF+VGA+ADC 驱动):按电压噪声密度与输出摆幅描述,不用 NF/IIP3 |
+| `RxParams.baseband.noise_v_sqrthz / out_swing_vpp` | V/√Hz / Vpp | 6e-9 / 1.0(**默认关**;GUI 校准类分析可调 5–40 nV/√Hz,5 步进) | 模拟基带(LPF+VGA+ADC 驱动):按电压噪声密度与输出摆幅描述,不用 NF/IIP3 |
 | `RxParams.adc.bits / fullscale_dbm / jitter_ps_rms` | — | 11 / 2 / 0 | ADC |
 
 每个损伤块都有 `enabled` 开关;`params.injected()` 返回注入真值(校准算法

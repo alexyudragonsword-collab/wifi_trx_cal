@@ -13,14 +13,14 @@ from specs import ALL_ANALYSES  # noqa: E402
 FAST_PARAMS = {
     "full_cal": {"bw_mhz": 80, "qam": 256, "seed": 5, "with_dpd": False,
                  "std": "11ax/be", "rx_hp": False, "baseband": False,
-                 "agc_rebw": False},
+                 "agc_rebw": False, "bb_noise_nv": 5},
     "full_cal_steps": {"bw_mhz": 80, "qam": 256, "seed": 5,
                        "with_dpd": False, "std": "11ax/be",
                        "rx_hp": False, "baseband": False,
-                       "agc_rebw": False},
+                       "agc_rebw": False, "bb_noise_nv": 5},
     "rx_evm_sweep": {"bw_mhz": 80, "qam": 256, "seed": 5,
                      "std": "11ax/be", "rx_hp": False, "baseband": False,
-                     "agc_rebw": False},
+                     "agc_rebw": False, "bb_noise_nv": 5},
     "drift_tracking": {"bw_mhz": 80, "n_states": 3},
     "blocker_desense": {"bw_mhz": 160, "offset_mhz": 200.0,
                         "p_sig_dbm": -60.0},
@@ -177,3 +177,33 @@ def test_mainwindow_offscreen():
         win.combo.setCurrentIndex(i)
         assert win.widgets
     win.close()
+
+
+def test_bb_noise_knob_sweeps_the_stage_not_the_rf_ladder():
+    """The density knob sets the baseband stage; the RF-only front end
+    is de-embedded at the fixed 6 nV reference so it stays one part
+    across the sweep.  40 nV must therefore (a) not raise — a
+    same-density de-embed would — and (b) leave the underlying RF
+    ladder identical to the 5 nV run, with only the stage and the
+    re-solved thresholds differing."""
+    from specs import _cal_setup
+
+    base = {"bw_mhz": 80, "qam": 256, "seed": 5, "baseband": True}
+    _, _, rx5, _ = _cal_setup({**base, "bb_noise_nv": 5})
+    _, _, rx40, _ = _cal_setup({**base, "bb_noise_nv": 40})
+
+    assert rx5.params.baseband.noise_v_sqrthz == pytest.approx(5e-9)
+    assert rx40.params.baseband.noise_v_sqrthz == pytest.approx(40e-9)
+    # same RF-only part: gains/NF/IIP3 identical, only the hand-over
+    # thresholds move (they are re-solved with the stage's effective
+    # figures, which is the study)
+    for a, b in zip(rx5.params.lna_states, rx40.params.lna_states):
+        assert (a.gain_db, a.nf_db, a.iip3_dbm) == (b.gain_db, b.nf_db,
+                                                    b.iip3_dbm)
+    t5 = [s.max_input_dbm for s in rx5.params.lna_states[:-1]]
+    t40 = [s.max_input_dbm for s in rx40.params.lna_states[:-1]]
+    assert any(x != y for x, y in zip(t5, t40))
+    # a noisier baseband raises the effective NF, and the balance point
+    # t = (2*IIP3 + NF + const)/3 moves a third of that with it —
+    # thresholds rise, never fall
+    assert all(y >= x for x, y in zip(t5, t40))

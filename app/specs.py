@@ -238,16 +238,27 @@ def _cal_setup(p: dict):
     if p.get("baseband", False):
         # explicit analog baseband: an input-referred noise voltage and
         # an output swing, replacing the share of both that the ladder
-        # carries today — the states are de-embedded so the cascade
-        # total is unchanged and only the new physics (an output-referred
-        # ceiling) shows up
+        # carries today.  The noise density is a study knob
+        # (`bb_noise_nv`, 5..40 nV/sqrt(Hz)); the de-embed below always
+        # uses the 6 nV/sqrt(Hz) REFERENCE stage — the placeholder the
+        # official ladder was derived to be consistent with — so the
+        # RF-only front end stays one part across the sweep.  Sweeping
+        # the de-embed instead would quietly improve the RF ladder to
+        # keep the cascade totals constant, and "what if the baseband
+        # were noisier" would measure nothing.  Densities above
+        # ~11 nV/sqrt(Hz) therefore make the cascade genuinely worse
+        # than the official table (and would make a same-density
+        # de-embed raise): that IS the study.
         from wifitrx.chain.agc import vga_gain_db
         from wifitrx.impairments.baseband import BasebandStage
         from wifitrx.link.budget import (deembed_states, effective_iip3_dbm,
                                          effective_nf_db)
-        bb = BasebandStage(enabled=True)
+        bb = BasebandStage(
+            noise_v_sqrthz=float(p.get("bb_noise_nv", 5.0)) * 1e-9,
+            enabled=True)
         rx.params.baseband = bb
-        states = deembed_states(rx.params.lna_states, bb)
+        states = deembed_states(rx.params.lna_states,
+                                BasebandStage(enabled=True))
         # the ceiling is output-referred, so each state's effective IIP3
         # has to be read at the VGA the AGC actually lands on there —
         # evaluated at the state's own hand-over edge, its worst case
@@ -701,9 +712,18 @@ ALL_ANALYSES: tuple[AnalysisSpec, ...] = (
                               "thresholds sit ~4 dB high."),
             ParamSpec("baseband", "Explicit baseband stage", "bool", False,
                       tooltip="Model the LPF/VGA/ADC-driver separately "
-                              "(6 nV/sqrt(Hz) input-referred noise, 1.0 Vpp "
-                              "output swing); the ladder is de-embedded so "
-                              "the cascade total is unchanged"),
+                              "(input-referred noise from the density knob "
+                              "below, 1.0 Vpp output swing); the ladder is "
+                              "de-embedded at the 6 nV/sqrt(Hz) reference"),
+            ParamSpec("bb_noise_nv", "BB noise density [nV/sqrt(Hz)]",
+                      "choice", 5, choices=(5, 10, 15, 20, 25, 30, 35, 40),
+                      tooltip="Input-referred noise of the baseband stage, "
+                              "at the baseband node. Only read when the "
+                              "explicit baseband stage is on. The RF-only "
+                              "front end is held fixed (de-embedded at the "
+                              "6 nV reference), so above ~11 nV the cascade "
+                              "is genuinely worse than the official ladder "
+                              "— that is the study, not an error"),
             ParamSpec("seed", "Process seed", "int", 5, minimum=0),
             ParamSpec("with_dpd", "Run DPD", "bool", False),
         ),
@@ -735,9 +755,18 @@ ALL_ANALYSES: tuple[AnalysisSpec, ...] = (
                               "thresholds sit ~4 dB high."),
             ParamSpec("baseband", "Explicit baseband stage", "bool", False,
                       tooltip="Model the LPF/VGA/ADC-driver separately "
-                              "(6 nV/sqrt(Hz) input-referred noise, 1.0 Vpp "
-                              "output swing); the ladder is de-embedded so "
-                              "the cascade total is unchanged"),
+                              "(input-referred noise from the density knob "
+                              "below, 1.0 Vpp output swing); the ladder is "
+                              "de-embedded at the 6 nV/sqrt(Hz) reference"),
+            ParamSpec("bb_noise_nv", "BB noise density [nV/sqrt(Hz)]",
+                      "choice", 5, choices=(5, 10, 15, 20, 25, 30, 35, 40),
+                      tooltip="Input-referred noise of the baseband stage, "
+                              "at the baseband node. Only read when the "
+                              "explicit baseband stage is on. The RF-only "
+                              "front end is held fixed (de-embedded at the "
+                              "6 nV reference), so above ~11 nV the cascade "
+                              "is genuinely worse than the official ladder "
+                              "— that is the study, not an error"),
             ParamSpec("seed", "Process seed", "int", 5, minimum=0),
             ParamSpec("with_dpd", "Run DPD", "bool", False),
         ),
@@ -769,9 +798,18 @@ ALL_ANALYSES: tuple[AnalysisSpec, ...] = (
                               "thresholds sit ~4 dB high."),
             ParamSpec("baseband", "Explicit baseband stage", "bool", False,
                       tooltip="Model the LPF/VGA/ADC-driver separately "
-                              "(6 nV/sqrt(Hz) input-referred noise, 1.0 Vpp "
-                              "output swing); the ladder is de-embedded so "
-                              "the cascade total is unchanged"),
+                              "(input-referred noise from the density knob "
+                              "below, 1.0 Vpp output swing); the ladder is "
+                              "de-embedded at the 6 nV/sqrt(Hz) reference"),
+            ParamSpec("bb_noise_nv", "BB noise density [nV/sqrt(Hz)]",
+                      "choice", 5, choices=(5, 10, 15, 20, 25, 30, 35, 40),
+                      tooltip="Input-referred noise of the baseband stage, "
+                              "at the baseband node. Only read when the "
+                              "explicit baseband stage is on. The RF-only "
+                              "front end is held fixed (de-embedded at the "
+                              "6 nV reference), so above ~11 nV the cascade "
+                              "is genuinely worse than the official ladder "
+                              "— that is the study, not an error"),
             ParamSpec("seed", "Process seed", "int", 5, minimum=0),
         ),
         run=run_rx_evm_sweep),

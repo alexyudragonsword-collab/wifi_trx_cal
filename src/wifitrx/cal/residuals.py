@@ -394,6 +394,13 @@ def run_conditions(cfg, tx=None, rx=None, *, with_dpd: bool | None = None,
         cond["rx_lpf_order"] = int(rx.params.lpf.order)
         cond["rx_lpf_family"] = str(rx.params.lpf.family)
         cond["adc_backoff_db"] = float(rx.params.adc_backoff_db)
+        # the explicit baseband stage changes every receive figure, so a
+        # file measured with it on must say so — and with which numbers
+        if rx.params.baseband.enabled:
+            cond["bb_noise_v_sqrthz"] = float(
+                rx.params.baseband.noise_v_sqrthz)
+            cond["bb_out_swing_vpp"] = float(
+                rx.params.baseband.out_swing_vpp)
     if with_dpd is not None:
         cond["with_dpd"] = bool(with_dpd)
     if profile is not None:
