@@ -485,7 +485,7 @@ def run_rx_evm_sweep(p: dict) -> AnalysisResult:
     # thermal curve likewise splits: the baseband stage's own noise gets
     # its isolation reading (front-end thermal silenced with the
     # nf = -100 dB instrument state)
-    evm_im3_rf = evm_ceiling = evm_bb_noise = None
+    evm_im3_rf = evm_ceiling = evm_bb_noise = evm_fe_noise = None
     if p.get("baseband", False):
         from dataclasses import replace as _replace
         saved_states, saved_bb = rx.params.lna_states, rx.params.baseband
@@ -498,6 +498,8 @@ def run_rx_evm_sweep(p: dict) -> AnalysisResult:
         rx.params.lna_states = saved_states
         evm_bb_noise = list(_iso_sweep(rx, cfg, p_in, noise=True,
                                        fe_nf_db=-100.0))
+        evm_fe_noise = list(_iso_sweep(rx, cfg, p_in, noise=True,
+                                       bb_nv=1e-6))
 
     mcs_rows = sensitivity_study(rx, cfg, (7, 9, 11, 13))
 
@@ -518,6 +520,9 @@ def run_rx_evm_sweep(p: dict) -> AnalysisResult:
     ax.plot(p_in, _mask(evm_thermal), "s-", color="tab:blue", ms=3,
             label="thermal only (front-end + baseband)"
                   if evm_bb_noise is not None else "thermal only")
+    if evm_fe_noise is not None:
+        ax.plot(p_in, _mask(evm_fe_noise), "d--", color="steelblue", ms=3,
+                label="front-end thermal only (RF-only NF)")
     if evm_bb_noise is not None:
         ax.plot(p_in, _mask(evm_bb_noise), "^-", color="deepskyblue", ms=3,
                 label="baseband noise only (noise density)")
