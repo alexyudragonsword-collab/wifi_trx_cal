@@ -21,6 +21,8 @@ FAST_PARAMS = {
     "rx_evm_sweep": {"bw_mhz": 80, "qam": 256, "seed": 5,
                      "std": "11ax/be", "rx_hp": False, "baseband": False,
                      "agc_rebw": False, "bb_noise_nv": 5},
+    "bb_noise_sweep": {"bw_mhz": 80, "qam": 256, "seed": 5,
+                       "std": "11ax/be", "agc_rebw": True, "quick": True},
     "drift_tracking": {"bw_mhz": 80, "n_states": 3},
     "blocker_desense": {"bw_mhz": 160, "offset_mhz": 200.0,
                         "p_sig_dbm": -60.0},

@@ -574,6 +574,140 @@ def run_rx_evm_sweep(p: dict) -> AnalysisResult:
                                          cfg, tx, rx, with_dpd=False)})
 
 
+def _iso_sweep(rx, cfg, p_in, *, noise=False, nonlin=False, pn=False,
+               adc=False, bb_nv=None, fe_nf_db=None):
+    """EVM curve with only the named sources active (isolation method).
+
+    ``bb_nv`` overrides the baseband density (1e-6 nV silences it);
+    ``fe_nf_db`` overrides every state's NF (-100 silences the
+    front-end thermal).  Both are instrument states — impossible parts
+    a study is allowed to build — and everything is restored after.
+    IQ/DC/LPF stay on throughout: their corrections are subtractive,
+    and what remains with everything switchable off is the isolation
+    floor that bounds every curve from below.
+    """
+    from dataclasses import replace as _replace
+
+    from wifitrx.link.sensitivity import measured_rx_evm_db
+    pr = rx.params
+    saved = (rx.noise_enabled, pr.nonlin_enabled, pr.lo.enabled,
+             pr.adc.enabled, pr.baseband, pr.lna_states)
+    rx.noise_enabled, pr.nonlin_enabled = noise, nonlin
+    pr.lo.enabled, pr.adc.enabled = pn, adc
+    if bb_nv is not None:
+        pr.baseband = _replace(pr.baseband, noise_v_sqrthz=bb_nv * 1e-9)
+    if fe_nf_db is not None:
+        pr.lna_states = tuple(_replace(s, nf_db=fe_nf_db)
+                              for s in pr.lna_states)
+    out = np.array([measured_rx_evm_db(rx, cfg, float(pi)) for pi in p_in])
+    (rx.noise_enabled, pr.nonlin_enabled, pr.lo.enabled,
+     pr.adc.enabled, pr.baseband, pr.lna_states) = saved
+    return out
+
+
+def run_bb_noise_sweep(p: dict) -> AnalysisResult:
+    """Baseband-noise density sweep: one RX EVM page per density.
+
+    Per density: a fast calibration (thresholds re-solved for that
+    density's effective NF/IIP3 — `agc_rebw` picks the anchor), then
+    five isolation curves and the baseband-noise share of the total
+    EVM.  The share strip masks the region where the baseband-only
+    reading sits within 3 dB of the isolation floor: there the curve is
+    the floor (IQ/DC residue + LPF ISI), and attributing it to the
+    baseband would repeat the mistake the floor line exists to expose —
+    at 20 MHz / 11ac/n the floor (~-46 dB) owns everything below
+    ~25 nV.
+    """
+    from wifitrx.cal.sequence import run_full_cal
+
+    densities = (5, 40) if p.get("quick", False) else (5, 10, 15, 20,
+                                                       25, 30, 35, 40)
+    p_in = np.arange(-92.0, -11.0, 8.0 if p.get("quick", False) else 4.0)
+
+    pages = []
+    metrics: dict = {}
+    lines = []
+    for nv in densities:
+        cfg, tx, rx, path = _cal_setup({**p, "baseband": True,
+                                        "bb_noise_nv": nv})
+        run_full_cal(tx, rx, cfg, path, with_dpd=False)
+
+        evm_full = _iso_sweep(rx, cfg, p_in, noise=True, nonlin=True,
+                              pn=True, adc=True)
+        evm_thermal = _iso_sweep(rx, cfg, p_in, noise=True)
+        evm_fe = _iso_sweep(rx, cfg, p_in, noise=True, bb_nv=1e-6)
+        evm_bb = _iso_sweep(rx, cfg, p_in, noise=True, fe_nf_db=-100.0)
+        evm_floor = _iso_sweep(rx, cfg, p_in)
+
+        share = np.clip(100.0 * 10.0 ** (evm_bb / 10.0)
+                        / 10.0 ** (evm_full / 10.0), 0.0, 100.0)
+        floor_dom = evm_bb < evm_floor + 3.0
+
+        fig = new_figure(figsize=(9.2, 7.2))
+        gs = fig.add_gridspec(2, 1, height_ratios=(3, 1), hspace=0.07)
+        ax = fig.add_subplot(gs[0])
+        axs = fig.add_subplot(gs[1], sharex=ax)
+        ax.plot(p_in, evm_full, "s-", ms=3.5, color="tab:orange",
+                label="calibrated, all impairments")
+        ax.plot(p_in, evm_thermal, "o-", ms=3, color="tab:blue",
+                label="thermal only (front-end + baseband)")
+        ax.plot(p_in, evm_fe, "^--", ms=3, color="tab:cyan",
+                label="front-end thermal only")
+        ax.plot(p_in, evm_bb, "v-", ms=3, color="tab:red",
+                label="baseband noise only")
+        ax.plot(p_in, evm_floor, ":", lw=1.2, color="gray",
+                label="isolation floor (all off)")
+        for i, s in enumerate(rx.params.lna_states[:-1]):
+            if p_in[0] <= s.max_input_dbm <= p_in[-1]:
+                ax.axvline(s.max_input_dbm, ls="-.", lw=0.7,
+                           color="tab:purple", alpha=0.6)
+                ax.annotate(f"{i}→{i + 1}", (s.max_input_dbm, 2.5),
+                            fontsize=6, rotation=90, ha="right",
+                            va="top", color="tab:purple")
+        ax.set_ylabel("EVM [dB]")
+        ax.set_ylim(-62, 5)
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=8, loc="upper center")
+        ax.tick_params(labelbottom=False)
+        ax.set_title(
+            f"RX EVM vs input power — baseband noise "
+            f"{nv} nV/√Hz\n{p['bw_mhz']} MHz / {p['qam']}-QAM "
+            f"({p.get('std', '11ax/be')}), thresholds re-solved for "
+            "this density (isolation curves: only that source active; "
+            "not power-additive)", fontsize=10)
+
+        ok = ~floor_dom
+        axs.plot(p_in[ok], share[ok], "d-", ms=3, color="tab:red")
+        axs.plot(p_in[floor_dom], share[floor_dom], "d", ms=3,
+                 mfc="none", color="gray")
+        if floor_dom.any():
+            axs.annotate("open gray = floor-dominated,\nnot "
+                         "attributable to bb noise", (0.99, 0.92),
+                         xycoords="axes fraction", fontsize=6.5,
+                         ha="right", va="top", color="gray")
+        axs.set_ylabel("BB noise share\nof total EVM [%]", fontsize=8)
+        axs.set_xlabel("RF input [dBm]")
+        axs.set_ylim(0, 100)
+        axs.grid(True, alpha=0.3)
+
+        pages.append((f"{nv} nV/√Hz", fig))
+        metrics[f"floor_db_{nv}nv"] = round(float(evm_full.min()), 2)
+        peak = float(share[ok].max()) if ok.any() else float("nan")
+        metrics[f"bb_share_pct_{nv}nv"] = round(peak, 1)
+        lines.append(f"{nv:2d} nV: calibrated floor "
+                     f"{evm_full.min():6.2f} dB, peak attributable "
+                     f"share {peak:5.1f}%, t0 "
+                     f"{rx.params.lna_states[0].max_input_dbm:.1f} dBm")
+
+    text = ("Isolation curves are direct readings with only the named "
+            "source active; they are not power-additive.  The share is "
+            "the baseband-only power over the full-chain power, masked "
+            "where the isolation floor owns the reading.\n\n"
+            + "\n".join(lines))
+    return AnalysisResult(metrics=metrics, figure=pages[0][1],
+                          figures=tuple(pages), text=text)
+
+
 def run_drift_tracking(p: dict) -> AnalysisResult:
     from wifitrx.cal.dpd_tracking import track_dpd
     from wifitrx.chain import RxChain, RxParams, TxChain, TxParams
@@ -813,6 +947,33 @@ ALL_ANALYSES: tuple[AnalysisSpec, ...] = (
             ParamSpec("seed", "Process seed", "int", 5, minimum=0),
         ),
         run=run_rx_evm_sweep),
+    AnalysisSpec(
+        key="bb_noise_sweep", title="Baseband noise sweep (RX EVM)",
+        description="One RX-EVM-vs-input-power page per baseband noise "
+                    "density (5..40 nV/sqrt(Hz)): thresholds re-solved "
+                    "per density, five isolation curves, and the "
+                    "baseband share of the total EVM with the "
+                    "floor-dominated region masked",
+        params=(
+            ParamSpec("bw_mhz", "Bandwidth [MHz]", "choice", 80,
+                      choices=(20, 40, 80, 160, 320)),
+            ParamSpec("qam", "QAM order", "choice", 256,
+                      choices=(64, 256, 1024, 4096)),
+            ParamSpec("std", "Standard", "choice", "11ax/be",
+                      choices=("11ax/be", "11ac/n")),
+            ParamSpec("seed", "Process seed", "int", 5, minimum=0),
+            ParamSpec("agc_rebw", "AGC thresholds at run BW", "bool", True,
+                      tooltip="On (default here): each density's "
+                              "thresholds are solved at this run's "
+                              "bandwidth — the study asks what an "
+                              "optimized AGC does with a noisier "
+                              "baseband. Off: 320 MHz factory anchor"),
+            ParamSpec("quick", "Endpoints only (quick)", "bool", False,
+                      tooltip="Run 5 and 40 nV only, with a coarser "
+                              "power grid — a preview/CI profile; the "
+                              "full study is 8 pages"),
+        ),
+        run=run_bb_noise_sweep),
     AnalysisSpec(
         key="drift_tracking", title="PA drift tracking DPD",
         description="RLS DPD vs frozen DPD over a thermal ramp",
