@@ -29,7 +29,8 @@ except ImportError as exc:  # pragma: no cover - environment-dependent
         "the library, CLI and the stdlib-only cal-state inspector all work "
         "without it") from exc
 
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+from matplotlib.backends.backend_qtagg import (FigureCanvasQTAgg,
+                                               NavigationToolbar2QT)
 from PySide6.QtGui import QIcon
 
 from inspector_page import InspectorPage
@@ -144,6 +145,7 @@ class MainWindow(QMainWindow):
         self.canvas_holder = QVBoxLayout()
         rv.addLayout(self.canvas_holder, 3)
         self.canvas: FigureCanvasQTAgg | None = None
+        self.toolbar: NavigationToolbar2QT | None = None
         self._pages: list = []
 
         split = QSplitter()
@@ -227,12 +229,18 @@ class MainWindow(QMainWindow):
         self._show_page(last)
 
     def _show_page(self, idx: int) -> None:
-        if self.canvas is not None:
-            self.canvas_holder.removeWidget(self.canvas)
-            self.canvas.deleteLater()
-            self.canvas = None
+        for w in (self.toolbar, self.canvas):
+            if w is not None:
+                self.canvas_holder.removeWidget(w)
+                w.deleteLater()
+        self.toolbar = None
+        self.canvas = None
         if 0 <= idx < len(self._pages):
+            # a live canvas + navigation toolbar, so results can be
+            # zoomed/panned and re-saved instead of read as a static image
             self.canvas = FigureCanvasQTAgg(self._pages[idx][1])
+            self.toolbar = NavigationToolbar2QT(self.canvas, self)
+            self.canvas_holder.addWidget(self.toolbar)
             self.canvas_holder.addWidget(self.canvas)
 
     def _on_failed(self, tb: str) -> None:
