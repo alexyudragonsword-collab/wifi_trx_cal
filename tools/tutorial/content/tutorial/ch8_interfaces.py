@@ -155,7 +155,10 @@ CHAPTER = Chapter(
                   "实测基带天花板在 1.0 Vpp 处交叉项占 48%,把它对 OIP3 的"
                   "斜率从解析值 −2.0 压到 −1.5 dB/dB。IQ/DC/LPF 在每条曲线里"
                   "都保持开启:它们的校正是减法型的,只关注入不关校正会引入"
-                  "等量反向误差,剩下的就是隔离底板。各条隔离曲线<b>不满足"
+                  "等量反向误差,剩下的就是隔离底板。开启基带段时,热噪声"
+                  "一条再拆成<b>仅前端热噪声</b>与<b>仅基带噪声</b>两条直读"
+                  "(以仪器态把另一个噪声源压死),任一输入功率下两个噪声源"
+                  "谁主导、差几个 dB 一眼可读。各条隔离曲线<b>不满足"
                   "功率相加</b>)、"
                   "基带噪声扫描(每个密度一页:门限按该密度重解的五条"
                   "隔离曲线 + 基带噪声占比,底板主导区打灰色掩码)、"
@@ -166,7 +169,9 @@ CHAPTER = Chapter(
                   "校准顺序表、依赖图与逐边理由表、AGC 档位表与损伤参数表——"
                   "全部由 <code>wifitrx.cal.reference</code> 与参数类现算,"
                   "与本文档同源;跑完一次校准后,顺序表的验收列与捕获成本表"
-                  "自动填入本次实测值。",
+                  "自动填入本次实测值。所有结果图都是活的 matplotlib 画布,"
+                  "每页带导航工具栏:框选放大、平移、复位、把当前视图另存为"
+                  "PNG/SVG/PDF。",
                   "<code>python app/main.py</code>, three tabs. "
                   "<b>Analyses</b>: seven analyses (forms generated from "
                   "declarative specs) — full calibration (result page = "
@@ -205,7 +210,12 @@ CHAPTER = Chapter(
                   "corrections are subtractive — removing the injection "
                   "while keeping the correction would inject an equal "
                   "and opposite error — and what remains is the "
-                  "isolation floor. Isolated curves are <b>not "
+                  "isolation floor. With the baseband stage on, the "
+                  "thermal curve further splits into <b>front-end-only</b> "
+                  "and <b>baseband-noise-only</b> direct readings (the "
+                  "other source silenced by an instrument state), so "
+                  "which noise source dominates at any input power reads "
+                  "off directly. Isolated curves are <b>not "
                   "power-additive</b>), the baseband-noise sweep (one page "
                   "per density: five isolation curves with "
                   "thresholds re-solved for that density, "
@@ -223,6 +233,9 @@ CHAPTER = Chapter(
                   "and the parameter classes, the same sources this "
                   "document uses; after a calibration run the order "
                   "table's acceptance column and the capture-cost table "
-                  "fill in with that run's own measurements)."),
+                  "fill in with that run's own measurements. Every result "
+                  "figure is a live matplotlib canvas with a navigation "
+                  "toolbar per page: rubber-band zoom, pan, reset, and "
+                  "saving the current view as PNG/SVG/PDF)."),
             )),
     ))
