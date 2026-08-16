@@ -4,6 +4,19 @@
 或 `wifitrx.*` 公开签名的条目都在下面显式标注,交付方按此判断是否需要
 重新取包。日期为落地日期。
 
+## 0.5.8 — 2026-08-16
+
+### 工程基础设施
+
+- **初始化 Project Cairn**(git_policy: track;知识库 provider 暂缓对接;
+  文档语言中文;历史处理 inventory_only):新增 `AGENTS.md`(规则与导航
+  入口)、`.cairn/config.yaml`(冻结配置)、`cairn/LOG.md`(编年日志,
+  含历史知识源清点)、`cairn/ROADMAP.md`(粗粒度镜像,待办权威仍是
+  `docs/backlog_zh.md`)。
+- 原 `CLAUDE.md` 的项目约定(语言/结构/计量学纪律/验证,17 条规则)
+  整体并入 `AGENTS.md`"项目约定"章(中文化);`CLAUDE.md` 改为一行
+  `@AGENTS.md` 桩,Claude Code 与 Codex 自此读同一套规则。
+
 ## 0.5.7 — 2026-08-15
 
 ### 文档
