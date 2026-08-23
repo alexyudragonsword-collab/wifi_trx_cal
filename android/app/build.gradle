@@ -37,9 +37,14 @@ chaquopy {
     defaultConfig {
         version "3.11"                // pinned: scipy/matplotlib wheels exist
         pip {
-            // Resolved against Chaquopy's Android wheel repository; the
-            // floors mirror pyproject.toml.  The first successful build
-            // logs the resolved versions — record them in android/README.md.
+            // Wheels only: without this, pip resolves scipy to the newest
+            // PyPI *sdist* (no Android wheel) and dies trying to compile
+            // it (run 32608953586: "meson executable not found").  With
+            // it, resolution lands on the newest version the Chaquopy
+            // Android wheel repository actually carries.  The floors
+            // mirror pyproject.toml; the first successful build logs the
+            // resolved versions — record them in android/README.md.
+            options "--only-binary", ":all:"
             install "numpy>=1.23"
             install "scipy>=1.9"
             install "matplotlib>=3.6"
