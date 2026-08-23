@@ -35,19 +35,28 @@ android {
 
 chaquopy {
     defaultConfig {
-        version "3.11"                // pinned: scipy/matplotlib wheels exist
+        // 3.8, not 3.11: probed by CI run 32612946416 — the Chaquopy
+        // wheel repository has NO scipy build for cp311 ("from versions:
+        // none"); its scientific stack is richest at 3.8, exactly as the
+        // configure-time warning says.  The whole source tree is 3.8-safe
+        // (audited: `from __future__ import annotations` everywhere that
+        // needs it, no match statements, no runtime generics, no 3.9+
+        // stdlib calls).
+        version "3.8"
         pip {
             // Wheels only: without this, pip resolves scipy to the newest
             // PyPI *sdist* (no Android wheel) and dies trying to compile
-            // it (run 32608953586: "meson executable not found").  With
-            // it, resolution lands on the newest version the Chaquopy
-            // Android wheel repository actually carries.  The floors
-            // mirror pyproject.toml; the first successful build logs the
-            // resolved versions — record them in android/README.md.
+            // it (run 32608953586: "meson executable not found").  Bare
+            // names, not the pyproject floors: cp38 Android wheels are
+            // older than the desktop floors — resolution lands on the
+            // newest wheel that exists, the build log reports which, and
+            // the on-device golden test is what proves the physics still
+            // matches the desktop.  Record resolved versions in
+            // android/README.md.
             options "--only-binary", ":all:"
-            install "numpy>=1.23"
-            install "scipy>=1.9"
-            install "matplotlib>=3.6"
+            install "numpy"
+            install "scipy"
+            install "matplotlib"
         }
     }
     sourceSets {
