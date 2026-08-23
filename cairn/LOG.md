@@ -2,6 +2,13 @@
 
 本文件按倒序记录实质性进展——最新条目在顶部、紧跟本行之下。每条尽量短——只写摘要与指针;结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-08-23 · R9:numpy 2.0 API 越界 + 守卫补齐 numpy 面(0.6.6)
+
+- Reference 表格侧 `np.trapezoid`(numpy 2.0 名)在端上 1.19.5 崩溃——与 correlation_lags 同类,而 0.6.2 的守卫只覆盖了 scipy,事故正落在没扫的另一半。
+- 修复:模块级 `getattr(np,"trapezoid",None) or np.trapz` 绑定;IPN −46.8 dBc 不变。
+- 守卫扩到 numpy(90 个名对照 1.19.5 清单),两个守卫均通过变异验证(放回越界调用当场判红)。
+- **教训**:跨版本兼容守卫必须覆盖"全部随包出货的依赖",按库补一半等于没补。279 测试通过。指针:`CHANGELOG.md` 0.6.6。
+
 ## 2026-08-23 · R8:Reference 资源缺失 + Inspector 内容不全(0.6.5)
 
 - 真机第三、四个现场报告:Reference 页 FileNotFoundError(assets 没进 APK,且 Chaquopy 平铺布局让 asset_path 的"上一级"失效);Inspector 只有 findings、缺 Qt 版的三张表。

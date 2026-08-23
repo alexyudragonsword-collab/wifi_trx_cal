@@ -4,6 +4,21 @@
 或 `wifitrx.*` 公开签名的条目都在下面显式标注,交付方按此判断是否需要
 重新取包。日期为落地日期。
 
+## 0.6.6 — 2026-08-23
+
+### Android:Reference 表格侧 numpy 2.0 API 越界
+
+- 0.6.5 修好 SVG 后 Reference 页停在表格侧:`integrate_pn` 用了
+  **`np.trapezoid`——numpy 2.0 才有的名字**(端上 1.19.5 只有 `np.trapz`)。
+  与 `correlation_lags` 同一类:桌面 numpy 2.x 下写法完全正常,只在手机上
+  炸。修复:模块级一次性绑定 `getattr(np, "trapezoid", None) or np.trapz`,
+  不在调用点做版本判断;IPN 读数不变(默认剖面 −46.8 dBc)。
+- **守卫补齐 numpy 面**:上次只扫了 scipy——本次事故正好落在没扫的那一半。
+  现扫描随 APK 出货的全部 Python 文件的 `np.*` 调用面(90 个名),对照
+  numpy 1.19.5 已核验清单;scipy 守卫同步重构共用文件清单。两个守卫都做了
+  变异验证:把 `np.trapezoid` 与 `sig.correlation_lags` 分别放回去,均被
+  当场判红(不是空跑)。279 测试通过。
+
 ## 0.6.5 — 2026-08-23
 
 ### Android:Reference 资源缺失 + Inspector 内容不全

@@ -17,6 +17,11 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+# numpy renamed trapz -> trapezoid in 2.0 and dropped the old name; the
+# Android wheel is numpy 1.19.5, which only has trapz.  One binding here
+# instead of a version test at every call site.
+_trapezoid = getattr(np, "trapezoid", None) or np.trapz
+
 TWOPI = 2.0 * np.pi
 
 
@@ -147,7 +152,7 @@ def integrate_pn(f: np.ndarray, s_phi: np.ndarray, f1: float = 1e3, f2: float = 
         fi, si = np.append(fi, f2), np.append(si, s2)
     if fi.size < 2:
         return 0.0
-    return float(np.trapezoid(si, fi))
+    return float(_trapezoid(si, fi))
 
 
 def ipn_dbc(f: np.ndarray, s_phi: np.ndarray, f1: float = 1e3, f2: float = 100e6) -> float:
