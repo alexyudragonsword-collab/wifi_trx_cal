@@ -72,6 +72,7 @@ CMOS WiFi 7(802.11be)直接变频收发器复基带行为模型 + 14 步校准�
 - `src/wifitrx/` 分层由 `tests/test_import_layering.py` 强制(AST 解析邻接表):`link` 可 import `chain`,反向禁止;`handoff/replay.py` 不得 import `wifitrx.chain` 或 `wifitrx.cal`——重放闭环证明的是交付残差解释交付 EVM,复用模型即失去意义。
 - `app/` 是 PySide6 工作台,声明式注册表在 `app/specs.py`。worker 线程分析代码绝不碰 pyplot;在裸 `matplotlib.figure.Figure` 上作图。结果画布配 `NavigationToolbar2QT`,翻页时随画布一起重建。
 - 新增 GUI 分析 = `app/specs.py` 一个 `AnalysisSpec` + `FAST_PARAMS` 一条对应记录(`tests/test_gui_specs.py` 断言参数集精确匹配——不得跳过)。
+- **本项目有两个前端(Qt 桌面 + Android),用户可见能力必须放进两端共用的数据层,不得只写进其中一个**:分析注册表 `app/specs.py`、检查器内容 `app/inspector_data.py`、参考页数据 `app/reference.py`、金标对拍 `bridge.self_check()`。各写各的必然漂移——Inspector 曾因此在 Android 上只显示 findings、缺三张表(0.6.5),Reference 表曾因此在 Android 上收不到检查器载入的文件(0.7.1)。
 - `fs` 由 `bandwidth × oversampling` 导出;绝不做成逐分析参数。
 
 ## 计量学纪律(违反即 bug,不是风格问题)
@@ -87,6 +88,11 @@ CMOS WiFi 7(802.11be)直接变频收发器复基带行为模型 + 14 步校准�
 
 - 提交前:`QT_QPA_PLATFORM=offscreen python -m pytest tests/ -q`(快速门禁 `scripts/ci_fast.sh`)与 `ruff check src/ app/ tests/ tools/ examples/`。
 - 教程/开发指南内容或其引用对象变化时重建:`QT_QPA_PLATFORM=offscreen MPLBACKEND=Agg python tools/build_docs.py --out docs/`,并提交重建的 HTML。
+- **任何更新都必须把 Qt 与 Android 两端各自验证完整,缺一不算完成**:
+  - Qt 侧:`QT_QPA_PLATFORM=offscreen python -m pytest tests/ -q` 覆盖 `test_gui_specs.py`(每个分析实跑 + 主窗口离屏构建)与 `test_gui_inspector.py`(检查器页 + decides-nothing 守卫);
+  - Android 侧:同一套桌面测试里的 `test_android_bridge.py`(桥契约、scipy/numpy 调用面守卫、`native.*`↔Kotlin↔bridge 跨层接线、两端检查器区块一致)**加上**重新 dispatch 金标 job 并核对日志测试条数;
+  - 只影响单端的改动同样要跑另一端——两端共用 `src/wifitrx/` 与 `app/` 数据层,"只改了 Android"往往不成立;
+  - 若某能力有意只存在于一端(如 Self-check、≥160 MHz 护栏、Save 的平台惯例差异),必须写进 `android/README.md` 的功能对照表并注明理由,否则视为漏做而非设计。
 - 改动随 APK 出货的代码(`src/wifitrx/`、`app/specs.py`、`app/reference.py`、`app/inspector_data.py`、`android/`)或新增端上测试后,必须重新 dispatch `android.yml` 的金标 job 并核对日志里的测试条数——**构建绿不等于端上物理对**,而没跑过的端上守卫等于没有守卫(两次事故的教训:scipy/numpy 跨版本 API,以及守卫自身未验证)。
 - 每个值得发布的变更配 `CHANGELOG.md` 条目(schema 或公开签名变化显式标注)+ `pyproject.toml` 与 `src/wifitrx/__init__.py` 版本号。
 - 决策与被推翻的假设记入 `docs/backlog_zh.md`——错误的转弯也要记,不只记修正。

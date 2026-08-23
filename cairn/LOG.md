@@ -2,6 +2,13 @@
 
 本文件按倒序记录实质性进展——最新条目在顶部、紧跟本行之下。每条尽量短——只写摘要与指针;结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-08-23 · 规则:任何更新都要两端(Qt + Android)完整验证
+
+- 用户要求立规。写入 `AGENTS.md`:**验证章**新增"两端各自验证完整,缺一不算完成",逐条列明各自的门禁(Qt: gui_specs + gui_inspector;Android: android_bridge 四类守卫 + 重跑金标并核对测试条数),并声明"只改了单端"通常不成立(两端共用 `src/wifitrx/` 与 `app/` 数据层)。
+- 配套写入**结构章**:用户可见能力必须放进两端共用数据层(`specs.py` / `inspector_data.py` / `reference.py` / `bridge.self_check()`),不得只写进一端——附 0.6.5(Inspector 缺三张表)与 0.7.1(Reference 收不到检查器载入的文件)两次实际漂移作依据。
+- 有意的单端差异必须进 `android/README.md` 对照表并注明理由,否则按漏做处理。
+- 纯规则/文档改动,不升版本号、不触发金标重跑。
+
 ## 2026-08-23 · R11:Android 与 Qt 功能逐项核对并补差(0.7.1)
 
 - 暂停 Android 线前做全面对照,查出**两个真缺陷**:① Inspector 载入的文件不喂 Reference 表(Qt 有 `loaded` 信号通路)——收包方场景下表是空的;② Reference 页一次性缓存,先看再跑就永远旧。
