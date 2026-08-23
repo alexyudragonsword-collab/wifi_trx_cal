@@ -2,6 +2,12 @@
 
 本文件按倒序记录实质性进展——最新条目在顶部、紧跟本行之下。每条尽量短——只写摘要与指针;结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-08-23 · R7 途中:真机第二报告——结果图空白修复(0.6.3)
+
+- 根因:`app.js` 的 `showPage()` 在 `#a-out` 仍 hidden 时排版,容器 clientWidth=0 → SVG 零宽,图永远空白(metrics/文本正常)。
+- 修复:先 unhide 再排版 + 视口宽度兜底;单页结果保留 Reset 按钮。`node --check` 过;金标对拍 run 同时在跑。
+- 指针:`CHANGELOG.md` 0.6.3。
+
 ## 2026-08-23 · R6:真机首跑崩溃修复 + scipy 调用面守卫(0.6.2)
 
 - 用户真机 full_cal 触发 `correlation_lags` AttributeError——0.6.1 标注的"端上 scipy 1.4.1 低于桌面下限"风险首次兑现,离预言到兑现不到一天。

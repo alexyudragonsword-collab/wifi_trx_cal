@@ -156,8 +156,12 @@ const ui = {
       o.value = i; o.textContent = p.title; sel.appendChild(o);
     });
     sel.onchange = () => showPage(pages[sel.value]);
-    sel.parentElement.style.display = pages.length > 1 ? "flex" : "none";
+    sel.style.display = pages.length > 1 ? "" : "none";
+    // unhide BEFORE laying out the SVG: showPage sizes the figure to
+    // the container's clientWidth, which is 0 while #a-out is hidden —
+    // the "analysis ran but no figure appears" bug on the first device
     if (pages.length) {                 // land on the last page (summary)
+      $("a-out").hidden = false;
       sel.value = pages.length - 1;
       showPage(pages[pages.length - 1]);
     }
@@ -189,11 +193,12 @@ function showPage(page) {
   $("fig-inner").innerHTML = page.svg;
   const svg = $("fig-inner").querySelector("svg");
   if (svg) {                     // scale to container width, keep vector
-    const w = $("fig").clientWidth;
-    const nat = svg.viewBox.baseVal.width || svg.width.baseVal.value;
+    // clientWidth can still be 0 in edge cases (mid-layout, rotation):
+    // fall back to the viewport so the figure is never sized to nothing
+    const w = $("fig").clientWidth ||
+        (document.documentElement.clientWidth - 18);
     svg.style.width = w + "px"; svg.style.height = "auto";
     svg.removeAttribute("height");
-    void nat;
   }
   resetView();
 }

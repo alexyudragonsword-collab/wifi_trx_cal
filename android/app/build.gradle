@@ -13,7 +13,7 @@ android {
         minSdk 24
         targetSdk 34
         versionCode 1
-        versionName "0.6.2"
+        versionName "0.6.3"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             // arm64 for devices, x86_64 for the emulator/CI golden tests.
