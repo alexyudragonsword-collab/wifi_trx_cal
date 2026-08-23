@@ -34,7 +34,35 @@ for _p in (_REPO / "app", _REPO / "src"):
     if _p.is_dir() and str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
+# What the Reference tab's acceptance and capture-cost columns are made
+# of.  Two sources feed it, exactly as on the desktop: a finished run
+# (main.py calls set_run_results) and a cal-state opened in the inspector
+# (main.py wires inspector.loaded to the same slot).  Before this existed
+# on Android, opening a delivered file left the Reference tables empty —
+# the very path a recipient uses.
 _last_cal_state: dict | None = None
+_reference_source: dict | None = None      # {"results", "fs_hz"}
+
+
+_reference_version = 0
+
+
+def _set_reference_source(results, fs_hz) -> None:
+    """Record what the Reference tables should be computed from.
+
+    The bumped version is how the UI knows its cached Reference page is
+    stale: the desktop re-renders on every set_run_results call, and a
+    one-shot cache on Android would otherwise freeze the tables at
+    whatever was known when the tab was first opened.
+    """
+    global _reference_source, _reference_version
+    _reference_source = {"results": results, "fs_hz": fs_hz}
+    _reference_version += 1
+
+
+def reference_version() -> str:
+    """Cheap poll for the UI: has the Reference source changed?"""
+    return json.dumps({"ok": True, "version": _reference_version})
 
 
 def _jsonable(v):
@@ -99,6 +127,9 @@ def run(key: str, params_json: str) -> str:
         pages = list(result.figures) or (
             [("figure", result.figure)] if result.figure is not None else [])
         _last_cal_state = result.cal_state
+        if result.cal_state:
+            _set_reference_source(result.cal_state.get("results"),
+                                  result.cal_state.get("fs_hz"))
         return json.dumps({
             "ok": True,
             "metrics": _jsonable(result.metrics),
@@ -143,9 +174,16 @@ def inspect_cal_state(json_text: str) -> str:
                                                inspect_cal_state as _inspect)
         doc = json.loads(json_text)
         findings = _inspect(doc)
-        return json.dumps({"ok": True, "findings": _jsonable(findings),
-                           "text": format_findings(findings),
-                           "sections": _jsonable(inspector_sections(doc))})
+        payload = json.dumps({"ok": True, "findings": _jsonable(findings),
+                              "text": format_findings(findings),
+                              "sections": _jsonable(inspector_sections(doc))})
+        # Only after the document actually inspected: the file's step
+        # records are also what the Reference tab's acceptance and
+        # capture-cost columns are made of, and the desktop likewise emits
+        # `loaded` only once rendering succeeded.  A file we could not
+        # read must not quietly rewrite those tables.
+        _set_reference_source(doc.get("results") or [], doc.get("fs_hz"))
+        return payload
     except Exception:
         return _fail()
 
@@ -158,8 +196,8 @@ def reference_data() -> str:
     """
     try:
         from reference import ALL_REFERENCE
-        results = (_last_cal_state or {}).get("results")
-        fs_hz = (_last_cal_state or {}).get("fs_hz")
+        src = _reference_source or {}
+        results, fs_hz = src.get("results"), src.get("fs_hz")
         entries = []
         for e in ALL_REFERENCE:
             item = {"key": e.key, "group": e.group, "title": e.title,
@@ -171,7 +209,8 @@ def reference_data() -> str:
                 item["columns"] = list(cols)
                 item["rows"] = _jsonable([list(r) for r in rows])
             entries.append(item)
-        return json.dumps({"ok": True, "entries": entries})
+        return json.dumps({"ok": True, "entries": entries,
+                           "version": _reference_version})
     except Exception:
         return _fail()
 

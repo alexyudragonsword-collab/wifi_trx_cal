@@ -207,3 +207,52 @@ def test_golden_values_ship_inside_the_apk():
          / "main" / "python" / "golden.json")
     assert p.exists(), "golden.json must sit beside bridge.py to ship"
     assert json.loads(p.read_text(encoding="utf-8"))
+
+
+def test_reference_source_follows_run_and_inspect():
+    """Both paths that produce step records feed the Reference tables, as
+    on the desktop (main.py wires a finished run AND inspector.loaded to
+    the same set_run_results slot).  Only the run path existed here, so a
+    recipient opening a delivered file saw empty acceptance and
+    capture-cost tables — the exact case the Android app is for."""
+    doc = {"format": "wifitrx-cal-state-v1", "fs_hz": 160e6,
+           "results": [{"name": "lpf_corner",
+                        "cost": {"captures": 3, "samples": 3072}}]}
+    before = json.loads(bridge.reference_version())["version"]
+    out = json.loads(bridge.inspect_cal_state(json.dumps(doc)))
+    assert out["ok"], out.get("error")
+
+    ref = json.loads(bridge.reference_data())
+    assert ref["ok"], ref.get("error")
+    budget = next(e for e in ref["entries"] if e["key"] == "budget")
+    names = [r[0] for r in budget["rows"]]
+    assert "lpf_corner" in names and "total" in names, budget["rows"]
+    # the version must move, or the UI's cached page would never reload
+    assert ref["version"] > before
+
+    # a document the inspector cannot read must not rewrite those tables:
+    # the desktop emits `loaded` only after rendering succeeded
+    stable = json.loads(bridge.reference_version())["version"]
+    bad = json.loads(bridge.inspect_cal_state('{"results": [{"spec": "x"}]}'))
+    assert bad["ok"] is False
+    assert json.loads(bridge.reference_version())["version"] == stable
+
+
+def test_every_native_call_the_ui_makes_exists_in_the_bridge():
+    """The WebView reaches Python through hand-written Kotlin shims, so a
+    renamed bridge function fails as a runtime error on the device and
+    nowhere else.  Pin the three-layer chain here instead."""
+    import re
+    root = Path(__file__).resolve().parent.parent / "android" / "app" / "src"
+    js = (root / "main" / "assets" / "ui" / "app.js").read_text(
+        encoding="utf-8")
+    kt = (root / "main" / "java" / "com" / "wifitrx" / "workbench"
+          / "MainActivity.kt").read_text(encoding="utf-8")
+
+    used = set(re.findall(r"native\.([A-Za-z_]\w*)\(", js))
+    declared = set(re.findall(r"fun ([A-Za-z_]\w*)\(", kt))
+    assert used <= declared, f"UI calls undeclared Native.*: {used - declared}"
+
+    # and every callAttr target must be a real bridge function
+    for name in re.findall(r'callAttr\(\s*"([a-z_]+)"', kt):
+        assert hasattr(bridge, name), f"MainActivity calls bridge.{name}()"

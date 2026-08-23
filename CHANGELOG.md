@@ -4,6 +4,32 @@
 或 `wifitrx.*` 公开签名的条目都在下面显式标注,交付方按此判断是否需要
 重新取包。日期为落地日期。
 
+## 0.7.1 — 2026-08-23
+
+### Android:与 Qt 版功能对齐(逐项核对后补差)
+
+- **Inspector 载入的交付文件现在也喂 Reference 表**。Qt 用
+  `inspector.loaded` 信号把文件的 `results/fs_hz` 送进 Reference 页;
+  Android 的 `reference_data()` 只读 `run()` 写的状态,于是**收包方在
+  手机上打开别人的 cal_state.json,验收列与捕获成本表全是空的**——恰好
+  是 Android 版最主要的使用场景。bridge 新增 `_set_reference_source()`,
+  run 与 inspect 两条路都喂它(与桌面两条通路一一对应)。
+  语义对齐 Qt:**仅在文件成功通过检查后才改写**(桌面也是渲染成功才
+  emit),读不了的文件不得悄悄改表。
+- **Reference 页不再是一次性缓存**。此前 `refLoaded` 让它只加载一次,
+  "先看 Reference 再跑分析"会永远看到旧数据。bridge 给数据源加版本戳
+  (`reference_version()`),UI 进页时比对,过期即重载——对应 Qt 每次
+  `set_run_results` 重绘。
+- **补上两处导出**:结果图 `Export SVG`(对应桌面工具栏的"另存当前视图")
+  与 Reference 图 `Export SVG`(对应 Qt 的 `Save SVG…`);均写入应用私有
+  目录后交系统分享面板(Android 没有"选路径另存"的惯例,与 cal-state
+  导出同一处理)。
+- **新增跨层接线守卫**:UI 里每个 `native.*` 调用必须在 MainActivity 中
+  声明,每个 `callAttr("...")` 必须是真实的 bridge 函数——这条 JS→Kotlin
+  →Python 链全靠手写胶水,改名只会在设备上炸,现在改名当场红。283 测试
+  通过。
+- `android/README.md` 新增与 Qt 的逐项功能对照表(含有意保留的平台差异)。
+
 ## 0.7.0 — 2026-08-23
 
 ### Android:设备自裁决(Self-check 页签)

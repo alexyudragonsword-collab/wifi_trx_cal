@@ -93,6 +93,37 @@ class MainActivity : ComponentActivity() {
         fun referenceData(): String = py.callAttr("reference_data").toString()
 
         @JavascriptInterface
+        fun referenceVersion(): String =
+            py.callAttr("reference_version").toString()
+
+        /** Export a text artefact (an SVG figure or reference diagram).
+         *
+         * The desktop offers a save dialog; Android has no equivalent
+         * idiom, so the file lands in app storage and goes straight to
+         * the share sheet — same treatment cal-state export already gets. */
+        @JavascriptInterface
+        fun saveText(name: String, text: String): String {
+            return try {
+                val dir = File(filesDir, "cal_state").apply { mkdirs() }
+                val safe = name.replace(Regex("[^A-Za-z0-9_.-]+"), "_")
+                val out = File(dir, safe)
+                out.writeText(text)
+                val uri = FileProvider.getUriForFile(
+                    this@MainActivity, "com.wifitrx.workbench.files", out)
+                val send = Intent(Intent.ACTION_SEND).apply {
+                    type = if (safe.endsWith(".svg")) "image/svg+xml"
+                           else "text/plain"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                startActivity(Intent.createChooser(send, "Share $safe"))
+                """{"ok": true, "path": ${JSONObject.quote(out.absolutePath)}}"""
+            } catch (e: Throwable) {
+                """{"ok": false, "error": ${JSONObject.quote(e.toString())}}"""
+            }
+        }
+
+        @JavascriptInterface
         fun run(key: String, paramsJson: String) {
             lastWasSelfCheck = false
             AnalysisService.launch(this@MainActivity, key, paramsJson)

@@ -2,6 +2,13 @@
 
 本文件按倒序记录实质性进展——最新条目在顶部、紧跟本行之下。每条尽量短——只写摘要与指针;结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-08-23 · R11:Android 与 Qt 功能逐项核对并补差(0.7.1)
+
+- 暂停 Android 线前做全面对照,查出**两个真缺陷**:① Inspector 载入的文件不喂 Reference 表(Qt 有 `loaded` 信号通路)——收包方场景下表是空的;② Reference 页一次性缓存,先看再跑就永远旧。
+- 修法:bridge 加 `_set_reference_source()` + 版本戳,run/inspect 两条路都喂(对齐 Qt 两条通路);**仅在检查成功后才改写**(Qt 也是渲染成功才 emit)。UI 按版本戳失效重载。
+- 另补两处导出(结果图 / Reference 图 Export SVG → 分享面板),对应 Qt 工具栏另存与 Save SVG。
+- 新增跨层接线守卫(`native.*` ↔ MainActivity ↔ bridge 函数名),这条手写胶水链改名此前只会在设备上炸。283 测试通过;对照表写入 `android/README.md`。
+
 ## 2026-08-23 · 真机 arm64 Self-check 通过——Android 验证链闭合
 
 - 用户在真机(arm64)上运行应用内 Self-check:**PASS**。这是整条验证链最后一个空格,且发生在真实交付硬件上,不再由模拟器代理。

@@ -95,6 +95,24 @@ gradle wrapper --gradle-version 8.9   # 首次;之后用 ./gradlew
   assembleDebug;金标对拍模拟器 job 手动 dispatch(模拟器 20+ 分钟,
   不进每次 push)。
 
+## 与桌面 Qt 版的功能对照
+
+逐项核对过一次(0.7.1),差异要么已消除,要么是有意的平台适配:
+
+| 功能 | Qt | Android | 说明 |
+|---|---|---|---|
+| 七个分析 + 参数表单 | ✅ | ✅ | 同一份 `list_specs()` 注册表 |
+| 结果 metrics / 文本 / 多页图 | ✅ | ✅ | |
+| 图形缩放 | 导航工具栏 | 触控平移/双指缩放/双击复位 | |
+| **图形导出** | 工具栏另存 PNG/SVG/PDF | **Export SVG → 分享面板** | 0.7.1 补齐;矢量,任意缩放重开 |
+| Save cal-state | 文件对话框选路径 | 私有目录 + 分享面板 | 平台惯例差异,非缺陷 |
+| Inspector 四区块 | ✅ | ✅ | 共用 `inspector_data.inspector_sections` |
+| **Inspector 载入 → Reference 表** | `loaded` 信号 | **✅ 0.7.1 补齐** | 此前收包方打开交付文件,Reference 表是空的 |
+| **Reference 随结果刷新** | 每次 `set_run_results` 重绘 | **✅ 0.7.1 补齐**(版本戳失效重载) | 此前只加载一次,先看 Reference 再跑分析就永远是旧的 |
+| **Reference 图导出** | Save SVG… | **Export SVG → 分享面板** | 0.7.1 补齐 |
+| Self-check(设备自裁决) | — | ✅ | Android 独有,Qt 是金标生成方,不需要 |
+| ≥160 MHz 两段式确认 | — | ✅ | 桌面不需要护栏 |
+
 ## 已知代价(选型时已明示)
 
 - APK ~200 MB 量级(CPython + numpy + scipy + matplotlib × 2 ABI);

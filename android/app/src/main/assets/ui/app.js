@@ -19,7 +19,9 @@ const native = window.Native || {          // browser smoke-test stub
   saveCalState: () => JSON.stringify({ok: false, error: "no app shell"}),
   pickAndInspect: () => ui.onInspectResult(
       JSON.stringify({ok: false, error: "no app shell"})),
-  referenceData: () => JSON.stringify({ok: true, entries: []}),
+  referenceData: () => JSON.stringify({ok: true, entries: [], version: 0}),
+  referenceVersion: () => JSON.stringify({ok: true, version: 0}),
+  saveText: () => JSON.stringify({ok: false, error: "no app shell"}),
   selfCheck: () => setTimeout(() => ui.onSelfCheckResult(
       JSON.stringify({ok: false, error: "no app shell"})), 0),
 };
@@ -34,7 +36,14 @@ document.querySelectorAll("nav button").forEach(b => {
         x.classList.toggle("on", x === b));
     document.querySelectorAll("main section").forEach(s =>
         s.classList.toggle("on", s.id === "tab-" + b.dataset.tab));
-    if (b.dataset.tab === "reference" && !ui.refLoaded) loadReference();
+    // The desktop re-renders Reference on every set_run_results; here the
+    // page is cached, so compare the bridge's source version and reload
+    // when a run or an inspected file has changed it.
+    if (b.dataset.tab === "reference") {
+      let v = -1;
+      try { v = JSON.parse(native.referenceVersion()).version; } catch (e) { }
+      if (ui.refVersion !== v) loadReference(v);
+    }
   };
 });
 
@@ -133,7 +142,7 @@ $("a-run").onclick = () => {
 
 /* result callback from Kotlin */
 const ui = {
-  refLoaded: false,
+  refVersion: null,
   onRunResult(json) {
     $("a-run").disabled = false;
     const r = JSON.parse(json);
@@ -232,6 +241,23 @@ function apply() {
 function resetView() { view.x = view.y = 0; view.k = 1; apply(); }
 $("a-reset").onclick = resetView;
 
+/* Export the figure as SVG — the toolbar's "save the current view" on the
+ * desktop.  Vector, so it reopens at any zoom; the shell hands it to the
+ * system share sheet rather than a file dialog (the Android idiom). */
+function currentPageSvg() {
+  const svg = $("fig-inner").querySelector("svg");
+  return svg ? svg.outerHTML : null;
+}
+$("a-export").onclick = () => {
+  const svg = currentPageSvg();
+  if (!svg) return;
+  const sel = $("a-page");
+  const name = (sel.options[sel.value] || {}).textContent || "figure";
+  const r = JSON.parse(native.saveText(
+      name.replace(/[^A-Za-z0-9_.-]+/g, "_") + ".svg", svg));
+  setStatus(r.ok ? "exported " + r.path : r.error, !r.ok);
+};
+
 function showPage(page) {
   $("fig-inner").innerHTML = page.svg;
   const svg = $("fig-inner").querySelector("svg");
@@ -318,9 +344,10 @@ function makeTable(columns, rows) {
   return box;
 }
 
-function loadReference() {
-  ui.refLoaded = true;
+function loadReference(version) {
+  ui.refVersion = version;
   const r = JSON.parse(native.referenceData());
+  if (r.version !== undefined) ui.refVersion = r.version;
   const body = $("r-body");
   if (!r.ok) { body.textContent = r.error; return; }
   body.innerHTML = ""; body.className = "";
@@ -335,6 +362,13 @@ function loadReference() {
       const svg = div.querySelector("svg");
       if (svg) { svg.style.maxWidth = "100%"; svg.style.height = "auto"; }
       d.appendChild(div);
+      const btn = document.createElement("button");
+      btn.className = "act"; btn.textContent = "Export SVG";
+      btn.onclick = () => {
+        const out = JSON.parse(native.saveText(e.key + ".svg", e.svg));
+        btn.textContent = out.ok ? "Exported" : "Export failed";
+      };
+      d.appendChild(btn);
     } else {
       d.appendChild(makeTable(e.columns, e.rows));
     }
