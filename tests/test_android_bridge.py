@@ -59,3 +59,41 @@ def test_reference_data_has_diagrams_and_tables():
             assert e["svg"].lstrip().startswith(("<?xml", "<svg"))
         else:
             assert e["columns"] and json.dumps(e["rows"])
+
+
+def test_scipy_surface_stays_within_the_android_wheel():
+    """Every scipy symbol the tree calls, verified against scipy 1.4.1 —
+    the newest version the Chaquopy Android wheel repository carries.
+
+    A new scipy call that is not on this list fails HERE, on the desktop,
+    instead of as an AttributeError on a phone — which is exactly how
+    ``correlation_lags`` (scipy >= 1.5) slipped through and crashed the
+    first on-device run.  To extend the list: check the symbol exists in
+    scipy 1.4.1 (docs.scipy.org/doc/scipy-1.4.1/reference/), then add it.
+    """
+    import re
+    root = Path(__file__).resolve().parent.parent
+    verified = {
+        "signal.butter", "signal.cheby1", "signal.correlate",
+        "signal.freqz", "signal.lfilter", "signal.oaconvolve",
+        "signal.sosfilt", "signal.sosfreqz", "signal.welch",
+        "interpolate.CubicSpline",
+    }
+    used = set()
+    files = list((root / "src" / "wifitrx").rglob("*.py"))
+    files += [root / "app" / "specs.py",
+              root / "android" / "app" / "src" / "main" / "python"
+              / "bridge.py"]
+    for f in files:
+        for line in f.read_text(encoding="utf-8").splitlines():
+            code = line.split("#", 1)[0]
+            for m in re.finditer(r"\bsig\.([A-Za-z_]\w*)", code):
+                used.add(f"signal.{m.group(1)}")
+            for m in re.finditer(
+                    r"from scipy\.(\w+) import ([\w, ]+)", code):
+                for name in m.group(2).split(","):
+                    used.add(f"{m.group(1)}.{name.strip()}")
+    assert used, "scanner found nothing — pattern rot, fix the test"
+    assert used <= verified, (
+        "scipy calls not verified against the Android wheel (1.4.1): "
+        f"{sorted(used - verified)}")

@@ -2,6 +2,13 @@
 
 本文件按倒序记录实质性进展——最新条目在顶部、紧跟本行之下。每条尽量短——只写摘要与指针;结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-08-23 · R6:真机首跑崩溃修复 + scipy 调用面守卫(0.6.2)
+
+- 用户真机 full_cal 触发 `correlation_lags` AttributeError——0.6.1 标注的"端上 scipy 1.4.1 低于桌面下限"风险首次兑现,离预言到兑现不到一天。
+- 修复:`cal/sync.py` 换数学恒等 `np.arange`(276 测试零改动);**守卫测试**扫描全仓 scipy 调用面对照 1.4.1 allowlist,同类问题此后在桌面测试期暴露。
+- numpy Generator 用面审计干净;APK 图标与 Windows exe 同源(assets/icon.png → 五档 mipmap)。
+- 指针:`CHANGELOG.md` 0.6.2、backlog R1 增补、`tests/test_android_bridge.py` 守卫。
+
 ## 2026-08-23 · R2':Android APK 在 GitHub Actions 上编译成功(0.6.1)
 
 - 三轮迭代到绿:pip sdist 陷阱(`--only-binary :all:`)→ 探针证实 wheel 仓无 cp311 scipy → 内嵌 Python 降 3.8(源码树预审计兼容后才动)。

@@ -4,6 +4,19 @@
 或 `wifitrx.*` 公开签名的条目都在下面显式标注,交付方按此判断是否需要
 重新取包。日期为落地日期。
 
+## 0.6.2 — 2026-08-23
+
+### Android 端上首报错修复 + 图标
+
+- **真机首跑崩溃修复**:`cal/sync.py` 的 `sig.correlation_lags` 是
+  scipy 1.5 新增 API,端上 wheel 是 1.4.1——替换为数学恒等的
+  `np.arange(-(len(x)-1), len(y))`(mode="full" 的滞后轴定义),
+  276 测试零改动通过。**新增守卫测试**:扫描全仓 scipy 调用面并对照
+  "已对 1.4.1 核验"allowlist,未核验的新 scipy 调用在桌面测试就报警,
+  不再等装进手机才炸(本次事故的直接教训)。
+- APK 启动图标改用与 Windows exe 相同的 `assets/icon.png`
+  (五档 mipmap 由同一源图生成)。
+
 ## 0.6.1 — 2026-08-23
 
 ### Android CI 构建打通(APK 首次在 GitHub Actions 上编译成功)

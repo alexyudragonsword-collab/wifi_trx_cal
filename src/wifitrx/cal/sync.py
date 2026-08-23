@@ -68,7 +68,10 @@ def align_delay(x: np.ndarray, y: np.ndarray, max_lag: int = 4096):
     x = np.asarray(x)
     y = np.asarray(y)
     corr = sig.correlate(y, x, mode="full", method="fft")
-    lags = sig.correlation_lags(len(y), len(x), mode="full")
+    # scipy.signal.correlation_lags exists only from scipy 1.5; the
+    # Android wheel is pinned at 1.4.1, and for mode="full" the lag axis
+    # is exactly this arange (see tests/test_android_bridge.py guard).
+    lags = np.arange(-(len(x) - 1), len(y))
     window = np.where(np.abs(lags) <= max_lag)[0]
     peak = window[np.argmax(np.abs(corr[window]))]
     lag = int(lags[peak])
