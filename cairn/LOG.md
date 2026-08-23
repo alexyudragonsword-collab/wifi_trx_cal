@@ -2,6 +2,13 @@
 
 本文件按倒序记录实质性进展——最新条目在顶部、紧跟本行之下。每条尽量短——只写摘要与指针;结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-08-23 · R2':Android APK 在 GitHub Actions 上编译成功(0.6.1)
+
+- 三轮迭代到绿:pip sdist 陷阱(`--only-binary :all:`)→ 探针证实 wheel 仓无 cp311 scipy → 内嵌 Python 降 3.8(源码树预审计兼容后才动)。
+- 端上解析 numpy 1.19.5 / scipy 1.4.1 / matplotlib 3.6.0——scipy/numpy 低于桌面下限,**物理一致性归模拟器金标对拍裁决,构建绿≠物理对**(README 显著标注)。
+- debug APK artifact 71 MB(双 ABI),远低于 200 MB 预估;首次成功 run 32613192402。
+- 指针:`CHANGELOG.md` 0.6.1、backlog R1 增补、`android/README.md` 版本表。
+
 ## 2026-08-16 · R1:Android 整包落地(0.6.0)
 
 - Chaquopy + WebView 壳:分析层零改动打入 APK,桥 `bridge.py` JSON 进出,图形 SVG 矢量缩放,manifest 无 INTERNET 权限。

@@ -4,6 +4,20 @@
 或 `wifitrx.*` 公开签名的条目都在下面显式标注,交付方按此判断是否需要
 重新取包。日期为落地日期。
 
+## 0.6.1 — 2026-08-23
+
+### Android CI 构建打通(APK 首次在 GitHub Actions 上编译成功)
+
+- 三轮迭代驱动到绿(run 32613192402,1m17s,44 任务):
+  ① `--only-binary :all:` 阻止 pip 落到 PyPI sdist 源码编译(scipy
+  1.17.1 sdist + "meson not found");② 该开关变探针,证实 Chaquopy
+  wheel 仓**无 cp311 scipy**;③ 内嵌 Python 3.11→3.8(源码树预先审计
+  3.8 兼容:future annotations 全覆盖、无 match/运行时泛型/3.9+ stdlib)。
+- **端上解析版本**:numpy 1.19.5 / scipy 1.4.1 / matplotlib 3.6.0。
+  scipy/numpy 低于桌面下限——物理一致性以模拟器金标对拍为准,已在
+  `android/README.md` 显著标注。debug APK artifact 71 MB(双 ABI),
+  远低于 ~200 MB 预估。
+
 ## 0.6.0 — 2026-08-16
 
 ### 新交付形态:Android 工作台(`android/`)

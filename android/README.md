@@ -26,14 +26,29 @@ bridge.py  →  specs.ALL_ANALYSES / reference / inspector / save_cal_state
 
 | 组件 | 版本 | 依据 |
 |---|---|---|
-| Chaquopy | 16.0.0 | AGP 8.6–8.8,Python 3.8–3.13,scipy/matplotlib wheel 覆盖 |
-| Python(内嵌) | 3.11 | Chaquopy wheel 仓对 numpy/scipy/matplotlib 的覆盖面 |
+| Chaquopy | 16.0.0 | AGP 8.6–8.8,Python 3.8–3.13 |
+| Python(内嵌) | **3.8** | CI 探针(run 32612946416)证实 wheel 仓无 cp311 scipy;科学栈在 3.8 覆盖最全 |
 | AGP | 8.7.3 | Chaquopy 16 支持窗内 |
 | Gradle | 8.9+ | AGP 8.7 要求 |
 | minSdk / target | 24 / 34 | Chaquopy 下限 / 前台服务类型要求 |
 
-首次成功构建后,把 pip 解析出的 numpy/scipy/matplotlib 实际版本记录到
-本表下方(Chaquopy wheel 仓的解析结果就是端上口径)。
+**端上实际解析版本**(首次成功构建 run 32613192402,2026-08-23,
+`--only-binary` 下 pip 的解析结果,两 ABI 相同):
+
+| 包 | 端上版本 | 桌面下限 | 备注 |
+|---|---|---|---|
+| numpy | 1.19.5 | ≥1.23 | **低于桌面下限** |
+| scipy | 1.4.1 | ≥1.9 | **低于桌面下限**;`oaconvolve` 需 ≥1.4.0,恰好够 |
+| matplotlib | 3.6.0 | ≥3.6 | 达标 |
+| OpenBLAS / libgfortran | 0.2.20 / 4.9 | — | Chaquopy 运行库 |
+
+> **端上 scipy/numpy 远旧于桌面**——"同一套物理"的最终裁决属于模拟器
+> 金标对拍(`connectedDebugAndroidTest`),不是构建绿灯。旧版若在金标
+> 上翻车,处置是把触发差异的调用点降级适配并重新对拍,不是放宽容差。
+
+实测:debug APK artifact 71 MB(zip,arm64+x86_64 双 ABI),远低于
+~200 MB 预估。已知非致命警告:runner buildPython 3.12 不能为 3.8 预编
+译 .pyc(只慢首次导入;要消除可在 CI 装 Python 3.8 并设 `buildPython`)。
 
 ## 构建
 

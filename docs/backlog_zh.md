@@ -21,6 +21,7 @@
 - **架构**:Kotlin 薄壳(决策零逻辑,对齐 inspector 页"decides nothing"纪律)+ WebView 离线单页 + `bridge.py`(唯一新 Python,JSON 进出);图形 Agg→SVG 矢量缩放;manifest 无 INTERNET 权限。
 - **验证**:桥契约进桌面主套件(`tests/test_android_bridge.py`,5 项);端上金标对拍(3 个代表分析 vs 桌面 golden,0.05 dB/1e-3 容差)进 CI 手动 job。**Gradle/Kotlin 侧本容器无 Android SDK,未在本机编译**——首次构建按 `android/README.md` 步骤在带 SDK 的机器执行,pip 解析出的端上 numpy/scipy/matplotlib 版本回填该文档。
 - **已知限制**:不支持中途取消(分析函数无取消点);≥160 MHz 两段式确认;bw 默认档偏 20/80 MHz。
+- **CI 编译打通(2026-08-23,0.6.1)**:三轮迭代——pip 落 sdist(加 `--only-binary :all:`)→ 探针证实 wheel 仓无 cp311 scipy → 内嵌 Python 降 3.8(源码树预审计兼容)。端上解析 numpy 1.19.5 / scipy 1.4.1 / matplotlib 3.6.0,**scipy/numpy 低于桌面下限,物理一致性待模拟器金标对拍裁决**;debug APK 71 MB(双 ABI)。首次成功 run:32613192402。
 
 ## B14. EVM 估计器自拟合偏差(自由度修正)—— ✅ 已落地(2026-08-16,0.5.9)
 
