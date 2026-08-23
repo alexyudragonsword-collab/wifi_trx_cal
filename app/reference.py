@@ -45,11 +45,23 @@ class RefEntry:
 
 
 def asset_path(name: str) -> Path:
-    """assets/<name>, whether running from source or a frozen exe
-    (same resolution as main.py's window icon)."""
-    base = Path(getattr(sys, "_MEIPASS",
-                        Path(__file__).resolve().parent.parent))
-    return base / "assets" / name
+    """assets/<name>, whether running from source, a frozen exe or the
+    Android app.
+
+    From source (and under PyInstaller's sys._MEIPASS) assets/ sits one
+    level above this module.  Chaquopy instead merges every source dir
+    into one root, so assets/ lands *beside* it — check that layout
+    before giving up, or the Reference tab raises FileNotFoundError on
+    the phone while working everywhere else.
+    """
+    here = Path(__file__).resolve()
+    base = Path(getattr(sys, "_MEIPASS", here.parent.parent))
+    path = base / "assets" / name
+    if not path.exists():
+        flat = here.parent / "assets" / name
+        if flat.exists():
+            return flat
+    return path
 
 
 def _schematic(name: str) -> Callable[[], str]:

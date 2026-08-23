@@ -2,6 +2,13 @@
 
 本文件按倒序记录实质性进展——最新条目在顶部、紧跟本行之下。每条尽量短——只写摘要与指针;结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-08-23 · R8:Reference 资源缺失 + Inspector 内容不全(0.6.5)
+
+- 真机第三、四个现场报告:Reference 页 FileNotFoundError(assets 没进 APK,且 Chaquopy 平铺布局让 asset_path 的"上一级"失效);Inspector 只有 findings、缺 Qt 版的三张表。
+- 结构性修法:新增 `app/inspector_data.py` 作为"检查器显示什么"的唯一定义,Qt 页与 Android 桥共用——两端不再各写各的;gradle `stageAssets` 把 assets/ 送进 Chaquopy srcDir。
+- **盲区归因**:端上测试只跑 run 一条路径,Reference/Inspector 从未在设备上被执行过;已补 `referenceAndInspectorRenderOnDevice` + 桌面两项守卫(sections 一致性、gradle 暂存在位)。
+- 指针:`CHANGELOG.md` 0.6.5。278 测试通过。
+
 ## 2026-08-23 · R7:金标对拍通过——端上物理 = 桌面物理(0.6.4)
 
 - 模拟器金标 job(run 32618761315,Android 14/x86_64)三个代表分析逐指标对拍全过(0.05 dB/1e-3 容差);先怀疑"3 分钟太快"核了日志,确认 GoldenTest 真实执行(1 test,0 failed)。

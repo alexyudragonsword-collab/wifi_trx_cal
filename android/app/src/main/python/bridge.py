@@ -131,13 +131,21 @@ def save_cal_state(dir_path: str) -> str:
 
 
 def inspect_cal_state(json_text: str) -> str:
-    """Stdlib-only inspector verdicts for a cal-state JSON document."""
+    """Inspector verdicts plus the same tables the Qt page renders.
+
+    Sections come from ``inspector_data.inspector_sections`` — shared with
+    the desktop page so the two inspectors cannot show different things
+    (they did once: this front-end had findings only).
+    """
     try:
+        from inspector_data import inspector_sections
         from wifitrx.handoff.inspector import (format_findings,
                                                inspect_cal_state as _inspect)
-        findings = _inspect(json.loads(json_text))
+        doc = json.loads(json_text)
+        findings = _inspect(doc)
         return json.dumps({"ok": True, "findings": _jsonable(findings),
-                           "text": format_findings(findings)})
+                           "text": format_findings(findings),
+                           "sections": _jsonable(inspector_sections(doc))})
     except Exception:
         return _fail()
 

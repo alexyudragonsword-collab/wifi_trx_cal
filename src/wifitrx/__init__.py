@@ -6,4 +6,4 @@ internal sibling repos (see PROVENANCE.md); transceiver chains, impairment
 models and calibration algorithms are native to this repo.
 """
 
-__version__ = "0.6.4"
+__version__ = "0.6.5"

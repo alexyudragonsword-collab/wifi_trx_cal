@@ -97,3 +97,34 @@ def test_scipy_surface_stays_within_the_android_wheel():
     assert used <= verified, (
         "scipy calls not verified against the Android wheel (1.4.1): "
         f"{sorted(used - verified)}")
+
+
+def test_inspector_sections_match_the_desktop_page(tmp_path):
+    """Both inspectors render inspector_data.inspector_sections, so the
+    Android one cannot silently show less than the Qt page again."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "app"))
+    from inspector_data import inspector_sections
+
+    doc = {"format": "wifitrx-cal-state-v1",
+           "provenance": {"tool": "test"},
+           "results": [{"name": "s", "passed": True,
+                        "metrics_after": {"m": 1.0}}],
+           "residuals": {"values": {"k": 1.0},
+                         "specification": {"k": {"unit": "dB"}}}}
+    out = json.loads(bridge.inspect_cal_state(json.dumps(doc)))
+    assert out["ok"], out.get("error")
+    assert out["sections"] == inspector_sections(doc)
+    assert {s["title"] for s in out["sections"]} == {
+        s["title"] for s in inspector_sections(doc)}
+    assert len(out["sections"]) == 3      # steps, residuals, provenance
+
+
+def test_reference_assets_are_staged_for_the_apk():
+    """The Reference tab reads assets/schematics/*.svg off the filesystem;
+    Chaquopy only ships what a source dir carries.  A build that drops the
+    staging task would put a FileNotFoundError on the phone, so the wiring
+    is asserted here rather than discovered on a device."""
+    gradle = (Path(__file__).resolve().parent.parent / "android" / "app"
+              / "build.gradle").read_text(encoding="utf-8")
+    assert "stageAssets" in gradle and "build/python-assets" in gradle
+    assert '"../../assets"' in gradle

@@ -4,6 +4,26 @@
 或 `wifitrx.*` 公开签名的条目都在下面显式标注,交付方按此判断是否需要
 重新取包。日期为落地日期。
 
+## 0.6.5 — 2026-08-23
+
+### Android:Reference 资源缺失 + Inspector 内容不全
+
+- **Reference 页 FileNotFoundError**:`assets/schematics/*.svg` 从未打进
+  APK——Chaquopy 只装 source dir 里的东西,而 `assets/` 不在其中;且它把
+  所有 source dir 平铺进一个根,`asset_path` 的"上一级"布局在端上不成立。
+  修复:gradle 新增 `stageAssets`(Sync 仓库 `assets/` 进 srcDir)+
+  `asset_path` 认识扁平布局(桌面/exe 路径不变)。
+- **Inspector 只显示 findings**:Qt 页有四个区块(findings + 逐步表 +
+  残差表 + 溯源表),Android 桥只返回了 findings——两个前端各写各的必然
+  漂移。修复:新增 **`app/inspector_data.py`**(Qt-free,`inspector_sections`
+  是"检查器显示什么"的唯一定义),Qt 页与桥共用;Android UI 渲染同一套
+  表格。decides-nothing 守卫扩到新文件。
+- **补上让这两个 bug 溜过的盲区**:端上测试新增
+  `referenceAndInspectorRenderOnDevice`(真机/模拟器上实跑 reference_data
+  与 inspect_cal_state——此前只测 run 一条路径);桌面新增两项守卫:
+  桥返回的 sections 必须逐字等于 `inspector_sections`、gradle 资源暂存
+  必须在位。278 测试通过。
+
 ## 0.6.4 — 2026-08-23
 
 ### 金标对拍通过:端上物理 = 桌面物理

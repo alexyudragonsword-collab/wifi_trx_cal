@@ -13,7 +13,7 @@ android {
         minSdk 24
         targetSdk 34
         versionCode 1
-        versionName "0.6.4"
+        versionName "0.6.5"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             // arm64 for devices, x86_64 for the emulator/CI golden tests.
@@ -66,10 +66,27 @@ chaquopy {
             // the declarative registry (specs.py, reference.py).  main.py
             // and the Qt pages ride along unimported — PySide6 is never
             // imported on-device.
-            srcDirs = ["src/main/python", "../../src", "../../app"]
+            // build/python-assets carries the repo's assets/ tree (see the
+            // stageAssets task below): the Reference tab reads the shipped
+            // schematic SVGs off the filesystem, so they must travel with
+            // the Python sources, not only as Android assets.
+            srcDirs = ["src/main/python", "../../src", "../../app",
+                       "build/python-assets"]
         }
     }
 }
+
+// Stage the repo's assets/ into a Chaquopy source dir, so the tree lands
+// as <python-root>/assets/... — the layout app/reference.py's asset_path
+// falls back to on Android.  A Sync (not Copy) keeps deletions honest.
+tasks.register("stageAssets", Sync) {
+    from "../../assets"
+    into layout.buildDirectory.dir("python-assets/assets")
+}
+tasks.matching { it.name.startsWith("generate") && it.name.contains("Python") }
+     .configureEach { dependsOn "stageAssets" }
+tasks.matching { it.name.startsWith("merge") && it.name.contains("Python") }
+     .configureEach { dependsOn "stageAssets" }
 
 dependencies {
     implementation "androidx.core:core-ktx:1.13.1"

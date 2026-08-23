@@ -169,7 +169,18 @@ const ui = {
   },
   onInspectResult(json) {
     const r = JSON.parse(json);
-    $("i-out").textContent = r.ok ? r.text : r.error;
+    const out = $("i-out");
+    out.textContent = "";
+    if (!r.ok) { out.textContent = r.error; return; }
+    // findings first, then the same tables the desktop page shows
+    const pre = document.createElement("pre");
+    pre.className = "txt"; pre.textContent = r.text;
+    out.appendChild(pre);
+    for (const sec of r.sections || []) {
+      const h = document.createElement("h2");
+      h.textContent = sec.title; out.appendChild(h);
+      out.appendChild(makeTable(sec.columns, sec.rows));
+    }
   },
 };
 window.ui = ui;
@@ -248,6 +259,25 @@ fig.addEventListener("wheel", e => {         // desktop smoke-test comfort
 /* ---------------- inspector / reference ---------------- */
 $("i-open").onclick = () => native.pickAndInspect();
 
+function makeTable(columns, rows) {
+  const t = document.createElement("table");
+  const hr = t.insertRow();
+  for (const c of columns) {
+    const th = document.createElement("th");
+    th.textContent = c; hr.appendChild(th);
+  }
+  for (const row of rows) {
+    const tr = t.insertRow();
+    // rows are objects (inspector sections) or arrays (reference tables)
+    const cells = Array.isArray(row) ? row : columns.map(c => row[c]);
+    for (const c of cells) tr.insertCell().textContent = String(c ?? "");
+  }
+  const box = document.createElement("div");
+  box.style.overflowX = "auto";       // wide tables scroll, page doesn't
+  box.appendChild(t);
+  return box;
+}
+
 function loadReference() {
   ui.refLoaded = true;
   const r = JSON.parse(native.referenceData());
@@ -266,17 +296,7 @@ function loadReference() {
       if (svg) { svg.style.maxWidth = "100%"; svg.style.height = "auto"; }
       d.appendChild(div);
     } else {
-      const t = document.createElement("table");
-      const hr = t.insertRow();
-      for (const c of e.columns) {
-        const th = document.createElement("th");
-        th.textContent = c; hr.appendChild(th);
-      }
-      for (const row of e.rows) {
-        const tr = t.insertRow();
-        for (const c of row) tr.insertCell().textContent = String(c);
-      }
-      d.appendChild(t);
+      d.appendChild(makeTable(e.columns, e.rows));
     }
     if (e.note) {
       const p = document.createElement("p");

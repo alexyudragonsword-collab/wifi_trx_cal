@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (QFileDialog, QHBoxLayout, QLabel,
                                QPushButton, QScrollArea, QTableWidget,
                                QTableWidgetItem, QVBoxLayout, QWidget)
 
+from inspector_data import fmt as _fmt, inspector_sections
 from wifitrx.handoff.inspector import inspect_cal_state
 
 # severity -> colour, by role; which finding gets which severity is the
@@ -29,14 +30,6 @@ SEVERITY_COLOURS = {"error": "#a11111", "warning": "#a5560b",
                     "info": "#666666"}
 
 
-def _fmt(v) -> str:
-    if isinstance(v, float):
-        return f"{v:.4g}"
-    if isinstance(v, (list, tuple)):
-        return ", ".join(_fmt(x) for x in v[:6]) + ("…" if len(v) > 6 else "")
-    if isinstance(v, dict):
-        return ", ".join(f"{k}={_fmt(x)}" for k, x in v.items())
-    return str(v)
 
 
 def findings_view(findings: list[dict]) -> QWidget:
@@ -100,24 +93,6 @@ def section(title: str, body: QWidget) -> QWidget:
     return box
 
 
-def _step_rows(doc: dict) -> list[dict]:
-    """One row per recorded step — the JSON's content, laid out."""
-    rows = []
-    for r in doc.get("results") or []:
-        before = r.get("metrics_before") or {}
-        after = r.get("metrics_after") or {}
-        key = next(iter(after), next(iter(before), "-"))
-        rows.append({
-            "step": r.get("name", "?"),
-            "metric": key,
-            "before": before.get(key, "—"),
-            "after": after.get(key, "—"),
-            "passed": {True: "yes", False: "NO", None: "—"}[r.get("passed")],
-            "saturated": {True: "RAILED", False: "no",
-                          None: "—"}[r.get("saturated")],
-            "spec": _fmt(r["spec"]) if r.get("spec") else "—",
-        })
-    return rows
 
 
 class InspectorPage(QWidget):
@@ -184,34 +159,10 @@ class InspectorPage(QWidget):
     def _render(self, doc: dict) -> None:
         add = self.body_layout.addWidget
         add(section("Findings", findings_view(inspect_cal_state(doc))))
-
-        rows = _step_rows(doc)
-        if rows:
-            add(section("Calibration steps (from the file)",
-                        fixed_table(rows, ["step", "metric", "before",
-                                           "after", "passed", "saturated",
-                                           "spec"])))
-
-        # The residual surface, each number beside its own description.
-        # Everything shown is the file's: the page names no key and
-        # decides nothing, same rule as the findings above.
-        res = doc.get("residuals") or {}
-        values, spec = res.get("values") or {}, res.get("specification") or {}
-        if values:
-            add(section(
-                "Residuals (each with its shipped specification)",
-                fixed_table(
-                    [{"key": k, "value": _fmt(values[k]),
-                      "unit": (spec.get(k) or {}).get("unit", ""),
-                      "better": (spec.get(k) or {}).get("better", ""),
-                      "role": (spec.get(k) or {}).get("role", ""),
-                      "apply": (spec.get(k) or {}).get("apply", "")}
-                     for k in sorted(values)],
-                    ["key", "value", "unit", "better", "role", "apply"])))
-
-        prov = doc.get("provenance") or {}
-        if prov:
-            add(section("Provenance", fixed_table(
-                [{"key": k, "value": v} for k, v in sorted(prov.items())],
-                ["key", "value"])))
+        # Every table below comes from inspector_data.inspector_sections,
+        # the same layout the Android front-end renders — a section added
+        # for one front-end therefore appears in both.
+        for sec in inspector_sections(doc):
+            add(section(sec["title"],
+                        fixed_table(sec["rows"], sec["columns"])))
         self.body_layout.addStretch(1)

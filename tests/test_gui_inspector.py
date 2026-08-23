@@ -116,8 +116,8 @@ def test_run_save_inspect_roundtrip(qapp, tmp_path):
 
 
 # ------------------------------------------------- the decides-nothing guard
-def _stripped_source() -> str:
-    tree = ast.parse((APP / "inspector_page.py").read_text())
+def _stripped_source(name: str = "inspector_page.py") -> str:
+    tree = ast.parse((APP / name).read_text())
     for node in ast.walk(tree):
         if (isinstance(node, ast.Expr)
                 and isinstance(node.value, ast.Constant)
@@ -138,6 +138,15 @@ def test_the_page_decides_no_verdict_and_no_threshold():
             "the page as data")
     # ...and the page really does source its verdicts from the inspector
     assert "inspect_cal_state" in src
+
+    # the table layout moved to inspector_data.py (shared with the Android
+    # front-end); the rule follows the code, so guard that file too
+    data_src = _stripped_source("inspector_data.py")
+    for token in ("violates", "railed trim", "dirty working tree",
+                  "no expiry metadata", "abs_max", "-38", "50.0"):
+        assert token not in data_src, (
+            f"{token!r} appears in inspector_data.py; verdicts and "
+            "thresholds belong to wifitrx.handoff.inspector")
 
 
 def test_the_stripper_does_not_hide_real_code():

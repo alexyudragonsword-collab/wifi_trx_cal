@@ -21,6 +21,38 @@ import kotlin.math.abs
 @RunWith(AndroidJUnit4::class)
 class GoldenTest {
 
+    /** The Reference tab reads shipped SVGs off the filesystem, and the
+     * Inspector renders the shared section tables.  Neither was exercised
+     * on-device before, which is how a missing assets/ tree reached the
+     * phone as a FileNotFoundError while every desktop test passed. */
+    @Test
+    fun referenceAndInspectorRenderOnDevice() {
+        val inst = InstrumentationRegistry.getInstrumentation()
+        if (!Python.isStarted())
+            Python.start(AndroidPlatform(inst.targetContext))
+        val bridge = Python.getInstance().getModule("bridge")
+
+        val ref = JSONObject(bridge.callAttr("reference_data").toString())
+        assertTrue("reference_data: ${ref.optString("error")}",
+                   ref.getBoolean("ok"))
+        val entries = ref.getJSONArray("entries")
+        var svgs = 0
+        for (i in 0 until entries.length())
+            if (entries.getJSONObject(i).has("svg")) svgs++
+        assertTrue("no schematic SVG reached the device", svgs > 0)
+
+        // a minimal but structurally real document: findings + sections
+        val doc = """{"format":"wifitrx-cal-state-v1","provenance":
+            {"tool":"test"},"results":[{"name":"step","passed":true,
+            "metrics_after":{"m":1.0}}]}"""
+        val insp = JSONObject(
+            bridge.callAttr("inspect_cal_state", doc).toString())
+        assertTrue("inspect: ${insp.optString("error")}",
+                   insp.getBoolean("ok"))
+        assertTrue("inspector showed no tables",
+                   insp.getJSONArray("sections").length() > 0)
+    }
+
     @Test
     fun metricsMatchDesktopGolden() {
         val inst = InstrumentationRegistry.getInstrumentation()
