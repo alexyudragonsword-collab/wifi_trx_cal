@@ -49,13 +49,19 @@ bridge.py  →  specs.ALL_ANALYSES / reference / inspector / save_cal_state
 > (`correlation_lags` scipy 1.5 / `np.trapezoid` numpy 2.0),现由
 > `tests/test_android_bridge.py` 的 scipy+numpy 调用面守卫拦在桌面。
 
-**arm64 由设备自己裁决(Self-check 页签)**:CI 只能为它跑的 ABI 背书
+**arm64 已由真机裁决(Self-check 页签)**:CI 只能为它跑的 ABI 背书
 (x86_64),而真机是 arm64、OpenBLAS 也不同。金标值随 APK 出货,应用内
-第四个页签一键在**本机**重放三个案例并逐指标对比,给出 PASS/FAIL、平台
-信息(ABI / numpy / scipy / Python)与每项 delta。对拍逻辑只有一份
-(`bridge.self_check()`),CI 的 GoldenTest 调的是同一个函数——手机与 CI
-不可能按不同规则裁决。换机、升级 Android、Chaquopy 换 wheel 之后,重跑
-一次即可复验。耗时数分钟(跑的是真校准)。
+Self-check 页签一键在**本机**重放三个案例并逐指标对比,给出 PASS/FAIL、
+平台信息(ABI / numpy / scipy / Python)与每项 delta。
+
+> **实测结果(2026-08-23,用户真机 arm64,0.7.0):PASS。**
+> 至此三条 ABI 路径全部裁决完毕——桌面(生成金标)、模拟器 x86_64
+> (CI run 32627470392)、真机 arm64(用户手动)。端上 numpy 1.19.5 /
+> scipy 1.4.1 / OpenBLAS 0.2.20 复现桌面物理,在两种 CPU 架构上都成立。
+
+对拍逻辑只有一份(`bridge.self_check()`),CI 的 GoldenTest 调的是同一个
+函数——手机与 CI 不可能按不同规则裁决。换机、升级 Android、Chaquopy 换
+wheel 之后重跑一次即可复验;耗时数分钟(跑的是真校准)。
 
 实测:debug APK artifact 71 MB(zip,arm64+x86_64 双 ABI),远低于
 ~200 MB 预估。已知非致命警告:runner buildPython 3.12 不能为 3.8 预编
