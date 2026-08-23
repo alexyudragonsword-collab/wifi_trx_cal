@@ -13,6 +13,15 @@
   镜像与 replica。清单见规格书 §9 与教程 ch9,此处不重复维护。
 - 以下正文为编年体决策记录(含已落地项与被推翻的假设,保留作对照)。
 
+## R1. Android 整包(Chaquopy + WebView 壳)—— ✅ 已落地(2026-08-16,0.6.0)
+
+- **需求**:用户在知情整包代价(APK ~200 MB、320 MHz 端上分钟级+发热)后仍选整包,否决了更低成本的检查器 PWA 与 Web 化两案。
+- **路线否决记录**:① `pyside6-android-deploy`——实验态且无 scipy 的 Android 交叉编译;② Kivy/python-for-android——scipy recipe 长期破损;③ 去 scipy 化——手写滤波器设计/多相重采样会动已验证 DSP、触发全量再验证。
+- **选型依据**(两个已验证事实):`app/specs.py` 零 Qt 依赖(声明式 ParamSpec/AnalysisResult,分析层原封搬移);Chaquopy 16 的 wheel 仓覆盖本仓全部 scipy 面(`signal` + `interpolate.CubicSpline`)。
+- **架构**:Kotlin 薄壳(决策零逻辑,对齐 inspector 页"decides nothing"纪律)+ WebView 离线单页 + `bridge.py`(唯一新 Python,JSON 进出);图形 Agg→SVG 矢量缩放;manifest 无 INTERNET 权限。
+- **验证**:桥契约进桌面主套件(`tests/test_android_bridge.py`,5 项);端上金标对拍(3 个代表分析 vs 桌面 golden,0.05 dB/1e-3 容差)进 CI 手动 job。**Gradle/Kotlin 侧本容器无 Android SDK,未在本机编译**——首次构建按 `android/README.md` 步骤在带 SDK 的机器执行,pip 解析出的端上 numpy/scipy/matplotlib 版本回填该文档。
+- **已知限制**:不支持中途取消(分析函数无取消点);≥160 MHz 两段式确认;bw 默认档偏 20/80 MHz。
+
 ## B14. EVM 估计器自拟合偏差(自由度修正)—— ✅ 已落地(2026-08-16,0.5.9)
 
 - **发现途径**:11ac/n vs 11ax/be 同芯片对照实验。热噪声隔离读数两制式只差 +0.13 dB,而占用带宽比(18.91/16.25 MHz)要求 +0.66 dB——差值高度可复现(6 种子均值稳定),按"随测量配置漂移先怀疑仪器"排查。

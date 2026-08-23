@@ -2,6 +2,13 @@
 
 本文件按倒序记录实质性进展——最新条目在顶部、紧跟本行之下。每条尽量短——只写摘要与指针;结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-08-16 · R1:Android 整包落地(0.6.0)
+
+- Chaquopy + WebView 壳:分析层零改动打入 APK,桥 `bridge.py` JSON 进出,图形 SVG 矢量缩放,manifest 无 INTERNET 权限。
+- 三条路线否决记录(pyside6-android-deploy / Kivy / 去 scipy 化)与选型依据沉淀在 backlog R1;版本锁与已知代价在 `android/README.md`。
+- 桥契约 5 项进桌面主套件;端上金标对拍进 CI 手动 job;Gradle 侧本容器无 SDK 未编译,首建步骤已文档化。
+- 指针:`CHANGELOG.md` 0.6.0、`docs/backlog_zh.md` R1、`android/README.md`。
+
 ## 2026-08-16 · B14:EVM 估计器自拟合偏差修正(0.5.9)
 
 - 11n vs 11ax 灵敏度对照暴露仪器伪影:per-tone 均衡器自拟合吞 1/N 噪声,6 符号帧偏乐观 0.79 dB,曾把 0.66 dB 占用带宽真实差抵消成 +0.13 dB。

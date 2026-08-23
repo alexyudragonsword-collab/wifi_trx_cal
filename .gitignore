@@ -6,3 +6,10 @@ reports/
 .coverage
 coverage.xml
 htmlcov/
+
+# Android build outputs (android/ scaffold)
+android/.gradle/
+android/local.properties
+android/app/build/
+android/build/
+android/.idea/

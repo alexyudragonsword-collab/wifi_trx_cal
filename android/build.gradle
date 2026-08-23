@@ -1,0 +1,9 @@
+// Version pins are deliberate: Chaquopy 16.0.0 supports AGP 8.6-8.8 and
+// Python 3.8-3.13, and its wheel repository carries numpy/scipy/matplotlib
+// builds for the Python 3.11 we pin in app/build.gradle.  Bump Chaquopy,
+// AGP and Gradle (wrapper 8.9+) together, never singly.
+plugins {
+    id "com.android.application" version "8.7.3" apply false
+    id "org.jetbrains.kotlin.android" version "2.0.21" apply false
+    id "com.chaquo.python" version "16.0.0" apply false
+}

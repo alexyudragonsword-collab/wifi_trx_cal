@@ -41,6 +41,10 @@ python examples/run_yield.py --runs 20
 # 结果图为活的 matplotlib 画布,带导航工具栏(框选缩放/平移/另存视图)
 python app/main.py
 
+# Android 工作台(android/,Chaquopy + WebView 整包):分析层与桌面同源
+# 零改动,图形 SVG 矢量缩放;构建步骤/版本锁/已知代价见 android/README.md
+
+
 # CI: scripts/ci_fast.sh (快速门禁) / scripts/ci_nightly.sh (全量+示例)
 ```
 

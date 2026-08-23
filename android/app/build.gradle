@@ -1,0 +1,66 @@
+plugins {
+    id "com.android.application"
+    id "org.jetbrains.kotlin.android"
+    id "com.chaquo.python"
+}
+
+android {
+    namespace "com.wifitrx.workbench"
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.wifitrx.workbench"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "0.6.0"           // tracks the repo version at scaffold time
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        ndk {
+            // arm64 for devices, x86_64 for the emulator/CI golden tests.
+            // Each ABI adds ~80 MB of CPython+numpy+scipy — do not widen.
+            abiFilters "arm64-v8a", "x86_64"
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = "17" }
+    buildTypes {
+        release {
+            minifyEnabled false       // Python assets dominate size anyway
+        }
+    }
+}
+
+chaquopy {
+    defaultConfig {
+        version "3.11"                // pinned: scipy/matplotlib wheels exist
+        pip {
+            // Resolved against Chaquopy's Android wheel repository; the
+            // floors mirror pyproject.toml.  The first successful build
+            // logs the resolved versions — record them in android/README.md.
+            install "numpy>=1.23"
+            install "scipy>=1.9"
+            install "matplotlib>=3.6"
+        }
+    }
+    sourceSets {
+        main {
+            // bridge.py (src/main/python) + the unmodified analysis layer:
+            // repo src/ provides the wifitrx package, repo app/ provides
+            // the declarative registry (specs.py, reference.py).  main.py
+            // and the Qt pages ride along unimported — PySide6 is never
+            // imported on-device.
+            srcDirs = ["src/main/python", "../../src", "../../app"]
+        }
+    }
+}
+
+dependencies {
+    implementation "androidx.core:core-ktx:1.13.1"
+    implementation "androidx.activity:activity-ktx:1.9.3"
+    implementation "androidx.webkit:webkit:1.12.1"
+    androidTestImplementation "androidx.test.ext:junit:1.2.1"
+    androidTestImplementation "androidx.test:runner:1.6.2"
+}

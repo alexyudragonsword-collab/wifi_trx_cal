@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>wifitrx workbench</title>
+<style>
+  :root { --fg:#1a1a1a; --bg:#fff; --mut:#667; --line:#d8dce2;
+          --acc:#0a5bd3; --bad:#b3261e; }
+  * { box-sizing:border-box; margin:0; }
+  body { font:15px/1.45 system-ui, sans-serif; color:var(--fg);
+         background:var(--bg); padding-bottom:3.2rem; }
+  nav { display:flex; position:fixed; bottom:0; left:0; right:0;
+        border-top:1px solid var(--line); background:var(--bg); z-index:9; }
+  nav button { flex:1; padding:.7rem 0; border:0; background:none;
+               font:inherit; color:var(--mut); }
+  nav button.on { color:var(--acc); font-weight:600; }
+  main { padding:.8rem; }
+  h2 { font-size:1.05rem; margin:.4rem 0; }
+  select,input[type=number] { font:inherit; padding:.35rem .5rem;
+      border:1px solid var(--line); border-radius:6px; width:9rem; }
+  .row { display:flex; justify-content:space-between; align-items:center;
+         gap:.6rem; padding:.32rem 0; }
+  .row label { flex:1; }
+  button.act { font:inherit; font-weight:600; color:#fff;
+      background:var(--acc); border:0; border-radius:8px;
+      padding:.55rem 1.2rem; margin:.5rem .4rem .5rem 0; }
+  button.act[disabled] { background:var(--mut); }
+  #status { color:var(--mut); min-height:1.3rem; }
+  #status.err { color:var(--bad); white-space:pre-wrap;
+                font-family:monospace; font-size:.8rem; }
+  table { border-collapse:collapse; width:100%; font-size:.85rem;
+          margin:.4rem 0; }
+  th,td { border:1px solid var(--line); padding:.25rem .45rem;
+          text-align:left; }
+  pre.txt { font-size:.78rem; overflow-x:auto; background:#f5f6f8;
+            padding:.5rem; border-radius:6px; }
+  /* figure viewer: CSS-transform pan/zoom, the toolbar equivalent */
+  #fig { border:1px solid var(--line); border-radius:6px; height:52vh;
+         overflow:hidden; touch-action:none; position:relative; }
+  #fig>div { transform-origin:0 0; }
+  #fig svg { display:block; }
+  #figbar { display:flex; gap:.4rem; align-items:center; margin:.4rem 0; }
+  #figbar select { flex:1; }
+  section { display:none; } section.on { display:block; }
+  details { margin:.5rem 0; border:1px solid var(--line);
+            border-radius:6px; padding:.4rem .6rem; }
+  .note { color:var(--mut); font-size:.8rem; }
+</style>
+</head>
+<body>
+<main>
+  <section id="tab-analyses" class="on">
+    <h2 id="a-title"></h2>
+    <p class="note" id="a-desc"></p>
+    <div class="row"><label for="a-pick">Analysis</label>
+      <select id="a-pick"></select></div>
+    <form id="a-form"></form>
+    <button class="act" id="a-run">Run</button>
+    <button class="act" id="a-save" disabled>Save cal-state</button>
+    <div id="status"></div>
+    <div id="a-out" hidden>
+      <table id="a-metrics"></table>
+      <pre class="txt" id="a-text"></pre>
+      <div id="figbar">
+        <select id="a-page"></select>
+        <button class="act" id="a-reset">Reset view</button>
+      </div>
+      <div id="fig"><div id="fig-inner"></div></div>
+      <p class="note">Drag to pan, pinch or double-tap to zoom.</p>
+    </div>
+  </section>
+
+  <section id="tab-inspector">
+    <h2>Cal-state inspector</h2>
+    <p class="note">Open a delivered cal_state.json and read the
+       inspector's findings. The page decides nothing itself.</p>
+    <button class="act" id="i-open">Open JSON…</button>
+    <pre class="txt" id="i-out"></pre>
+  </section>
+
+  <section id="tab-reference">
+    <h2>Reference</h2>
+    <div id="r-body" class="note">Loading…</div>
+  </section>
+</main>
+<nav>
+  <button data-tab="analyses" class="on">Analyses</button>
+  <button data-tab="inspector">Inspector</button>
+  <button data-tab="reference">Reference</button>
+</nav>
+<script src="app.js"></script>
+</body>
+</html>

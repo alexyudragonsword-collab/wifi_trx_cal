@@ -4,6 +4,27 @@
 或 `wifitrx.*` 公开签名的条目都在下面显式标注,交付方按此判断是否需要
 重新取包。日期为落地日期。
 
+## 0.6.0 — 2026-08-16
+
+### 新交付形态:Android 工作台(`android/`)
+
+- **Chaquopy + WebView 整包**:分析层零改动(`src/wifitrx` +
+  `app/specs.py`/`reference.py` 源码打入 APK,PySide6 永不 import),
+  Qt 壳换成 Kotlin 薄壳(`MainActivity` WebView + JSON 桥,
+  `AnalysisService` 前台服务跑分钟级分析)+ 离线单页 UI(表单由
+  `list_specs()` JSON 生成,图形 Agg→SVG 矢量,自写触控平移/缩放——
+  对应桌面工具栏)。manifest **不申请 INTERNET 权限**。
+- Python 侧唯一新代码 `bridge.py`(JSON 进出、错误以 JSON 返回不崩进程);
+  契约由 `tests/test_android_bridge.py` 在桌面主套件钉死。
+- 端上金标对拍:`GoldenTest` 在模拟器/真机重放三个代表分析,与桌面生成的
+  `golden.json` 逐指标对拍(0.05 dB / 1e-3 容差,不追位一致);
+  `android/tools/make_golden.py` 重生成。CI:push 触碰 android/ 构建
+  APK,金标 job 手动 dispatch(`.github/workflows/android.yml`)。
+- 版本锁:Chaquopy 16.0.0 / Python 3.11 / AGP 8.7.3 / Gradle 8.9 /
+  minSdk 24(依据与已知代价见 `android/README.md`:APK ~200 MB、
+  320 MHz 端上分钟级+发热有两段式确认护栏、不支持中途取消)。
+- 选型决策(否决项)记 `docs/backlog_zh.md` R1。
+
 ## 0.5.9 — 2026-08-16
 
 ### 计量学(公开行为变化)

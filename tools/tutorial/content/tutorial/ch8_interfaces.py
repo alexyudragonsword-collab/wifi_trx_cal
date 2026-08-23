@@ -171,7 +171,9 @@ CHAPTER = Chapter(
                   "与本文档同源;跑完一次校准后,顺序表的验收列与捕获成本表"
                   "自动填入本次实测值。所有结果图都是活的 matplotlib 画布,"
                   "每页带导航工具栏:框选放大、平移、复位、把当前视图另存为"
-                  "PNG/SVG/PDF。",
+                  "PNG/SVG/PDF。同一份声明式注册表也驱动 Android 工作台"
+                  "(<code>android/</code>,Chaquopy + WebView 壳,分析层"
+                  "零改动,图形以 SVG 矢量缩放)。",
                   "<code>python app/main.py</code>, three tabs. "
                   "<b>Analyses</b>: seven analyses (forms generated from "
                   "declarative specs) — full calibration (result page = "
@@ -236,6 +238,10 @@ CHAPTER = Chapter(
                   "fill in with that run's own measurements. Every result "
                   "figure is a live matplotlib canvas with a navigation "
                   "toolbar per page: rubber-band zoom, pan, reset, and "
-                  "saving the current view as PNG/SVG/PDF)."),
+                  "saving the current view as PNG/SVG/PDF. The same "
+                  "declarative registry also drives the Android workbench "
+                  "(<code>android/</code>, a Chaquopy + WebView shell — "
+                  "the analysis layer ships unmodified, figures pan/zoom "
+                  "as SVG vectors)."),
             )),
     ))

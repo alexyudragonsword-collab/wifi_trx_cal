@@ -1,0 +1,58 @@
+[
+ {
+  "key": "full_cal",
+  "params": {
+   "bw_mhz": 80,
+   "qam": 256,
+   "seed": 5,
+   "with_dpd": false,
+   "std": "11ax/be",
+   "rx_hp": false,
+   "baseband": false,
+   "agc_rebw": false,
+   "bb_noise_nv": 5
+  },
+  "metrics": {
+   "loopback_evm_db": -33.60767219613386,
+   "tx_evm_db": -34.01012781927378,
+   "steps_passed": 13,
+   "steps_total": 13,
+   "rx_evm_db": -41.47175415698364
+  },
+  "n_pages": 1
+ },
+ {
+  "key": "rx_evm_sweep",
+  "params": {
+   "bw_mhz": 80,
+   "qam": 256,
+   "seed": 5,
+   "std": "11ax/be",
+   "rx_hp": false,
+   "baseband": false,
+   "agc_rebw": false,
+   "bb_noise_nv": 5
+  },
+  "metrics": {
+   "rx_evm_floor_db": -42.26728110475321,
+   "rx_evm_floor_uncal_db": -30.291077876825273,
+   "sens_mcs7_dbm": -69.1,
+   "sens_mcs9_dbm": -63.0,
+   "sens_mcs11_dbm": -56.6,
+   "sens_mcs13_dbm": -49.1
+  },
+  "n_pages": 1
+ },
+ {
+  "key": "spur_planner",
+  "params": {
+   "bw_mhz": 320,
+   "band": "6g"
+  },
+  "metrics": {
+   "n_channels": 59,
+   "n_dirty": 7
+  },
+  "n_pages": 1
+ }
+]
