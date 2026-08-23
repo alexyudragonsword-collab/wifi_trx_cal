@@ -42,9 +42,14 @@ bridge.py  →  specs.ALL_ANALYSES / reference / inspector / save_cal_state
 | matplotlib | 3.6.0 | ≥3.6 | 达标 |
 | OpenBLAS / libgfortran | 0.2.20 / 4.9 | — | Chaquopy 运行库 |
 
-> **端上 scipy/numpy 远旧于桌面**——"同一套物理"的最终裁决属于模拟器
-> 金标对拍(`connectedDebugAndroidTest`),不是构建绿灯。旧版若在金标
-> 上翻车,处置是把触发差异的调用点降级适配并重新对拍,不是放宽容差。
+> **端上 scipy/numpy 远旧于桌面——已裁决:金标对拍通过**
+> (run 32618761315,2026-08-23,Android 14/x86_64 模拟器):full_cal
+> 80M/256/seed5、rx_evm_sweep 80M、spur_planner 320M 全部指标与桌面金标
+> 在 0.05 dB / 1e-3 容差内一致。期间抓出并修掉一个真实不兼容
+> (`correlation_lags`,scipy 1.5 API,见 0.6.2)。残余告诫:金标跑在
+> x86_64 ABI 上,arm64 真机的 OpenBLAS 数值路径未单独对拍(真机功能性
+> 运行已验证);若未来真机读数存疑,把金标 job 的 AVD 换 arm64 镜像
+> 重跑,仍然**不放宽容差**。
 
 实测:debug APK artifact 71 MB(zip,arm64+x86_64 双 ABI),远低于
 ~200 MB 预估。已知非致命警告:runner buildPython 3.12 不能为 3.8 预编
