@@ -2,6 +2,13 @@
 
 本文件按倒序记录实质性进展——最新条目在顶部、紧跟本行之下。每条尽量短——只写摘要与指针;结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-08-23 · R10:设备自裁决 Self-check + 金标重跑纪律(0.7.0)
+
+- 补 arm64 缺口:金标随 APK 出货,应用内 Self-check 页签让**真机自己**裁决物理一致性(PASS/FAIL + 平台信息 + 每项 delta),不再只由 x86_64 模拟器代理。
+- 结构:对拍逻辑唯一实现 `bridge.self_check()`,CI GoldenTest 改为调用并断言其结论——同 inspector_data 的思路,消灭第二份实现。
+- 桌面测试钉死"生成金标的机器上 delta 必须恰为零"(测的是对拍逻辑本身);`AGENTS.md` 新增纪律:动了随 APK 出货的代码或加了端上测试就必须重跑金标 job 并核对测试条数。
+- 指针:`CHANGELOG.md` 0.7.0、`android/README.md` arm64 段。281 测试通过。
+
 ## 2026-08-23 · R9:numpy 2.0 API 越界 + 守卫补齐 numpy 面(0.6.6)
 
 - Reference 表格侧 `np.trapezoid`(numpy 2.0 名)在端上 1.19.5 崩溃——与 correlation_lags 同类,而 0.6.2 的守卫只覆盖了 scipy,事故正落在没扫的另一半。

@@ -43,13 +43,19 @@ bridge.py  →  specs.ALL_ANALYSES / reference / inspector / save_cal_state
 | OpenBLAS / libgfortran | 0.2.20 / 4.9 | — | Chaquopy 运行库 |
 
 > **端上 scipy/numpy 远旧于桌面——已裁决:金标对拍通过**
-> (run 32618761315,2026-08-23,Android 14/x86_64 模拟器):full_cal
-> 80M/256/seed5、rx_evm_sweep 80M、spur_planner 320M 全部指标与桌面金标
-> 在 0.05 dB / 1e-3 容差内一致。期间抓出并修掉一个真实不兼容
-> (`correlation_lags`,scipy 1.5 API,见 0.6.2)。残余告诫:金标跑在
-> x86_64 ABI 上,arm64 真机的 OpenBLAS 数值路径未单独对拍(真机功能性
-> 运行已验证);若未来真机读数存疑,把金标 job 的 AVD 换 arm64 镜像
-> 重跑,仍然**不放宽容差**。
+> (run 32624752010,2026-08-23,Android 14/x86_64 模拟器,0.6.6):
+> full_cal 80M/256/seed5、rx_evm_sweep 80M、spur_planner 320M 全部指标与
+> 桌面金标在 0.05 dB / 1e-3 容差内一致。期间抓出并修掉两个真实不兼容
+> (`correlation_lags` scipy 1.5 / `np.trapezoid` numpy 2.0),现由
+> `tests/test_android_bridge.py` 的 scipy+numpy 调用面守卫拦在桌面。
+
+**arm64 由设备自己裁决(Self-check 页签)**:CI 只能为它跑的 ABI 背书
+(x86_64),而真机是 arm64、OpenBLAS 也不同。金标值随 APK 出货,应用内
+第四个页签一键在**本机**重放三个案例并逐指标对比,给出 PASS/FAIL、平台
+信息(ABI / numpy / scipy / Python)与每项 delta。对拍逻辑只有一份
+(`bridge.self_check()`),CI 的 GoldenTest 调的是同一个函数——手机与 CI
+不可能按不同规则裁决。换机、升级 Android、Chaquopy 换 wheel 之后,重跑
+一次即可复验。耗时数分钟(跑的是真校准)。
 
 实测:debug APK artifact 71 MB(zip,arm64+x86_64 双 ABI),远低于
 ~200 MB 预估。已知非致命警告:runner buildPython 3.12 不能为 3.8 预编

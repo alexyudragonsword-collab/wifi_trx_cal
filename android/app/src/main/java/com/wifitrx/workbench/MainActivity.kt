@@ -28,6 +28,8 @@ import java.io.File
 class MainActivity : ComponentActivity() {
 
     private lateinit var web: WebView
+    // runs are strictly serial, so one flag is enough to route the result
+    private var lastWasSelfCheck = false
 
     private val pickJson =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -62,7 +64,9 @@ class MainActivity : ComponentActivity() {
         web.loadUrl("https://appassets.androidplatform.net/ui/ui/index.html")
 
         AnalysisService.onResult = { json ->
-            runOnUiThread { emit("ui.onRunResult", json) }
+            val fn = if (lastWasSelfCheck) "ui.onSelfCheckResult"
+                     else "ui.onRunResult"
+            runOnUiThread { emit(fn, json) }
         }
     }
 
@@ -90,7 +94,15 @@ class MainActivity : ComponentActivity() {
 
         @JavascriptInterface
         fun run(key: String, paramsJson: String) {
+            lastWasSelfCheck = false
             AnalysisService.launch(this@MainActivity, key, paramsJson)
+        }
+
+        @JavascriptInterface
+        fun selfCheck() {
+            lastWasSelfCheck = true
+            AnalysisService.launch(this@MainActivity,
+                                   AnalysisService.SELF_CHECK, "{}")
         }
 
         @JavascriptInterface

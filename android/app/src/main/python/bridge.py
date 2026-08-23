@@ -174,3 +174,80 @@ def reference_data() -> str:
         return json.dumps({"ok": True, "entries": entries})
     except Exception:
         return _fail()
+
+
+# Golden tolerances: Android BLAS/FFT builds differ from the desktop's, so
+# bit identity is never the claim.  Shared by the emulator GoldenTest and
+# the in-app self-check — one implementation, one pair of numbers.
+GOLDEN_ABS_DB = 0.05
+GOLDEN_REL = 1.0e-3
+
+
+def _platform() -> dict:
+    """What actually executed the physics — the point of a self-check."""
+    import platform
+    import numpy
+    import scipy
+    return {"python": sys.version.split()[0], "numpy": numpy.__version__,
+            "scipy": scipy.__version__, "machine": platform.machine(),
+            "android_abi": ", ".join(_abis()) or platform.machine()}
+
+
+def _abis() -> list:
+    try:                                        # Chaquopy exposes the ABI
+        from java.lang import System            # noqa: F401
+        from android.os import Build
+        return [str(a) for a in Build.SUPPORTED_ABIS]
+    except Exception:
+        return []
+
+
+def self_check() -> str:
+    """Replay the desktop-generated golden cases on THIS device.
+
+    The emulator job can only adjudicate the ABI it runs on (x86_64); a
+    phone is arm64 with a different OpenBLAS.  Shipping the golden values
+    inside the APK lets the device that actually matters answer the
+    question — and lets a user re-answer it after any Android, phone or
+    wheel change.
+
+    Verdict shape mirrors the CI test exactly because the CI test calls
+    this function: a metric passes within GOLDEN_ABS_DB absolute or
+    GOLDEN_REL relative, non-numeric values must match exactly.
+    """
+    try:
+        from specs import ALL_ANALYSES
+        golden = json.loads(
+            (Path(__file__).resolve().parent / "golden.json")
+            .read_text(encoding="utf-8"))
+        cases, all_passed = [], True
+        for case in golden:
+            spec = next(s for s in ALL_ANALYSES if s.key == case["key"])
+            result = spec.run(dict(case["params"]))
+            got = _jsonable(result.metrics)
+            pages = len(result.figures) or (result.figure is not None)
+            rows, case_ok = [], pages == case["n_pages"]
+            for name, want in case["metrics"].items():
+                have = got.get(name)
+                if isinstance(want, (int, float)) and \
+                        isinstance(have, (int, float)):
+                    delta = abs(float(have) - float(want))
+                    ok = (delta <= GOLDEN_ABS_DB
+                          or delta <= GOLDEN_REL * abs(float(want)))
+                    shown = f"{delta:.2e}"
+                else:
+                    ok, shown = str(want) == str(have), "—"
+                case_ok = case_ok and ok
+                rows.append({"metric": name, "desktop": want,
+                             "device": have, "delta": shown,
+                             "verdict": "ok" if ok else "FAIL"})
+            all_passed = all_passed and case_ok
+            cases.append({"key": case["key"], "passed": case_ok,
+                          "pages_desktop": case["n_pages"],
+                          "pages_device": pages, "rows": rows})
+        return json.dumps({"ok": True, "passed": all_passed,
+                           "platform": _platform(), "cases": cases,
+                           "tolerance_abs_db": GOLDEN_ABS_DB,
+                           "tolerance_rel": GOLDEN_REL})
+    except Exception:
+        return _fail()

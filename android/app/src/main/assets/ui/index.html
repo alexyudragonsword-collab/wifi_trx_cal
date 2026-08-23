@@ -46,6 +46,11 @@
   details { margin:.5rem 0; border:1px solid var(--line);
             border-radius:6px; padding:.4rem .6rem; }
   .note { color:var(--mut); font-size:.8rem; }
+  .verdict { font-weight:600; padding:.5rem .7rem; border-radius:8px;
+             margin:.5rem 0; }
+  .verdict.pass { background:#e6f4ea; color:#14622c; }
+  .verdict.fail { background:#fce8e6; color:var(--bad); }
+  td.bad { color:var(--bad); font-weight:600; }
 </style>
 </head>
 <body>
@@ -79,6 +84,18 @@
     <div id="i-out"></div>
   </section>
 
+  <section id="tab-selfcheck">
+    <h2>Self-check</h2>
+    <p class="note">Replays the desktop-generated golden cases on
+       <b>this</b> device and compares every metric. The CI emulator can
+       only vouch for the ABI it runs on (x86_64); this answers for the
+       phone in your hand. Takes several minutes — it runs real
+       calibrations.</p>
+    <button class="act" id="sc-run">Run self-check</button>
+    <div id="sc-status" class="note"></div>
+    <div id="sc-out"></div>
+  </section>
+
   <section id="tab-reference">
     <h2>Reference</h2>
     <div id="r-body" class="note">Loading…</div>
@@ -88,6 +105,7 @@
   <button data-tab="analyses" class="on">Analyses</button>
   <button data-tab="inspector">Inspector</button>
   <button data-tab="reference">Reference</button>
+  <button data-tab="selfcheck">Self-check</button>
 </nav>
 <script src="app.js"></script>
 </body>

@@ -20,6 +20,11 @@ import kotlin.concurrent.thread
 class AnalysisService : Service() {
 
     companion object {
+        /** Sentinel key: the self-check replays several analyses and is
+         * just as long-running, so it rides the same foreground service
+         * rather than blocking the UI thread. */
+        const val SELF_CHECK = "__self_check__"
+
         // Result hand-off to whatever activity is alive; a run whose
         // activity died still completes and the notification closes.
         var onResult: ((String) -> Unit)? = null
@@ -40,10 +45,12 @@ class AnalysisService : Service() {
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "wifitrx:run")
         wake.acquire(30 * 60 * 1000L)
         thread(name = "wifitrx-analysis") {
+            val key = intent.getStringExtra("key")
             val out = try {
-                Python.getInstance().getModule("bridge")
-                    .callAttr("run", intent.getStringExtra("key"),
-                              intent.getStringExtra("params")).toString()
+                val bridge = Python.getInstance().getModule("bridge")
+                if (key == SELF_CHECK) bridge.callAttr("self_check").toString()
+                else bridge.callAttr("run", key,
+                                     intent.getStringExtra("params")).toString()
             } catch (e: Throwable) {
                 """{"ok": false, "error": ${org.json.JSONObject.quote(
                     e.toString())}}"""

@@ -87,5 +87,6 @@ CMOS WiFi 7(802.11be)直接变频收发器复基带行为模型 + 14 步校准�
 
 - 提交前:`QT_QPA_PLATFORM=offscreen python -m pytest tests/ -q`(快速门禁 `scripts/ci_fast.sh`)与 `ruff check src/ app/ tests/ tools/ examples/`。
 - 教程/开发指南内容或其引用对象变化时重建:`QT_QPA_PLATFORM=offscreen MPLBACKEND=Agg python tools/build_docs.py --out docs/`,并提交重建的 HTML。
+- 改动随 APK 出货的代码(`src/wifitrx/`、`app/specs.py`、`app/reference.py`、`app/inspector_data.py`、`android/`)或新增端上测试后,必须重新 dispatch `android.yml` 的金标 job 并核对日志里的测试条数——**构建绿不等于端上物理对**,而没跑过的端上守卫等于没有守卫(两次事故的教训:scipy/numpy 跨版本 API,以及守卫自身未验证)。
 - 每个值得发布的变更配 `CHANGELOG.md` 条目(schema 或公开签名变化显式标注)+ `pyproject.toml` 与 `src/wifitrx/__init__.py` 版本号。
 - 决策与被推翻的假设记入 `docs/backlog_zh.md`——错误的转弯也要记,不只记修正。

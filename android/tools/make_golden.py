@@ -41,9 +41,11 @@ def main() -> None:
                        "n_pages": len(out["pages"])})
         print(f"{key}: {len(out['metrics'])} metrics, "
               f"{len(out['pages'])} page(s)")
-    dst = (REPO / "android" / "app" / "src" / "androidTest" / "assets"
+    # beside bridge.py, i.e. inside the Chaquopy source dir: the golden
+    # values ship in the APK so the app can self-check on the device it
+    # is actually installed on (the emulator job only covers x86_64).
+    dst = (REPO / "android" / "app" / "src" / "main" / "python"
            / "golden.json")
-    dst.parent.mkdir(parents=True, exist_ok=True)
     dst.write_text(json.dumps(golden, indent=1))
     print("wrote", dst)
 

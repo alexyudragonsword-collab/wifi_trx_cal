@@ -176,3 +176,34 @@ def test_reference_assets_are_staged_for_the_apk():
               / "build.gradle").read_text(encoding="utf-8")
     assert "stageAssets" in gradle and "build/python-assets" in gradle
     assert '"../../assets"' in gradle
+
+
+def test_self_check_is_the_one_golden_comparison():
+    """The in-app self-check and the emulator GoldenTest call this same
+    function, so a phone and CI can never adjudicate by different rules.
+    On the desktop it compares the golden values against the machine that
+    produced them — every delta must be exactly zero, which is what makes
+    this a test of the comparison logic rather than of the physics."""
+    out = json.loads(bridge.self_check())
+    assert out["ok"], out.get("error")
+    assert out["passed"], out["cases"]
+    assert out["tolerance_abs_db"] == 0.05 and out["tolerance_rel"] == 1e-3
+    assert {c["key"] for c in out["cases"]} == {
+        "full_cal", "rx_evm_sweep", "spur_planner"}
+    for case in out["cases"]:
+        assert case["rows"], case["key"]
+        for row in case["rows"]:
+            assert row["verdict"] == "ok", (case["key"], row)
+            if row["delta"] != "—":
+                assert float(row["delta"]) == 0.0, (case["key"], row)
+    # the platform block is the point of the feature: it must name what ran
+    assert out["platform"]["numpy"] and out["platform"]["android_abi"]
+
+
+def test_golden_values_ship_inside_the_apk():
+    """Self-check on a phone needs the golden file in the Chaquopy source
+    dir, not only in the test APK's assets."""
+    p = (Path(__file__).resolve().parent.parent / "android" / "app" / "src"
+         / "main" / "python" / "golden.json")
+    assert p.exists(), "golden.json must sit beside bridge.py to ship"
+    assert json.loads(p.read_text(encoding="utf-8"))

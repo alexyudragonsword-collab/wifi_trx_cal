@@ -20,6 +20,8 @@ const native = window.Native || {          // browser smoke-test stub
   pickAndInspect: () => ui.onInspectResult(
       JSON.stringify({ok: false, error: "no app shell"})),
   referenceData: () => JSON.stringify({ok: true, entries: []}),
+  selfCheck: () => setTimeout(() => ui.onSelfCheckResult(
+      JSON.stringify({ok: false, error: "no app shell"})), 0),
 };
 
 const $ = id => document.getElementById(id);
@@ -167,6 +169,36 @@ const ui = {
     }
     $("a-out").hidden = false;
   },
+  onSelfCheckResult(json) {
+    $("sc-run").disabled = false;
+    const r = JSON.parse(json);
+    const out = $("sc-out");
+    out.textContent = "";
+    if (!r.ok) { $("sc-status").textContent = ""; out.textContent = r.error;
+                 return; }
+    const p = r.platform;
+    $("sc-status").textContent =
+        `${p.android_abi} · numpy ${p.numpy} · scipy ${p.scipy} · ` +
+        `Python ${p.python} — tolerance ${r.tolerance_abs_db} dB abs ` +
+        `or ${r.tolerance_rel} rel`;
+    const banner = document.createElement("div");
+    banner.className = "verdict " + (r.passed ? "pass" : "fail");
+    banner.textContent = r.passed
+        ? "PASS — this device reproduces the desktop physics"
+        : "FAIL — metrics below are outside tolerance";
+    out.appendChild(banner);
+    for (const c of r.cases) {
+      const h = document.createElement("h2");
+      h.textContent = `${c.key} — ${c.passed ? "ok" : "FAIL"}`;
+      out.appendChild(h);
+      const t = makeTable(["metric", "desktop", "device", "delta",
+                           "verdict"], c.rows);
+      for (const tr of t.querySelectorAll("tr"))
+        if (tr.lastChild && tr.lastChild.textContent === "FAIL")
+          for (const td of tr.children) td.className = "bad";
+      out.appendChild(t);
+    }
+  },
   onInspectResult(json) {
     const r = JSON.parse(json);
     const out = $("i-out");
@@ -258,6 +290,14 @@ fig.addEventListener("wheel", e => {         // desktop smoke-test comfort
 
 /* ---------------- inspector / reference ---------------- */
 $("i-open").onclick = () => native.pickAndInspect();
+
+$("sc-run").onclick = () => {
+  $("sc-run").disabled = true;
+  $("sc-out").textContent = "";
+  $("sc-status").textContent = "replaying golden cases on this device… " +
+      "(several minutes; a notification tracks progress)";
+  native.selfCheck();
+};
 
 function makeTable(columns, rows) {
   const t = document.createElement("table");
