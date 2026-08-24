@@ -66,6 +66,52 @@ class ExportTest {
         return if (v is String) v else null
     }
 
+    /** The toolbar's data readout, in the renderer that has to compute it.
+     *
+     * Pure arithmetic, so it needs no analysis run — but it is arithmetic
+     * shipped as JavaScript, and a readout that is silently wrong is
+     * worse than none: it reads like a measurement. */
+    @Test
+    fun toolbarReportsDataCoordinatesOnDevice() {
+        val web = loadShippedUi()
+        assertEquals("app.js did not expose the coordinate mapping",
+                     "function", eval(web, "typeof window.dataAtPoint"))
+
+        // a 100x50 viewer; one axes over the middle 60%, x 0..10, y -60..0
+        val probe = """(() => {
+            const axes = [{x0:0.2, y0:0.2, x1:0.8, y1:0.8,
+                           xlim:[0,10], ylim:[-60,0],
+                           xscale:'linear', yscale:'linear',
+                           xlabel:'x', ylabel:'y'}];
+            const size = {w:100, h:50}, view = {x:0, y:0, k:1};
+            return JSON.stringify({
+              mid: window.dataAtPoint(axes, size, view, 50, 25),
+              corner: window.dataAtPoint(axes, size, view, 20, 10),
+              outside: window.dataAtPoint(axes, size, view, 5, 5),
+              zoomed: window.dataAtPoint(axes, size, {x:-100, y:-25, k:2},
+                                         0, 25)});
+        })()"""
+        val r = JSONObject(eval(web, probe)!!)
+
+        val mid = r.getJSONObject("mid")           // axes centre
+        assertEquals(5.0, mid.getDouble("x"), 1e-9)
+        assertEquals(-30.0, mid.getDouble("y"), 1e-9)
+
+        // figure fractions count y from the bottom: the axes' top-left
+        // corner is xlim[0] and ylim[1], not ylim[0]
+        val corner = r.getJSONObject("corner")
+        assertEquals(0.0, corner.getDouble("x"), 1e-9)
+        assertEquals(0.0, corner.getDouble("y"), 1e-9)
+
+        assertTrue("a point off the axes must report nothing",
+                   r.isNull("outside"))
+
+        // the same data point, found through a panned and zoomed view
+        val zoomed = r.getJSONObject("zoomed")
+        assertEquals(5.0, zoomed.getDouble("x"), 1e-9)
+        assertEquals(-30.0, zoomed.getDouble("y"), 1e-9)
+    }
+
     @Test
     fun figuresRasterizeToPngOnDevice() {
         if (!Python.isStarted()) Python.start(AndroidPlatform(inst.targetContext))

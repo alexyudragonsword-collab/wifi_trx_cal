@@ -103,7 +103,8 @@ gradle wrapper --gradle-version 8.9   # 首次;之后用 ./gradlew
 |---|---|---|---|
 | 七个分析 + 参数表单 | ✅ | ✅ | 同一份 `list_specs()` 注册表 |
 | 结果 metrics / 文本 / 多页图 | ✅ | ✅ | |
-| 图形缩放 | 导航工具栏 | 触控平移/双指缩放/双击复位 | |
+| **图形工具栏** | NavigationToolbar2QT | **Home / ◀ / ▶ / Pan / Zoom(框选)** | 0.7.3 补齐;桌面由 matplotlib 提供,端上自实现 |
+| **数据坐标读数** | 工具栏右下角 | **图上方一行,触摸即读** | 0.7.3;SVG 不含数据范围,由 `bridge.run()` 的 `axes` 元数据支撑 |
 | **图形导出** | 工具栏另存 PNG/SVG/PDF | **Export PNG / Export SVG → 分享面板** | 0.7.2:PNG 为首选(见下方格式说明),SVG 保留矢量 |
 | Save cal-state | 文件对话框选路径 | 私有目录 + 分享面板 | 平台惯例差异,非缺陷 |
 | Inspector 四区块 | ✅ | ✅ | 共用 `inspector_data.inspector_sections` |
@@ -119,6 +120,14 @@ gradle wrapper --gradle-version 8.9   # 首次;之后用 ./gradlew
 > 报告;导出的字节经核实完全合法,错的是格式选型)。PNG 由 WebView 自己
 > 栅格化(2000 px 宽,白底),SVG 保留给需要矢量的场合。端上守卫见
 > `ExportTest.figuresRasterizeToPngOnDevice`。
+
+> **图形工具栏是两端各自实现的唯一一项能力。** 桌面画布上的 Home/Back/
+> Forward/Pan/Zoom 与坐标读数由 matplotlib 的 `NavigationToolbar2QT` 直接
+> 提供;WebView 里显示的是一张 SVG,这些必须自己写。因此坐标读数所需的
+> 坐标轴位置与范围由 `bridge.run()` 的 `axes` 元数据随图下发,并由
+> `tests/test_android_bridge.py` 钉住(报出的矩形必须与渲染图里坐标轴边框
+> 的像素位置一致),端上由 `ExportTest.toolbarReportsDataCoordinatesOnDevice`
+> 复验映射本身。Reference 页的示意图不带工具栏(静态图,无数据坐标可言)。
 
 ## 已知代价(选型时已明示)
 

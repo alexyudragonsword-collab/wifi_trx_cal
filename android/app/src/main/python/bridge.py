@@ -90,6 +90,37 @@ def _svg(fig) -> str:
     return buf.getvalue()
 
 
+def _axes_meta(fig) -> list:
+    """Where each axes sits in the figure, and what it spans.
+
+    This is what lets the WebView toolbar report data coordinates the way
+    matplotlib's own toolbar does — the SVG alone carries no trace of the
+    data limits.  Positions are figure fractions with y measured from the
+    bottom, matching ``Axes.get_position()``.
+
+    Read after the figure has been drawn.  Today's analyses call
+    tight_layout while building, so their rectangles are already settled
+    beforehand — but constrained layout only resolves during the draw,
+    and a figure switching to it would silently start reporting its
+    pre-layout rectangle.  What the guard actually pins is the property
+    that matters either way: the reported rectangle must coincide with
+    where the axes frame lands in the rendered image
+    (tests/test_android_bridge.py).
+    """
+    out = []
+    for ax in fig.axes:
+        p = ax.get_position()
+        out.append({
+            "x0": float(p.x0), "y0": float(p.y0),
+            "x1": float(p.x1), "y1": float(p.y1),
+            "xlim": [float(v) for v in ax.get_xlim()],
+            "ylim": [float(v) for v in ax.get_ylim()],
+            "xscale": ax.get_xscale(), "yscale": ax.get_yscale(),
+            "xlabel": ax.get_xlabel(), "ylabel": ax.get_ylabel(),
+        })
+    return out
+
+
 def _fail() -> str:
     return json.dumps({"ok": False, "error": traceback.format_exc()})
 
@@ -134,7 +165,10 @@ def run(key: str, params_json: str) -> str:
             "ok": True,
             "metrics": _jsonable(result.metrics),
             "text": result.text,
-            "pages": [{"title": t, "svg": _svg(f)} for t, f in pages],
+            # _svg draws the figure, so the axes rectangles are settled by
+            # the time _axes_meta reads them — do not reorder these two
+            "pages": [dict(title=t, svg=_svg(f), axes=_axes_meta(f))
+                      for t, f in pages],
             "has_cal_state": result.cal_state is not None,
         })
     except Exception:

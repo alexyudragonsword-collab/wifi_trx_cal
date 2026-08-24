@@ -40,8 +40,21 @@
          overflow:hidden; touch-action:none; position:relative; }
   #fig>div { transform-origin:0 0; }
   #fig svg { display:block; }
-  #figbar { display:flex; gap:.4rem; align-items:center; margin:.4rem 0; }
-  #figbar select { flex:1; }
+  #figbar { display:flex; gap:.3rem; align-items:center; margin:.4rem 0;
+            flex-wrap:wrap; }
+  #figbar select { flex:1 1 7rem; }
+  #figbar2 { display:flex; flex-wrap:wrap; }
+  /* toolbar buttons: quieter than .act, and Pan/Zoom show which is armed */
+  button.tool { font:inherit; font-size:.82rem; padding:.35rem .6rem;
+      border:1px solid var(--line); border-radius:6px;
+      background:var(--bg); color:var(--fg); }
+  button.tool.on { background:var(--acc); border-color:var(--acc);
+                   color:#fff; font-weight:600; }
+  button.tool[disabled] { color:var(--line); }
+  #fig-band { position:absolute; border:1px dashed var(--acc);
+              background:rgba(10,91,211,.12); pointer-events:none; }
+  #fig-coord { font-family:monospace; font-size:.78rem; color:var(--mut);
+               min-height:1.15rem; padding:.15rem 0; }
   section { display:none; } section.on { display:block; }
   details { margin:.5rem 0; border:1px solid var(--line);
             border-radius:6px; padding:.4rem .6rem; }
@@ -69,12 +82,29 @@
       <pre class="txt" id="a-text"></pre>
       <div id="figbar">
         <select id="a-page"></select>
-        <button class="act" id="a-reset">Reset view</button>
+        <button class="tool" id="a-reset"
+                title="Back to the original view">Home</button>
+        <button class="tool" id="a-back" title="Previous view">&#9664;</button>
+        <button class="tool" id="a-fwd" title="Next view">&#9654;</button>
+        <button class="tool on" id="a-pan"
+                title="Drag to pan, pinch to zoom">Pan</button>
+        <button class="tool" id="a-zoom"
+                title="Drag a rectangle to zoom into it">Zoom</button>
+      </div>
+      <!-- readout above the figure, where matplotlib's toolbar keeps it:
+           below a screen-tall figure box it would be off-screen exactly
+           while a finger is on the plot -->
+      <div id="fig-coord"></div>
+      <div id="fig">
+        <div id="fig-inner"></div>
+        <div id="fig-band" hidden></div>
+      </div>
+      <div id="figbar2">
         <button class="act" id="a-export">Export PNG</button>
         <button class="act" id="a-export-svg">Export SVG</button>
       </div>
-      <div id="fig"><div id="fig-inner"></div></div>
-      <p class="note">Drag to pan, pinch or double-tap to zoom.</p>
+      <p class="note">Pan: drag, pinch or double-tap. Zoom: drag a
+         rectangle. Touch the plot to read data coordinates.</p>
     </div>
   </section>
 

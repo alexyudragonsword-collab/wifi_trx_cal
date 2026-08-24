@@ -239,14 +239,100 @@ $("a-save").onclick = () => {
                    "share sheet" : r.error, !r.ok);
 };
 
-/* ---------------- figure pan/zoom (toolbar equivalent) ------------- */
-const view = { x: 0, y: 0, k: 1 };
+/* ---------------- figure viewer: the matplotlib toolbar ------------- */
+
+/* Mirrors NavigationToolbar2 on the desktop canvas — Home, Back, Forward,
+ * Pan, Zoom-to-rectangle and the data-coordinate readout.  Qt gets all of
+ * that from matplotlib itself; a WebView showing an SVG has to provide
+ * it, so this is the one capability the two front-ends implement
+ * separately (recorded in android/README.md's comparison table).
+ *
+ * The data readout is the part the SVG cannot supply on its own: the
+ * bridge sends each page's axes rectangles and limits alongside it. */
+const view = {x: 0, y: 0, k: 1};
+const MIN_K = 0.2, MAX_K = 40;
+let figAxes = [];               // axes metadata for the page on screen
+let figSize = {w: 0, h: 0};     // the SVG's untransformed layout size
+let mode = "pan";
+
 function apply() {
   $("fig-inner").style.transform =
       `translate(${view.x}px,${view.y}px) scale(${view.k})`;
 }
-function resetView() { view.x = view.y = 0; view.k = 1; apply(); }
-$("a-reset").onclick = resetView;
+function setView(v) { view.x = v.x; view.y = v.y; view.k = v.k; apply(); }
+
+/* view history, walked by Back/Forward exactly like the desktop toolbar */
+let history = [], histAt = -1;
+function pushView() {
+  const v = {x: view.x, y: view.y, k: view.k}, top = history[histAt];
+  if (top && top.x === v.x && top.y === v.y && top.k === v.k) return;
+  history = history.slice(0, histAt + 1);
+  history.push(v); histAt = history.length - 1;
+  syncNav();
+}
+function syncNav() {
+  $("a-back").disabled = histAt <= 0;
+  $("a-fwd").disabled = histAt >= history.length - 1;
+}
+$("a-back").onclick = () => {
+  if (histAt > 0) { setView(history[--histAt]); syncNav(); }
+};
+$("a-fwd").onclick = () => {
+  if (histAt < history.length - 1) { setView(history[++histAt]); syncNav(); }
+};
+$("a-reset").onclick = () => { setView({x: 0, y: 0, k: 1}); pushView(); };
+
+function setMode(m) {
+  mode = m;
+  $("a-pan").classList.toggle("on", m === "pan");
+  $("a-zoom").classList.toggle("on", m === "zoom");
+}
+$("a-pan").onclick = () => setMode("pan");
+$("a-zoom").onclick = () => setMode(mode === "zoom" ? "pan" : "zoom");
+
+/* ----- data coordinates under a point (what the toolbar reports) ---- */
+
+function axisValue(lim, t, scale) {
+  if (scale === "log" && lim[0] > 0 && lim[1] > 0) {
+    const a = Math.log10(lim[0]), b = Math.log10(lim[1]);
+    return Math.pow(10, a + t * (b - a));
+  }
+  return lim[0] + t * (lim[1] - lim[0]);
+}
+
+/* Pure so the on-device test can check the mapping without a real run:
+ * container point -> data coordinates, or null when off every axes.
+ * Figure fractions measure y from the bottom (Axes.get_position), the
+ * container measures it from the top — hence the flip. */
+function dataAtPoint(axes, size, v, px, py) {
+  if (!size.w || !size.h) return null;
+  const figX = ((px - v.x) / v.k) / size.w;
+  const figY = 1 - ((py - v.y) / v.k) / size.h;
+  for (let i = axes.length - 1; i >= 0; i--) {      // topmost axes wins
+    const a = axes[i];
+    if (figX < a.x0 || figX > a.x1 || figY < a.y0 || figY > a.y1) continue;
+    return {x: axisValue(a.xlim, (figX - a.x0) / (a.x1 - a.x0), a.xscale),
+            y: axisValue(a.ylim, (figY - a.y0) / (a.y1 - a.y0), a.yscale),
+            xlabel: a.xlabel, ylabel: a.ylabel};
+  }
+  return null;
+}
+window.dataAtPoint = dataAtPoint;      // reached by the on-device test
+// what the viewer currently holds, so a test can map a figure fraction to
+// a container point the same way a finger would land on one
+window.figState = () => ({axes: figAxes, size: figSize, view: view});
+
+function fmtCoord(v) {
+  if (!isFinite(v)) return "?";
+  const a = Math.abs(v);
+  if (a !== 0 && (a < 1e-3 || a >= 1e5)) return v.toExponential(3);
+  return v.toFixed(a >= 100 ? 1 : a >= 1 ? 3 : 4);
+}
+function showCoord(px, py) {
+  const d = dataAtPoint(figAxes, figSize, view, px, py);
+  $("fig-coord").textContent =
+      d ? `x = ${fmtCoord(d.x)}   y = ${fmtCoord(d.y)}` : "";
+}
 
 /* ---------------- export (the desktop toolbar's save) --------------- */
 
@@ -332,6 +418,7 @@ $("a-export-svg").onclick = () => exportCurrent(false);
 
 function showPage(page) {
   $("fig-inner").innerHTML = page.svg;
+  figAxes = page.axes || [];
   const svg = $("fig-inner").querySelector("svg");
   if (svg) {                     // scale to container width, keep vector
     // clientWidth can still be 0 in edge cases (mid-layout, rotation):
@@ -341,36 +428,89 @@ function showPage(page) {
     svg.style.width = w + "px"; svg.style.height = "auto";
     svg.removeAttribute("height");
   }
-  resetView();
+  history = []; histAt = -1;
+  setView({x: 0, y: 0, k: 1});
+  // measure with the view at identity, so this is the layout size the
+  // coordinate mapping divides by
+  const box = svg ? svg.getBoundingClientRect() : null;
+  figSize = box ? {w: box.width, h: box.height} : {w: 0, h: 0};
+  // fit the viewport to the figure: the fixed CSS height left a phone
+  // screen of dead space under a wide, short plot.  Zoomed content
+  // simply overflows it, the way a canvas does.
+  if (box && box.height) $("fig").style.height = Math.round(box.height) + "px";
+  pushView();
+  $("fig-coord").textContent = "";
 }
 
 const fig = $("fig");
-let touches = new Map(), lastDist = 0, lastTap = 0;
+let touches = new Map(), lastDist = 0, lastTap = 0, band = null;
+
+function figPoint(e) {
+  const r = fig.getBoundingClientRect();
+  return {x: e.clientX - r.left, y: e.clientY - r.top};
+}
+function drawBand() {
+  const b = $("fig-band");
+  if (!band) { b.hidden = true; return; }
+  b.hidden = false;
+  b.style.left = Math.min(band.x0, band.x1) + "px";
+  b.style.top = Math.min(band.y0, band.y1) + "px";
+  b.style.width = Math.abs(band.x1 - band.x0) + "px";
+  b.style.height = Math.abs(band.y1 - band.y0) + "px";
+}
+/* Zoom so the dragged rectangle fills the viewer — the toolbar's zoom. */
+function zoomToBand() {
+  const W = fig.clientWidth, H = fig.clientHeight;
+  const x0 = Math.min(band.x0, band.x1), x1 = Math.max(band.x0, band.x1);
+  const y0 = Math.min(band.y0, band.y1), y1 = Math.max(band.y0, band.y1);
+  if (x1 - x0 < 12 || y1 - y0 < 12) return;    // a tap, not a drag
+  const c0x = (x0 - view.x) / view.k, c0y = (y0 - view.y) / view.k;
+  const c1x = (x1 - view.x) / view.k, c1y = (y1 - view.y) / view.k;
+  const k = Math.min(MAX_K, Math.max(MIN_K,
+      Math.min(W / (c1x - c0x), H / (c1y - c0y))));
+  setView({k: k,
+           x: -k * c0x + (W - k * (c1x - c0x)) / 2,
+           y: -k * c0y + (H - k * (c1y - c0y)) / 2});
+  pushView();
+}
+
 fig.addEventListener("pointerdown", e => {
   fig.setPointerCapture(e.pointerId);
   touches.set(e.pointerId, {x: e.clientX, y: e.clientY});
-  const now = Date.now();                    // double-tap zoom
+  const p = figPoint(e);
+  showCoord(p.x, p.y);
   if (touches.size === 1) {
-    if (now - lastTap < 300) { view.k = view.k > 1 ? 1 : 2.5; apply(); }
+    if (mode === "zoom") { band = {x0: p.x, y0: p.y, x1: p.x, y1: p.y}; }
+    const now = Date.now();                  // double-tap zoom
+    if (now - lastTap < 300) {
+      view.k = view.k > 1 ? 1 : 2.5; apply(); pushView();
+    }
     lastTap = now;
+  } else {
+    band = null; drawBand();                 // a second finger ends a drag
   }
 });
 fig.addEventListener("pointermove", e => {
+  const p = figPoint(e);
+  showCoord(p.x, p.y);
   if (!touches.has(e.pointerId)) return;
   const prev = touches.get(e.pointerId);
   touches.set(e.pointerId, {x: e.clientX, y: e.clientY});
   const pts = [...touches.values()];
-  if (pts.length === 1) {                    // pan
+  if (pts.length === 1 && band) {             // rubber band
+    band.x1 = p.x; band.y1 = p.y; drawBand();
+  } else if (pts.length === 1) {              // pan
     view.x += e.clientX - prev.x; view.y += e.clientY - prev.y; apply();
-  } else if (pts.length === 2) {             // pinch
+  } else if (pts.length === 2) {              // pinch, in either mode
     const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
     if (lastDist > 0) {
-      const c = {x: (pts[0].x + pts[1].x) / 2 - fig.offsetLeft,
-                 y: (pts[0].y + pts[1].y) / 2 - fig.offsetTop};
+      const r = fig.getBoundingClientRect();
+      const c = {x: (pts[0].x + pts[1].x) / 2 - r.left,
+                 y: (pts[0].y + pts[1].y) / 2 - r.top};
       const s = d / lastDist;
       view.x = c.x - s * (c.x - view.x);
       view.y = c.y - s * (c.y - view.y);
-      view.k = Math.min(40, Math.max(0.2, view.k * s));
+      view.k = Math.min(MAX_K, Math.max(MIN_K, view.k * s));
       apply();
     }
     lastDist = d;
@@ -379,11 +519,13 @@ fig.addEventListener("pointermove", e => {
 ["pointerup", "pointercancel"].forEach(ev => fig.addEventListener(ev, e => {
   touches.delete(e.pointerId);
   if (touches.size < 2) lastDist = 0;
+  if (band && touches.size === 0) { zoomToBand(); band = null; drawBand(); }
+  else if (touches.size === 0) pushView();    // a finished pan or pinch
 }));
 fig.addEventListener("wheel", e => {         // desktop smoke-test comfort
   e.preventDefault();
   const s = e.deltaY < 0 ? 1.15 : 1 / 1.15;
-  view.k = Math.min(40, Math.max(0.2, view.k * s)); apply();
+  view.k = Math.min(MAX_K, Math.max(MIN_K, view.k * s)); apply();
 }, {passive: false});
 
 /* ---------------- inspector / reference ---------------- */

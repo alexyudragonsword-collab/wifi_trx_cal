@@ -5,6 +5,7 @@ verifiable on the desktop, so its JSON contract is pinned here: the same
 guarantee test_gui_specs gives the Qt shell, for the Android one.
 """
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -311,3 +312,78 @@ def test_shipped_diagrams_can_be_rasterized_on_device():
         assert "<image" not in svg, f"{entry.key}: embedded raster image"
         assert "url(http" not in svg, f"{entry.key}: external url() reference"
     assert checked, "no diagrams were checked"
+
+
+def _spur_page():
+    """One real result page, cheap enough for a unit test (~0.3 s)."""
+    out = json.loads(bridge.run("spur_planner",
+                                json.dumps({"bw_mhz": 320, "band": "6g"})))
+    assert out["ok"], out.get("error")
+    return out["pages"][0]
+
+
+def test_pages_carry_axes_metadata_for_the_coordinate_readout():
+    """The figure travels as an SVG, which says nothing about the data
+    limits.  Without this metadata the Android toolbar cannot report data
+    coordinates at all — the readout would silently show nothing."""
+    page = _spur_page()
+    assert page["axes"], "no axes metadata reached the UI"
+    for a in page["axes"]:
+        assert set(a) >= {"x0", "y0", "x1", "y1", "xlim", "ylim",
+                          "xscale", "yscale", "xlabel", "ylabel"}
+        assert 0.0 <= a["x0"] < a["x1"] <= 1.0, a
+        assert 0.0 <= a["y0"] < a["y1"] <= 1.0, a
+        for lim in (a["xlim"], a["ylim"]):
+            assert len(lim) == 2 and all(math.isfinite(v) for v in lim)
+            assert lim[0] != lim[1]
+        # JSON-safe: numpy scalars would survive json.dumps as strings
+        assert all(isinstance(v, float) for v in a["xlim"] + a["ylim"])
+
+
+def test_axes_rectangle_matches_where_the_frame_actually_lands():
+    """Independent check of the readout's frame of reference: render the
+    same figure and find the axes spines in the pixels.  A wrong or
+    stale rectangle (read before layout, or measured in the wrong
+    direction) puts every reported coordinate off by that much."""
+    import io
+
+    import numpy as np
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    from PIL import Image
+
+    from specs import ALL_ANALYSES
+    spec = next(s for s in ALL_ANALYSES if s.key == "spur_planner")
+    fig = spec.run({"bw_mhz": 320, "band": "6g"}).figure
+    reported = bridge._axes_meta(fig)[0]        # _svg draws; so does print_png
+
+    buf = io.BytesIO()
+    FigureCanvasAgg(fig).print_png(buf)
+    im = np.asarray(Image.open(io.BytesIO(buf.getvalue())).convert("L"))
+    h, w = im.shape
+    dark = im < 128
+    cols = np.where(dark.sum(axis=0) > 0.35 * h)[0]   # the vertical spines
+    rows = np.where(dark.sum(axis=1) > 0.35 * w)[0]   # the horizontal ones
+    assert cols.size and rows.size, "no axes frame found in the render"
+    measured = {"x0": cols.min() / w, "x1": cols.max() / w,
+                # figure fractions count y from the bottom, pixels from the top
+                "y0": 1 - rows.max() / h, "y1": 1 - rows.min() / h}
+    for key, value in measured.items():
+        assert abs(value - reported[key]) < 0.01, \
+            f"{key}: reported {reported[key]:.4f}, frame at {value:.4f}"
+
+
+def test_the_figure_toolbar_offers_what_the_desktop_toolbar_does():
+    """Qt gets Home/Back/Forward/Pan/Zoom and the coordinate readout from
+    matplotlib's own NavigationToolbar2QT; on Android the WebView has to
+    supply them, so they can regress independently."""
+    root = Path(__file__).resolve().parent.parent / "android" / "app" / "src"
+    ui = root / "main" / "assets" / "ui"
+    js = (ui / "app.js").read_text(encoding="utf-8")
+    html = (ui / "index.html").read_text(encoding="utf-8")
+
+    for el in ("a-reset", "a-back", "a-fwd", "a-pan", "a-zoom", "fig-coord"):
+        assert f'id="{el}"' in html, f"{el} missing from the toolbar"
+    for el in ("a-reset", "a-back", "a-fwd", "a-pan", "a-zoom"):
+        assert f'$("{el}").onclick' in js, f"{el} is not wired up"
+    # the readout needs the metadata above; keep the consumer honest
+    assert "dataAtPoint" in js and "page.axes" in js
