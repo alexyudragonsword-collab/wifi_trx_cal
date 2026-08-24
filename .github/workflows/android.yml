@@ -87,9 +87,13 @@ jobs:
                 f"{skipped} skipped")
           for name in sorted(names):
               print("  -", name)
-          if total < 4:
-              sys.exit(f"expected at least 4 on-device tests, ran {total} — "
-                       "raise this floor when adding one")
+          # exact, not a floor: ">= 4" still passes if a new test is added
+          # while one of the old ones quietly stops running.  This job runs
+          # a single AVD, so the count is the test count.
+          expected = 4
+          if total != expected:
+              sys.exit(f"expected exactly {expected} on-device tests, ran "
+                       f"{total} — update this number when adding one")
           if failed or skipped:
               sys.exit("on-device tests failed or were skipped")
           PY
