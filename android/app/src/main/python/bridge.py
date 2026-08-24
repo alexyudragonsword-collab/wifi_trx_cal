@@ -22,6 +22,7 @@ os.environ.setdefault("MPLBACKEND", "Agg")  # before any matplotlib import
 
 import io          # noqa: E402
 import json        # noqa: E402
+import math        # noqa: E402
 import sys         # noqa: E402
 import traceback   # noqa: E402
 from pathlib import Path  # noqa: E402
@@ -42,6 +43,13 @@ for _p in (_REPO / "app", _REPO / "src"):
 # the very path a recipient uses.
 _last_cal_state: dict | None = None
 _reference_source: dict | None = None      # {"results", "fs_hz"}
+
+# Figures of the last run, kept so the cursor can ask for one page's data
+# without run() shipping every page's samples up front: full_cal_steps
+# alone carries ~106k points across its 14 pages.  The figures already
+# hold those samples as numpy arrays, so retaining them costs nothing the
+# run had not already spent.
+_last_figs: list = []
 
 
 _reference_version = 0
@@ -71,7 +79,10 @@ def _jsonable(v):
     if isinstance(v, (np.integer,)):
         return int(v)
     if isinstance(v, (np.floating,)):
-        return float(v)
+        f = float(v)
+        return f if math.isfinite(f) else None
+    if isinstance(v, float):
+        return v if math.isfinite(v) else None
     if isinstance(v, np.ndarray):
         return [_jsonable(x) for x in v.tolist()]
     if isinstance(v, dict):
@@ -121,6 +132,110 @@ def _axes_meta(fig) -> list:
     return out
 
 
+# Bounds on what one page ships for snapping.  A marker-only artist with
+# more than a few hundred points is a scatter cloud, not a curve; the
+# budget is the backstop that keeps a future figure from pushing a
+# multi-megabyte string through the JavaScript bridge.
+SCATTER_CLOUD_POINTS = 200
+PAGE_POINT_BUDGET = 30000
+
+
+def _num(v):
+    """9 significant digits: far beyond what the readout or the model
+    resolves, and roughly 40% smaller than a full float repr.
+
+    Non-finite becomes null.  JSON has no NaN, and Python's json writes a
+    bare ``NaN`` token that JSON.parse rejects outright — one masked point
+    would make the WebView discard the whole page's samples.  Those points
+    are real data ("not attributable", per the isolation-floor masking),
+    and a cursor must not snap to one, so null is also the honest value.
+    """
+    f = float(v)
+    return float("%.9g" % f) if math.isfinite(f) else None
+
+
+def _series_of(fig) -> list:
+    """Plotted data of one figure, per axes, for the cursor to snap to.
+
+    Only artists drawn in data coordinates count.  ``axvline``/``axhline``
+    guides — AGC hand-over marks, MCS thresholds — carry a blended
+    transform instead, and a cursor that snapped to one would report a
+    threshold as if it were a measurement.  Labels cannot make this
+    distinction: the constellation scatters and the blocker curve are
+    unlabelled data, while every guide line here is unlabelled too.
+    """
+    out = []
+    budget = PAGE_POINT_BUDGET
+    for ai, ax in enumerate(fig.axes):
+        anonymous = 0
+        for line in ax.get_lines():
+            if line.get_transform() is not ax.transData:
+                continue
+            xs, ys = line.get_xdata(), line.get_ydata()
+            if len(xs) == 0:
+                continue
+            label = line.get_label() or ""
+            if label.startswith("_"):
+                anonymous += 1
+                label = f"data {anonymous}" if anonymous > 1 else "data"
+            entry = {"axes": ai, "name": label, "kind": "line"}
+            # A marker-only artist with thousands of points is a scatter
+            # cloud (the constellations: 5976 symbols each, four per
+            # page), not a curve to run a marker along — and shipping
+            # them is what took one page from 210 KB to 815 KB.  A
+            # handful of marker-only points is an annotated operating
+            # point, which is worth snapping to, hence the threshold
+            # rather than a plain style test.  Nothing is dropped
+            # silently: the entry still travels, and the UI says the
+            # cursor is positioning freely over it.
+            cloud = (line.get_linestyle() in ("None", " ", "")
+                     and len(xs) > SCATTER_CLOUD_POINTS)
+            if cloud or len(xs) > budget:
+                entry.update(snap=False, points=len(xs),
+                             why="scatter cloud" if cloud else "page budget")
+            else:
+                budget -= len(xs)
+                entry.update(snap=True,
+                             x=[_num(v) for v in xs],
+                             y=[_num(v) for v in ys])
+            out.append(entry)
+        for container in getattr(ax, "containers", []):
+            patches = [p for p in container if hasattr(p, "get_height")]
+            if not patches:
+                continue
+            label = container.get_label() or ""
+            if label.startswith("_"):
+                label = "bars"
+            out.append({
+                "axes": ai, "name": label, "kind": "bar", "snap": True,
+                # the bar's own value is its top, and its x is its centre
+                "x": [_num(p.get_x() + p.get_width() / 2.0) for p in patches],
+                "y": [_num(p.get_y() + p.get_height()) for p in patches]})
+    return out
+
+
+def page_series(index) -> str:
+    """Plotted data of one result page, fetched only when the cursor needs
+    it.  Keeping this out of run() matters: full_cal_steps would otherwise
+    push ~106k points through the bridge on every run, for a feature the
+    user may never turn on."""
+    try:
+        i = int(index)
+        if not 0 <= i < len(_last_figs):
+            return json.dumps({"ok": False,
+                               "error": "no such page in the last run"})
+        series = _series_of(_last_figs[i][1])
+        # allow_nan=False: if a non-finite value ever slips past _num,
+        # fail loudly here instead of emitting a token the WebView cannot
+        # parse — that failure mode is invisible on the device
+        return json.dumps({
+            "ok": True, "series": series,
+            "points": sum(len(s.get("x", ())) for s in series)},
+            allow_nan=False)
+    except Exception:
+        return _fail()
+
+
 def _fail() -> str:
     return json.dumps({"ok": False, "error": traceback.format_exc()})
 
@@ -149,7 +264,7 @@ def list_specs() -> str:
 
 def run(key: str, params_json: str) -> str:
     """Run one analysis; figures come back as per-page SVG text."""
-    global _last_cal_state
+    global _last_cal_state, _last_figs
     try:
         from specs import ALL_ANALYSES
         spec = next(s for s in ALL_ANALYSES if s.key == key)
@@ -158,6 +273,7 @@ def run(key: str, params_json: str) -> str:
         pages = list(result.figures) or (
             [("figure", result.figure)] if result.figure is not None else [])
         _last_cal_state = result.cal_state
+        _last_figs = pages          # page_series() reads these on demand
         if result.cal_state:
             _set_reference_source(result.cal_state.get("results"),
                                   result.cal_state.get("fs_hz"))

@@ -105,6 +105,7 @@ gradle wrapper --gradle-version 8.9   # 首次;之后用 ./gradlew
 | 结果 metrics / 文本 / 多页图 | ✅ | ✅ | |
 | **图形工具栏** | NavigationToolbar2QT | **Home / ◀ / ▶ / Pan / Zoom(框选)** | 0.7.3 补齐;桌面由 matplotlib 提供,端上自实现 |
 | **数据坐标读数** | 工具栏右下角 | **图上方一行,触摸即读** | 0.7.3;SVG 不含数据范围,由 `bridge.run()` 的 `axes` 元数据支撑 |
+| **游标(仪器式 marker)** | — | **双标记吸附采样点 + Δ 读数** | 0.7.4;Android 独有,桌面可用工具栏读数替代 |
 | **图形导出** | 工具栏另存 PNG/SVG/PDF | **Export PNG / Export SVG → 分享面板** | 0.7.2:PNG 为首选(见下方格式说明),SVG 保留矢量 |
 | Save cal-state | 文件对话框选路径 | 私有目录 + 分享面板 | 平台惯例差异,非缺陷 |
 | Inspector 四区块 | ✅ | ✅ | 共用 `inspector_data.inspector_sections` |
@@ -128,6 +129,14 @@ gradle wrapper --gradle-version 8.9   # 首次;之后用 ./gradlew
 > `tests/test_android_bridge.py` 钉住(报出的矩形必须与渲染图里坐标轴边框
 > 的像素位置一致),端上由 `ExportTest.toolbarReportsDataCoordinatesOnDevice`
 > 复验映射本身。Reference 页的示意图不带工具栏(静态图,无数据坐标可言)。
+
+> **游标吸附到的是真实采样点,不是插值。** 数据由 `bridge.page_series(i)`
+> 按页惰性下发(不进 `run()`:full_cal_steps 全部页合计 ~10.6 MB)。判定
+> 哪些图元算"数据"用的是**坐标变换**而非图例标签——`axvline`/`axhline`
+> 的辅助线(AGC 切换、MCS 门限)带混合变换,吸附上去会把规格线报成测量
+> 值;而星座图与 blocker 曲线恰恰是无标签的真数据。星座点云(5976 点 ×4)
+> 标为不吸附并附原因,该处游标自由定位并在读数里注明。隔离底板掩码点以
+> `null` 传输,游标不吸附——它们的含义就是"不可归因"。
 
 ## 已知代价(选型时已明示)
 

@@ -23,6 +23,7 @@ const native = window.Native || {          // browser smoke-test stub
   referenceVersion: () => JSON.stringify({ok: true, version: 0}),
   saveText: () => JSON.stringify({ok: false, error: "no app shell"}),
   saveBinary: () => JSON.stringify({ok: false, error: "no app shell"}),
+  pageSeries: () => JSON.stringify({ok: true, series: []}),
   selfCheck: () => setTimeout(() => ui.onSelfCheckResult(
       JSON.stringify({ok: false, error: "no app shell"})), 0),
 };
@@ -163,6 +164,7 @@ const ui = {
     $("a-text").hidden = !r.text;
     const pages = r.pages || [];
     ui.pages = pages;
+    for (const k of Object.keys(seriesCache)) delete seriesCache[k];
     const sel = $("a-page");
     sel.innerHTML = "";
     pages.forEach((p, i) => {
@@ -258,6 +260,7 @@ let mode = "pan";
 function apply() {
   $("fig-inner").style.transform =
       `translate(${view.x}px,${view.y}px) scale(${view.k})`;
+  if (cursors.length) drawCursors();   // markers hold data, not pixels
 }
 function setView(v) { view.x = v.x; view.y = v.y; view.k = v.k; apply(); }
 
@@ -286,6 +289,8 @@ function setMode(m) {
   mode = m;
   $("a-pan").classList.toggle("on", m === "pan");
   $("a-zoom").classList.toggle("on", m === "zoom");
+  $("a-cursor").classList.toggle("on", m === "cursor");
+  setCursorMode(m === "cursor");
 }
 $("a-pan").onclick = () => setMode("pan");
 $("a-zoom").onclick = () => setMode(mode === "zoom" ? "pan" : "zoom");
@@ -311,12 +316,31 @@ function dataAtPoint(axes, size, v, px, py) {
   for (let i = axes.length - 1; i >= 0; i--) {      // topmost axes wins
     const a = axes[i];
     if (figX < a.x0 || figX > a.x1 || figY < a.y0 || figY > a.y1) continue;
-    return {x: axisValue(a.xlim, (figX - a.x0) / (a.x1 - a.x0), a.xscale),
+    return {ai: i,
+            x: axisValue(a.xlim, (figX - a.x0) / (a.x1 - a.x0), a.xscale),
             y: axisValue(a.ylim, (figY - a.y0) / (a.y1 - a.y0), a.yscale),
             xlabel: a.xlabel, ylabel: a.ylabel};
   }
   return null;
 }
+
+/* The inverse: a data point's place in the container.  Cursors are held
+ * in data coordinates, so they stay on their point through pan and zoom
+ * and only their screen position is recomputed. */
+function axisFrac(lim, v, scale) {
+  if (scale === "log" && lim[0] > 0 && lim[1] > 0 && v > 0) {
+    const a = Math.log10(lim[0]), b = Math.log10(lim[1]);
+    return (Math.log10(v) - a) / (b - a);
+  }
+  return (v - lim[0]) / (lim[1] - lim[0]);
+}
+function pointAtData(size, v, a, x, y) {
+  const figX = a.x0 + axisFrac(a.xlim, x, a.xscale) * (a.x1 - a.x0);
+  const figY = a.y0 + axisFrac(a.ylim, y, a.yscale) * (a.y1 - a.y0);
+  return {px: v.x + v.k * figX * size.w,
+          py: v.y + v.k * (1 - figY) * size.h};
+}
+window.pointAtData = pointAtData;      // reached by the on-device test
 window.dataAtPoint = dataAtPoint;      // reached by the on-device test
 // what the viewer currently holds, so a test can map a figure fraction to
 // a container point the same way a finger would land on one
@@ -329,10 +353,139 @@ function fmtCoord(v) {
   return v.toFixed(a >= 100 ? 1 : a >= 1 ? 3 : 4);
 }
 function showCoord(px, py) {
+  if (mode === "cursor") return;           // the cursors own the readout
   const d = dataAtPoint(figAxes, figSize, view, px, py);
   $("fig-coord").textContent =
       d ? `x = ${fmtCoord(d.x)}   y = ${fmtCoord(d.y)}` : "";
 }
+
+/* ---------------- cursors: two markers and their delta -------------- */
+
+/* The instrument idiom rather than a crosshair: each marker rides the
+ * plotted data, and the pair reports the difference.  Markers are held in
+ * data coordinates and re-projected on every view change, so panning and
+ * zooming moves the picture under them, never the reading.
+ *
+ * The samples come from bridge.page_series(), fetched for one page at a
+ * time and only once a cursor is armed — full_cal_steps carries ~106k
+ * points across its pages, which has no business travelling on every run.
+ */
+let cursors = [];               // up to two {ai, x, y, name, snapped}
+let dragging = -1;
+const seriesCache = {};         // page index -> series[] (per run)
+const GRAB_PX = 44;             // finger-sized: grab vs. place a marker
+
+function curPage() { return Number($("a-page").value) || 0; }
+
+function pageSeries() {
+  const i = curPage();
+  if (!(i in seriesCache)) {
+    const r = nativeJson(() => native.pageSeries(i));
+    seriesCache[i] = r.ok ? (r.series || []) : [];
+    if (!r.ok) setStatus(r.error, true);
+  }
+  return seriesCache[i];
+}
+
+/* Nearest plotted point to a container position, within the axes under
+ * it.  No radius limit: on an instrument a marker rides the trace, and a
+ * finger cannot be placed to the pixel.  Where the axes has nothing
+ * snappable — a constellation's scatter cloud — the marker stays where it
+ * was put and says so, instead of pretending to sit on a sample. */
+function nearestPoint(px, py) {
+  const hit = dataAtPoint(figAxes, figSize, view, px, py);
+  if (!hit) return null;
+  const a = figAxes[hit.ai];
+  let best = null;
+  for (const s of pageSeries()) {
+    if (s.axes !== hit.ai || !s.snap) continue;
+    for (let i = 0; i < s.x.length; i++) {
+      // null is a masked sample — real data, but nothing to snap to
+      if (s.x[i] === null || s.y[i] === null) continue;
+      const p = pointAtData(figSize, view, a, s.x[i], s.y[i]);
+      const d = (p.px - px) * (p.px - px) + (p.py - py) * (p.py - py);
+      if (best === null || d < best.d)
+        best = {d: d, x: s.x[i], y: s.y[i], name: s.name};
+    }
+  }
+  if (best) return {ai: hit.ai, x: best.x, y: best.y, name: best.name,
+                    snapped: true};
+  return {ai: hit.ai, x: hit.x, y: hit.y, name: "", snapped: false};
+}
+
+function cursorAt(px, py) {                 // which marker is under here?
+  let best = -1, bestD = GRAB_PX * GRAB_PX;
+  cursors.forEach((c, i) => {
+    const p = pointAtData(figSize, view, figAxes[c.ai], c.x, c.y);
+    const d = (p.px - px) * (p.px - px) + (p.py - py) * (p.py - py);
+    if (d <= bestD) { bestD = d; best = i; }
+  });
+  return best;
+}
+
+function placeCursor(px, py) {
+  const c = nearestPoint(px, py);
+  if (!c) return;
+  if (dragging < 0) dragging = cursors.length < 2 ? cursors.length : 0;
+  cursors[dragging] = c;
+  drawCursors();
+}
+
+function drawCursors() {
+  const svg = $("fig-cursors");
+  svg.hidden = cursors.length === 0;
+  svg.setAttribute("width", fig.clientWidth);
+  svg.setAttribute("height", fig.clientHeight);
+  let out = "";
+  cursors.forEach((c, i) => {
+    const p = pointAtData(figSize, view, figAxes[c.ai], c.x, c.y);
+    const col = i === 0 ? "#0a5bd3" : "#b3261e";
+    out += `<line x1="${p.px}" y1="0" x2="${p.px}" y2="100%"
+                  stroke="${col}" stroke-width="1"
+                  stroke-dasharray="4 3"/>
+            <line x1="0" y1="${p.py}" x2="100%" y2="${p.py}"
+                  stroke="${col}" stroke-width="1"
+                  stroke-dasharray="4 3"/>
+            <circle cx="${p.px}" cy="${p.py}" r="5" fill="none"
+                    stroke="${col}" stroke-width="2"/>
+            <text x="${p.px + 7}" y="${p.py - 7}" fill="${col}"
+                  font-size="12" font-weight="600">${i + 1}</text>`;
+  });
+  svg.innerHTML = out;
+  showCursorReadout();
+}
+
+function showCursorReadout() {
+  if (!cursors.length) {
+    $("fig-coord").textContent = "tap the plot to place marker 1";
+    return;
+  }
+  const lines = cursors.map((c, i) => {
+    const tag = c.snapped ? c.name : "free — no curve on these axes";
+    return `C${i + 1}  x = ${fmtCoord(c.x)}   y = ${fmtCoord(c.y)}` +
+           (tag ? `   ${tag}` : "");
+  });
+  if (cursors.length === 2) {
+    lines.push(cursors[0].ai === cursors[1].ai
+        ? `Δ   x = ${fmtCoord(cursors[1].x - cursors[0].x)}` +
+          `   y = ${fmtCoord(cursors[1].y - cursors[0].y)}`
+        : "Δ   markers are on different axes");
+  }
+  $("fig-coord").textContent = lines.join("\n");
+}
+
+function setCursorMode(on) {
+  if (on) {
+    pageSeries();                 // fetch before the first tap, not during
+    showCursorReadout();
+  } else {
+    $("fig-coord").textContent = "";
+  }
+}
+$("a-cursor").onclick = () => setMode(mode === "cursor" ? "pan" : "cursor");
+$("a-cursor-clear").onclick = () => {
+  cursors = []; dragging = -1; drawCursors();
+};
 
 /* ---------------- export (the desktop toolbar's save) --------------- */
 
@@ -419,6 +572,7 @@ $("a-export-svg").onclick = () => exportCurrent(false);
 function showPage(page) {
   $("fig-inner").innerHTML = page.svg;
   figAxes = page.axes || [];
+  cursors = []; dragging = -1;          // markers belong to one page
   const svg = $("fig-inner").querySelector("svg");
   if (svg) {                     // scale to container width, keep vector
     // clientWidth can still be 0 in edge cases (mid-layout, rotation):
@@ -480,6 +634,10 @@ fig.addEventListener("pointerdown", e => {
   const p = figPoint(e);
   showCoord(p.x, p.y);
   if (touches.size === 1) {
+    if (mode === "cursor") {
+      dragging = cursorAt(p.x, p.y);      // grab a marker, or place one
+      placeCursor(p.x, p.y);
+    }
     if (mode === "zoom") { band = {x0: p.x, y0: p.y, x1: p.x, y1: p.y}; }
     const now = Date.now();                  // double-tap zoom
     if (now - lastTap < 300) {
@@ -497,7 +655,9 @@ fig.addEventListener("pointermove", e => {
   const prev = touches.get(e.pointerId);
   touches.set(e.pointerId, {x: e.clientX, y: e.clientY});
   const pts = [...touches.values()];
-  if (pts.length === 1 && band) {             // rubber band
+  if (pts.length === 1 && mode === "cursor") {
+    placeCursor(p.x, p.y);                    // drag the grabbed marker
+  } else if (pts.length === 1 && band) {      // rubber band
     band.x1 = p.x; band.y1 = p.y; drawBand();
   } else if (pts.length === 1) {              // pan
     view.x += e.clientX - prev.x; view.y += e.clientY - prev.y; apply();
@@ -519,8 +679,9 @@ fig.addEventListener("pointermove", e => {
 ["pointerup", "pointercancel"].forEach(ev => fig.addEventListener(ev, e => {
   touches.delete(e.pointerId);
   if (touches.size < 2) lastDist = 0;
+  if (touches.size === 0) dragging = -1;
   if (band && touches.size === 0) { zoomToBand(); band = null; drawBand(); }
-  else if (touches.size === 0) pushView();    // a finished pan or pinch
+  else if (touches.size === 0 && mode !== "cursor") pushView();
 }));
 fig.addEventListener("wheel", e => {         // desktop smoke-test comfort
   e.preventDefault();

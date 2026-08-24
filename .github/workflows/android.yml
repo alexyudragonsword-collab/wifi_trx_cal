@@ -90,7 +90,7 @@ jobs:
           # exact, not a floor: ">= 4" still passes if a new test is added
           # while one of the old ones quietly stops running.  This job runs
           # a single AVD, so the count is the test count.
-          expected = 4
+          expected = 5
           if total != expected:
               sys.exit(f"expected exactly {expected} on-device tests, ran "
                        f"{total} — update this number when adding one")

@@ -131,6 +131,14 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface
         fun referenceData(): String = py.callAttr("reference_data").toString()
 
+        /** Plotted samples of one result page, for the cursor to snap
+         * to.  Per page and on demand: shipping every page's samples with
+         * every run would push megabytes through the bridge for a feature
+         * that may never be switched on. */
+        @JavascriptInterface
+        fun pageSeries(index: Int): String =
+            py.callAttr("page_series", index).toString()
+
         @JavascriptInterface
         fun referenceVersion(): String =
             py.callAttr("reference_version").toString()

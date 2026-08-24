@@ -54,7 +54,9 @@
   #fig-band { position:absolute; border:1px dashed var(--acc);
               background:rgba(10,91,211,.12); pointer-events:none; }
   #fig-coord { font-family:monospace; font-size:.78rem; color:var(--mut);
-               min-height:1.15rem; padding:.15rem 0; }
+               min-height:1.15rem; padding:.15rem 0; white-space:pre;
+               overflow-x:auto; }
+  #fig-cursors { position:absolute; left:0; top:0; pointer-events:none; }
   section { display:none; } section.on { display:block; }
   details { margin:.5rem 0; border:1px solid var(--line);
             border-radius:6px; padding:.4rem .6rem; }
@@ -90,6 +92,11 @@
                 title="Drag to pan, pinch to zoom">Pan</button>
         <button class="tool" id="a-zoom"
                 title="Drag a rectangle to zoom into it">Zoom</button>
+        <button class="tool" id="a-cursor"
+                title="Two markers that ride the data, with their delta"
+                >Cursor</button>
+        <button class="tool" id="a-cursor-clear"
+                title="Remove both markers">Clear</button>
       </div>
       <!-- readout above the figure, where matplotlib's toolbar keeps it:
            below a screen-tall figure box it would be off-screen exactly
@@ -98,13 +105,17 @@
       <div id="fig">
         <div id="fig-inner"></div>
         <div id="fig-band" hidden></div>
+        <!-- markers live outside #fig-inner: they are re-projected from
+             data coordinates, never scaled with the picture -->
+        <svg id="fig-cursors" hidden></svg>
       </div>
       <div id="figbar2">
         <button class="act" id="a-export">Export PNG</button>
         <button class="act" id="a-export-svg">Export SVG</button>
       </div>
       <p class="note">Pan: drag, pinch or double-tap. Zoom: drag a
-         rectangle. Touch the plot to read data coordinates.</p>
+         rectangle. Cursor: tap to place two markers — they snap to the
+         plotted samples and report their delta.</p>
     </div>
   </section>
 

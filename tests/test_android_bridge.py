@@ -387,3 +387,87 @@ def test_the_figure_toolbar_offers_what_the_desktop_toolbar_does():
         assert f'$("{el}").onclick' in js, f"{el} is not wired up"
     # the readout needs the metadata above; keep the consumer honest
     assert "dataAtPoint" in js and "page.axes" in js
+
+
+def _strict(payload, what):
+    """Parse the way the WebView does: JSON.parse has no NaN or Infinity,
+    and Python's json writes those tokens happily.  One masked sample was
+    enough to make the browser discard a whole page of data."""
+    def reject(token):
+        raise AssertionError(f"{what} contains the non-JSON token {token!r}")
+    return json.loads(payload, parse_constant=reject)
+
+
+def test_every_bridge_payload_is_strict_json():
+    """Whatever a payload carries, it has to survive JSON.parse — the one
+    consumer on the far side of the bridge."""
+    _strict(bridge.list_specs(), "list_specs")
+    _strict(bridge.reference_data(), "reference_data")
+    run = _strict(bridge.run("rx_evm_sweep", json.dumps(
+        {"bw_mhz": 20, "qam": 256, "std": "11ax/be", "rx_hp": False,
+         "agc_rebw": False, "baseband": False, "bb_noise_nv": 5,
+         "seed": 5})), "run")
+    assert run["ok"], run.get("error")
+    for i in range(len(run["pages"])):
+        _strict(bridge.page_series(i), f"page_series({i})")
+    _strict(bridge.inspect_cal_state('{"format":"wifitrx-cal-state-v1"}'),
+            "inspect_cal_state")
+
+
+def test_masked_samples_reach_the_cursor_as_null():
+    """The isolation-floor masking leaves NaN in the swept curves — real
+    data meaning "not attributable".  It has to travel as null: a cursor
+    must not snap to it, and the token must not break the parse."""
+    out = json.loads(bridge.run("rx_evm_sweep", json.dumps(
+        {"bw_mhz": 20, "qam": 256, "std": "11ax/be", "rx_hp": False,
+         "agc_rebw": False, "baseband": False, "bb_noise_nv": 5,
+         "seed": 5})))
+    assert out["ok"], out.get("error")
+    page = _strict(bridge.page_series(0), "page_series")
+    masked = [v for s in page["series"] for v in s.get("y", ()) if v is None]
+    assert masked, "no masked sample survived to the payload"
+    for s in page["series"]:
+        for v in s.get("x", ()) + s.get("y", ()):
+            assert v is None or isinstance(v, float)
+
+
+def test_page_series_ships_data_and_not_guide_lines():
+    """Guide lines carry a blended transform, not transData: an AGC
+    hand-over mark or an MCS threshold is not a measurement, and a cursor
+    that snapped to one would report it as if it were."""
+    params = {"bw_mhz": 80, "qam": 256, "seed": 5, "with_dpd": False,
+              "std": "11ax/be", "rx_hp": False, "baseband": False,
+              "agc_rebw": False, "bb_noise_nv": 5}
+    out = json.loads(bridge.run("full_cal", json.dumps(params)))
+    assert out["ok"], out.get("error")
+    page = _strict(bridge.page_series(0), "page_series")
+    by_axes = {}
+    for s in page["series"]:
+        by_axes.setdefault(s["axes"], []).append(s)
+
+    # the RX-EVM axes plots two swept curves and one operating point, and
+    # carries eight guides on top of them
+    mixed = [s for a in by_axes.values() for s in a
+             if any(x["name"] == "uncalibrated" for x in a)]
+    assert len(mixed) == 3, [s["name"] for s in mixed]
+
+    # constellation scatters are declared, not silently dropped
+    clouds = [s for s in page["series"] if not s.get("snap")]
+    assert clouds, "the scatter clouds should still be listed"
+    for s in clouds:
+        assert s["why"] and s["points"] > 0 and "x" not in s
+
+    # and the bars a cursor can sit on are grouped by their container
+    bars = [s["name"] for s in page["series"] if s["kind"] == "bar"]
+    assert bars == ["before", "after"], bars
+
+
+def test_page_series_is_bounded_and_refuses_unknown_pages():
+    params = {"bw_mhz": 80, "qam": 256, "seed": 5, "with_dpd": False,
+              "std": "11ax/be", "rx_hp": False, "baseband": False,
+              "agc_rebw": False, "bb_noise_nv": 5}
+    json.loads(bridge.run("full_cal", json.dumps(params)))
+    page = _strict(bridge.page_series(0), "page_series")
+    assert page["points"] <= bridge.PAGE_POINT_BUDGET
+    bad = json.loads(bridge.page_series(99))
+    assert bad["ok"] is False and "error" in bad

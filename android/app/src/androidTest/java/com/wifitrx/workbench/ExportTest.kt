@@ -112,6 +112,58 @@ class ExportTest {
         assertEquals(-30.0, zoomed.getDouble("y"), 1e-9)
     }
 
+    /** The cursor's two halves, on the device: the samples it snaps to
+     * have to survive the bridge, and the projection it draws them with
+     * has to invert the one that reads them.
+     *
+     * A cursor that lands beside the point it names is worse than none —
+     * it looks like a measurement either way. */
+    @Test
+    fun cursorSamplesAndProjectionSurviveOnDevice() {
+        if (!Python.isStarted()) Python.start(AndroidPlatform(inst.targetContext))
+        val bridge = Python.getInstance().getModule("bridge")
+
+        // spur_planner is the cheapest analysis that plots something a
+        // marker can sit on (bars), so this stays affordable on an AVD
+        val run = JSONObject(bridge.callAttr(
+            "run", "spur_planner", """{"bw_mhz":320,"band":"6g"}""").toString())
+        assertTrue("run: ${run.optString("error")}", run.getBoolean("ok"))
+        val raw = bridge.callAttr("page_series", 0).toString()
+        assertTrue("NaN reaches JSON.parse as a syntax error, not a value",
+                   !raw.contains("NaN") && !raw.contains("Infinity"))
+        val page = JSONObject(raw)
+        assertTrue("page_series: ${page.optString("error")}",
+                   page.getBoolean("ok"))
+        val series = page.getJSONArray("series")
+        assertTrue("no samples reached the device", series.length() > 0)
+        val first = series.getJSONObject(0)
+        assertTrue("nothing to snap to", first.optBoolean("snap"))
+        val xs = first.getJSONArray("x")
+        assertTrue("empty series", xs.length() > 0)
+
+        // project a real sample to the screen and read it back
+        val web = loadShippedUi()
+        val x = xs.getDouble(0)
+        val y = first.getJSONArray("y").getDouble(0)
+        val probe = """(() => {
+            const a = ${run.getJSONArray("pages").getJSONObject(0)
+                          .getJSONArray("axes").getJSONObject(0)};
+            const size = {w: 400, h: 300}, view = {x: 0, y: 0, k: 1};
+            const p = window.pointAtData(size, view, a, $x, $y);
+            const back = window.dataAtPoint([a], size, view, p.px, p.py);
+            return JSON.stringify({px: p.px, py: p.py,
+                                   x: back && back.x, y: back && back.y});
+        })()"""
+        val got = JSONObject(eval(web, probe)!!)
+        assertEquals("x did not survive the round trip",
+                     x, got.getDouble("x"), Math.abs(x) * 1e-9 + 1e-9)
+        assertEquals("y did not survive the round trip",
+                     y, got.getDouble("y"), Math.abs(y) * 1e-9 + 1e-9)
+        assertTrue("the sample projected outside the figure",
+                   got.getDouble("px") in 0.0..400.0 &&
+                   got.getDouble("py") in 0.0..300.0)
+    }
+
     @Test
     fun figuresRasterizeToPngOnDevice() {
         if (!Python.isStarted()) Python.start(AndroidPlatform(inst.targetContext))
