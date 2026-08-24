@@ -256,3 +256,58 @@ def test_every_native_call_the_ui_makes_exists_in_the_bridge():
     # and every callAttr target must be a real bridge function
     for name in re.findall(r'callAttr\(\s*"([a-z_]+)"', kt):
         assert hasattr(bridge, name), f"MainActivity calls bridge.{name}()"
+
+    # third leg: the callbacks the shell pushes back into the page.  A
+    # result that lands on a handler the UI never defined is swallowed by
+    # the WebView with no error anywhere — same class of silent break as
+    # the two directions above.
+    for name in set(re.findall(r'emit\(\s*"ui\.(\w+)"', kt)) | set(
+            re.findall(r'"ui\.(\w+)"', kt)):
+        assert f"{name}(" in js, f"MainActivity emits ui.{name}(), UI has no such handler"
+
+
+def test_figure_export_offers_a_format_the_phone_can_open():
+    """Android has no SVG decoder anywhere in the platform, so an SVG-only
+    export ships a file the receiving phone cannot open (0.7.1 did exactly
+    that).  PNG must stay the primary export on both figure surfaces."""
+    root = Path(__file__).resolve().parent.parent / "android" / "app" / "src"
+    ui = root / "main" / "assets" / "ui"
+    js = (ui / "app.js").read_text(encoding="utf-8")
+    html = (ui / "index.html").read_text(encoding="utf-8")
+
+    assert 'id="a-export"' in html and 'id="a-export-svg"' in html, \
+        "the result figure must offer both PNG and SVG export"
+    assert ">Export PNG<" in html, "PNG must be the button reached first"
+    for el in ("a-export", "a-export-svg"):
+        assert f'$("{el}").onclick' in js, f"{el} is not wired up"
+    assert "native.saveBinary(" in js, "PNG never reaches the shell"
+    # both figure surfaces (result pages and Reference diagrams) go
+    # through the one export helper, so neither can regress alone
+    assert js.count("exportFigure(") >= 3
+
+    # the saved figure must be the SVG the bridge produced, never the DOM
+    # copy: showPage() sizes that one in px and strips its height
+    # attribute, which leaves the exported file with no intrinsic size
+    assert "outerHTML" not in js, \
+        "export must use the pristine page.svg, not the mutated DOM node"
+
+
+def test_shipped_diagrams_can_be_rasterized_on_device():
+    """The PNG export draws each SVG into a WebView canvas.  That works
+    only while the diagrams are self-contained: an external reference
+    would fail to load offline (no INTERNET permission) and a cross-origin
+    one taints the canvas, so toDataURL throws instead of exporting."""
+    import re
+    from reference import ALL_REFERENCE
+    checked = 0
+    for entry in ALL_REFERENCE:
+        if entry.svg is None:
+            continue
+        svg = entry.svg()
+        checked += 1
+        for attr in re.findall(r'(?:xlink:)?href\s*=\s*"([^"]*)"', svg):
+            assert attr.startswith("#"), \
+                f"{entry.key}: external reference {attr!r} breaks rasterizing"
+        assert "<image" not in svg, f"{entry.key}: embedded raster image"
+        assert "url(http" not in svg, f"{entry.key}: external url() reference"
+    assert checked, "no diagrams were checked"

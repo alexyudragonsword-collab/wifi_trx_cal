@@ -22,6 +22,7 @@ const native = window.Native || {          // browser smoke-test stub
   referenceData: () => JSON.stringify({ok: true, entries: [], version: 0}),
   referenceVersion: () => JSON.stringify({ok: true, version: 0}),
   saveText: () => JSON.stringify({ok: false, error: "no app shell"}),
+  saveBinary: () => JSON.stringify({ok: false, error: "no app shell"}),
   selfCheck: () => setTimeout(() => ui.onSelfCheckResult(
       JSON.stringify({ok: false, error: "no app shell"})), 0),
 };
@@ -143,6 +144,7 @@ $("a-run").onclick = () => {
 /* result callback from Kotlin */
 const ui = {
   refVersion: null,
+  pages: [],            // pristine bridge SVGs, what export saves from
   onRunResult(json) {
     $("a-run").disabled = false;
     const r = JSON.parse(json);
@@ -160,6 +162,7 @@ const ui = {
     $("a-text").textContent = r.text || "";
     $("a-text").hidden = !r.text;
     const pages = r.pages || [];
+    ui.pages = pages;
     const sel = $("a-page");
     sel.innerHTML = "";
     pages.forEach((p, i) => {
@@ -178,6 +181,10 @@ const ui = {
     }
     $("a-out").hidden = false;
   },
+  /* the shell reporting a failure that happened after it had already
+     answered — sharing is dispatched asynchronously, so its throw has no
+     return value left to travel in */
+  onShellError(msg) { setStatus(msg, true); },
   onSelfCheckResult(json) {
     $("sc-run").disabled = false;
     const r = JSON.parse(json);
@@ -241,22 +248,87 @@ function apply() {
 function resetView() { view.x = view.y = 0; view.k = 1; apply(); }
 $("a-reset").onclick = resetView;
 
-/* Export the figure as SVG — the toolbar's "save the current view" on the
- * desktop.  Vector, so it reopens at any zoom; the shell hands it to the
- * system share sheet rather than a file dialog (the Android idiom). */
-function currentPageSvg() {
-  const svg = $("fig-inner").querySelector("svg");
-  return svg ? svg.outerHTML : null;
+/* ---------------- export (the desktop toolbar's save) --------------- */
+
+/* Never parse a bridge return value unguarded: a shell-side throw comes
+ * back as something other than JSON, and an uncaught exception in a click
+ * handler is invisible — the button silently does nothing. */
+function nativeJson(call) {
+  try {
+    return JSON.parse(call());
+  } catch (e) {
+    return {ok: false, error: String(e)};
+  }
 }
-$("a-export").onclick = () => {
-  const svg = currentPageSvg();
-  if (!svg) return;
+
+/* Rasterize SVG text to base64 PNG using the WebView's own renderer.
+ *
+ * PNG, not SVG, is the default export: Android has no SVG decoder in the
+ * platform, so an exported .svg reaches the recipient intact and
+ * unopenable — gallery, file manager and chat previews all decline it.
+ * The desktop toolbar defaults to PNG for the same reason.
+ *
+ * Rasterizing at a fixed width rather than the on-screen size keeps the
+ * export sharp no matter how the figure happened to be zoomed. */
+const PNG_WIDTH = 2000;
+function rasterizePng(svgText) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const w = PNG_WIDTH;
+        const h = Math.max(1, Math.round(w * img.height / img.width));
+        const c = document.createElement("canvas");
+        c.width = w; c.height = h;
+        const ctx = c.getContext("2d");
+        // matplotlib writes a transparent background; PNG viewers show
+        // that as black on dark themes, so paint white underneath first
+        ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(c.toDataURL("image/png").split(",")[1]);
+      } catch (e) { reject(e); }
+    };
+    img.onerror = () => reject(new Error("the renderer could not read " +
+                                         "this SVG"));
+    img.src = "data:image/svg+xml;charset=utf-8," +
+              encodeURIComponent(svgText);
+  });
+}
+window.rasterizePng = rasterizePng;      // reached by the on-device test
+
+function safeName(name, ext) {
+  return String(name || "figure").replace(/[^A-Za-z0-9_.-]+/g, "_") + ext;
+}
+
+/* Export the pristine SVG the bridge sent, NOT the one in the DOM:
+ * showPage() sizes the displayed copy in px and drops its height
+ * attribute, which leaves the saved file without an intrinsic size. */
+function exportFigure(svgText, name, asPng, report) {
+  if (!svgText) { report("no figure to export", true); return; }
+  if (!asPng) {
+    const r = nativeJson(() => native.saveText(safeName(name, ".svg"),
+                                               svgText));
+    report(r.ok ? "exported " + r.path : r.error, !r.ok);
+    return;
+  }
+  report("rendering PNG…");
+  rasterizePng(svgText).then(b64 => {
+    const r = nativeJson(() => native.saveBinary(
+        safeName(name, ".png"), b64, "image/png"));
+    report(r.ok ? "exported " + r.path : r.error, !r.ok);
+  }).catch(e => report("PNG export failed: " + e.message, true));
+}
+
+function currentPage() {
   const sel = $("a-page");
-  const name = (sel.options[sel.value] || {}).textContent || "figure";
-  const r = JSON.parse(native.saveText(
-      name.replace(/[^A-Za-z0-9_.-]+/g, "_") + ".svg", svg));
-  setStatus(r.ok ? "exported " + r.path : r.error, !r.ok);
-};
+  return (ui.pages || [])[Number(sel.value)] || null;
+}
+function exportCurrent(asPng) {
+  const page = currentPage();
+  exportFigure(page && page.svg, page && page.title, asPng, setStatus);
+}
+$("a-export").onclick = () => exportCurrent(true);
+$("a-export-svg").onclick = () => exportCurrent(false);
 
 function showPage(page) {
   $("fig-inner").innerHTML = page.svg;
@@ -362,13 +434,21 @@ function loadReference(version) {
       const svg = div.querySelector("svg");
       if (svg) { svg.style.maxWidth = "100%"; svg.style.height = "auto"; }
       d.appendChild(div);
-      const btn = document.createElement("button");
-      btn.className = "act"; btn.textContent = "Export SVG";
-      btn.onclick = () => {
-        const out = JSON.parse(native.saveText(e.key + ".svg", e.svg));
-        btn.textContent = out.ok ? "Exported" : "Export failed";
-      };
-      d.appendChild(btn);
+      const note = document.createElement("p");
+      note.className = "note";
+      for (const [label, asPng] of [["Export PNG", true],
+                                    ["Export SVG", false]]) {
+        const btn = document.createElement("button");
+        btn.className = "act"; btn.textContent = label;
+        // report through the note element: the old code collapsed every
+        // failure into the button label and threw the real message away
+        btn.onclick = () => exportFigure(
+            e.svg, e.key, asPng,
+            (msg, err) => { note.textContent = msg;
+                            note.className = err ? "err" : "note"; });
+        d.appendChild(btn);
+      }
+      d.appendChild(note);
     } else {
       d.appendChild(makeTable(e.columns, e.rows));
     }

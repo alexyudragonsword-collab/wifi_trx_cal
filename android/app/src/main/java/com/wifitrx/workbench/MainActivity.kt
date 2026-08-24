@@ -1,9 +1,11 @@
 package com.wifitrx.workbench
 
 import android.annotation.SuppressLint
+import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.util.Base64
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -83,6 +85,43 @@ class MainActivity : ComponentActivity() {
         emit("ui.onInspectResult", out)
     }
 
+    /** Write one export next to the cal-state files and return it.
+     *
+     * Shared by the text (SVG) and binary (PNG) exports so the naming and
+     * location rules exist once. */
+    internal fun writeExport(name: String, bytes: ByteArray): File {
+        val dir = File(filesDir, "cal_state").apply { mkdirs() }
+        val safe = name.replace(Regex("[^A-Za-z0-9_.-]+"), "_")
+        return File(dir, safe).apply { writeBytes(bytes) }
+    }
+
+    /** Hand a file to the system share sheet.
+     *
+     * setClipData carries the URI where the grant flag actually applies —
+     * an EXTRA_STREAM alone is migrated for the target intent but not for
+     * every chooser implementation.  Started on the UI thread because
+     * @JavascriptInterface methods arrive on the WebView's own thread. */
+    internal fun shareFile(file: File, mime: String) {
+        val uri = FileProvider.getUriForFile(
+            this, "com.wifitrx.workbench.files", file)
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = mime
+            putExtra(Intent.EXTRA_STREAM, uri)
+            clipData = ClipData.newUri(contentResolver, file.name, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        // the write already succeeded, so the caller has returned "ok" by
+        // the time this runs; a throw here would otherwise reach nobody
+        runOnUiThread {
+            try {
+                startActivity(Intent.createChooser(send, "Share ${file.name}"))
+            } catch (e: Throwable) {
+                emit("ui.onShellError",
+                     "the file was written but sharing failed: $e")
+            }
+        }
+    }
+
     inner class Bridge {
         private val py get() = Python.getInstance().getModule("bridge")
 
@@ -100,24 +139,39 @@ class MainActivity : ComponentActivity() {
          *
          * The desktop offers a save dialog; Android has no equivalent
          * idiom, so the file lands in app storage and goes straight to
-         * the share sheet — same treatment cal-state export already gets. */
+         * the share sheet — same treatment cal-state export already gets.
+         *
+         * SVG is the vector option, not the default one: Android has no
+         * SVG decoder anywhere in the platform (gallery, file manager,
+         * chat-app preview and thumbnailer all decline it), so an .svg
+         * arrives intact and unopenable on the receiving phone.  PNG via
+         * saveBinary is what the buttons reach for first. */
         @JavascriptInterface
         fun saveText(name: String, text: String): String {
             return try {
-                val dir = File(filesDir, "cal_state").apply { mkdirs() }
-                val safe = name.replace(Regex("[^A-Za-z0-9_.-]+"), "_")
-                val out = File(dir, safe)
-                out.writeText(text)
-                val uri = FileProvider.getUriForFile(
-                    this@MainActivity, "com.wifitrx.workbench.files", out)
-                val send = Intent(Intent.ACTION_SEND).apply {
-                    type = if (safe.endsWith(".svg")) "image/svg+xml"
-                           else "text/plain"
-                    putExtra(Intent.EXTRA_STREAM, uri)
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                }
-                startActivity(Intent.createChooser(send, "Share $safe"))
+                val out = writeExport(name, text.toByteArray())
+                shareFile(out, if (out.name.endsWith(".svg")) "image/svg+xml"
+                               else "text/plain")
                 """{"ok": true, "path": ${JSONObject.quote(out.absolutePath)}}"""
+            } catch (e: Throwable) {
+                """{"ok": false, "error": ${JSONObject.quote(e.toString())}}"""
+            }
+        }
+
+        /** Export a binary artefact — a figure rasterized to PNG by the
+         * WebView (see rasterizePng in app.js).
+         *
+         * This is the export that a phone can actually open, which is why
+         * it is the primary one: PNG is decoded by every gallery, viewer
+         * and chat app on the device. */
+        @JavascriptInterface
+        fun saveBinary(name: String, base64: String, mime: String): String {
+            return try {
+                val bytes = Base64.decode(base64, Base64.DEFAULT)
+                val out = writeExport(name, bytes)
+                shareFile(out, mime)
+                """{"ok": true, "path": ${JSONObject.quote(out.absolutePath)},
+                    "bytes": ${bytes.size}}"""
             } catch (e: Throwable) {
                 """{"ok": false, "error": ${JSONObject.quote(e.toString())}}"""
             }
@@ -142,15 +196,7 @@ class MainActivity : ComponentActivity() {
             val out = py.callAttr("save_cal_state", dir.absolutePath).toString()
             val parsed = JSONObject(out)
             if (parsed.optBoolean("ok")) {
-                val json = File(parsed.getString("path"))
-                val uri = FileProvider.getUriForFile(
-                    this@MainActivity, "com.wifitrx.workbench.files", json)
-                val send = Intent(Intent.ACTION_SEND).apply {
-                    type = "application/json"
-                    putExtra(Intent.EXTRA_STREAM, uri)
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                }
-                startActivity(Intent.createChooser(send, "Share cal-state"))
+                shareFile(File(parsed.getString("path")), "application/json")
             }
             return out
         }

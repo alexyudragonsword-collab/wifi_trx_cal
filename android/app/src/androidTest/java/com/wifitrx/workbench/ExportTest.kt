@@ -1,0 +1,117 @@
+package com.wifitrx.workbench
+
+import android.util.Base64
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import com.chaquo.python.Python
+import com.chaquo.python.android.AndroidPlatform
+import org.json.JSONObject
+import org.json.JSONTokener
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.junit.runner.RunWith
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+
+/** Figure export, on the device that has to open the result.
+ *
+ * Export shipped in 0.7.1 writing SVG, and SVG is the one image format
+ * Android cannot decode anywhere — gallery, file manager, thumbnailer and
+ * chat previews all decline it, so the file arrived intact and unopenable.
+ * PNG is now the primary export, rasterized by the WebView itself, and
+ * this test is the guard that was missing: nothing on-device had ever
+ * executed the export path at all.
+ *
+ * It drives the real shipped UI (assets/ui/index.html + app.js), not a
+ * copy of the function — a rasterizer that works only in the test is
+ * worth nothing.
+ */
+@RunWith(AndroidJUnit4::class)
+class ExportTest {
+
+    private val inst get() = InstrumentationRegistry.getInstrumentation()
+
+    /** Load the shipped UI in a WebView and return it, page-load done. */
+    private fun loadShippedUi(): WebView {
+        var web: WebView? = null
+        val loaded = CountDownLatch(1)
+        inst.runOnMainSync {
+            val w = WebView(inst.targetContext)
+            w.settings.javaScriptEnabled = true
+            w.settings.allowFileAccess = true      // file:///android_asset
+            w.webViewClient = object : WebViewClient() {
+                override fun onPageFinished(view: WebView, url: String) =
+                    loaded.countDown()
+            }
+            w.loadUrl("file:///android_asset/ui/index.html")
+            web = w
+        }
+        assertTrue("the shipped UI never finished loading",
+                   loaded.await(30, TimeUnit.SECONDS))
+        return web!!
+    }
+
+    /** evaluateJavascript, decoded from its JSON envelope. */
+    private fun eval(web: WebView, js: String): String? {
+        var out: String? = null
+        val done = CountDownLatch(1)
+        inst.runOnMainSync {
+            web.evaluateJavascript(js) { r -> out = r; done.countDown() }
+        }
+        assertTrue("JS never came back", done.await(30, TimeUnit.SECONDS))
+        val v = JSONTokener(out ?: "null").nextValue()
+        return if (v is String) v else null
+    }
+
+    @Test
+    fun figuresRasterizeToPngOnDevice() {
+        if (!Python.isStarted()) Python.start(AndroidPlatform(inst.targetContext))
+        val bridge = Python.getInstance().getModule("bridge")
+
+        // a real shipped diagram, straight off the device's filesystem —
+        // the same bytes the Reference tab hands the export button
+        val ref = JSONObject(bridge.callAttr("reference_data").toString())
+        assertTrue("reference_data: ${ref.optString("error")}",
+                   ref.getBoolean("ok"))
+        val entries = ref.getJSONArray("entries")
+        var svg: String? = null
+        for (i in 0 until entries.length()) {
+            val e = entries.getJSONObject(i)
+            if (e.has("svg")) { svg = e.getString("svg"); break }
+        }
+        assertTrue("no shipped SVG to export", svg != null)
+        val svgText = svg!!
+
+        val web = loadShippedUi()
+        assertEquals("app.js did not expose the rasterizer", "function",
+                     eval(web, "typeof window.rasterizePng"))
+
+        // the rasterizer is async; park the outcome and poll for it
+        eval(web, "window.__pngResult = null; " +
+                  "window.rasterizePng(${JSONObject.quote(svgText)})" +
+                  ".then(b => window.__pngResult = b)" +
+                  ".catch(e => window.__pngResult = 'ERR:' + e.message); ''")
+        var b64: String? = null
+        for (attempt in 0 until 60) {
+            b64 = eval(web, "window.__pngResult")
+            if (b64 != null) break
+            Thread.sleep(500)
+        }
+        assertTrue("rasterizing timed out", b64 != null)
+        assertTrue("rasterizing failed: $b64", !b64!!.startsWith("ERR:"))
+
+        val png = Base64.decode(b64, Base64.DEFAULT)
+        // PNG magic — proves it is the format a phone can actually open,
+        // which was the whole point of the change
+        assertTrue("not a PNG: first bytes ${png.take(4)}",
+                   png.size > 8 && png[0] == 0x89.toByte() &&
+                   png[1] == 'P'.code.toByte() && png[2] == 'N'.code.toByte() &&
+                   png[3] == 'G'.code.toByte())
+        // a blank canvas would still carry the magic; a real figure is big
+        assertTrue("suspiciously small PNG: ${png.size} bytes",
+                   png.size > 10_000)
+    }
+}

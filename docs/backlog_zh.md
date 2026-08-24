@@ -24,6 +24,7 @@
 - **CI 编译打通(2026-08-23,0.6.1)**:三轮迭代——pip 落 sdist(加 `--only-binary :all:`)→ 探针证实 wheel 仓无 cp311 scipy → 内嵌 Python 降 3.8(源码树预审计兼容)。端上解析 numpy 1.19.5 / scipy 1.4.1 / matplotlib 3.6.0,**scipy/numpy 低于桌面下限,物理一致性待模拟器金标对拍裁决**;debug APK 71 MB(双 ABI)。首次成功 run:32613192402。
 - **验证链闭合(2026-08-23,0.7.0)**:应用内 Self-check(金标随 APK 出货,对拍逻辑与 CI 共用 `bridge.self_check()`)让真机自己裁决物理一致性;**用户真机 arm64 实测 PASS**。至此桌面/模拟器 x86_64/真机 arm64 三条路径全部裁决通过,Android 交付形态的验证链无剩余空缺。
 - **真机首跑崩溃与修复(2026-08-23,0.6.2)**:用户真机跑 full_cal 即触发 `AttributeError: correlation_lags`(scipy 1.5 API,端上 1.4.1)——预判的旧版风险第一次兑现。修复:数学恒等的 `np.arange` 替换 + **scipy 调用面守卫测试**(allowlist 对照 1.4.1,未核验调用桌面即失败)。守卫落地后审计确认:全仓其余 scipy 调用(含踩线的 oaconvolve@1.4.0)与 numpy Generator 用面全部在端上版本内。APK 图标改用与 Windows exe 同源的 assets/icon.png。
+- **导出格式选型纠错(2026-08-24,0.7.2)**:用户报告 Android 端 Export SVG "文件发出去了但打不开"。核实导出字节完全合法(严格 XML 解析通过、572 处 `xlink:href` 完整、独立渲染出完整图形),**问题在格式而非实现**:Android 平台层没有 SVG 解码器,相册/文件管理器/缩略图/聊天预览全不认 `.svg`,只有浏览器能开。**被推翻的假设**:0.7.1 补导出时按"矢量、任意缩放重开更优"选了 SVG-only——这是桌面的推理直接搬到移动端,忽略了目标平台能不能打开产物;桌面工具栏默认 PNG 本身就是反例。修法:PNG 首选(WebView canvas 栅格化,2000 px 宽、先铺白底——matplotlib 输出透明背景在深色主题下会成黑块),SVG 保留为矢量选项。**盲区归因**:导出这条路在设备上一次都没执行过(端上测试只覆盖 run/inspect/reference 渲染),与 0.6.5 的 Reference/Inspector 盲区同型;已补 `ExportTest.figuresRasterizeToPngOnDevice`(真 WebView 加载出货 UI 栅格化)与两条桌面守卫(经变异验证)。
 
 ## B14. EVM 估计器自拟合偏差(自由度修正)—— ✅ 已落地(2026-08-16,0.5.9)
 
