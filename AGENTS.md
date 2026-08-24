@@ -90,9 +90,10 @@ CMOS WiFi 7(802.11be)直接变频收发器复基带行为模型 + 14 步校准�
 - 教程/开发指南内容或其引用对象变化时重建:`QT_QPA_PLATFORM=offscreen MPLBACKEND=Agg python tools/build_docs.py --out docs/`,并提交重建的 HTML。
 - **任何更新都必须把 Qt 与 Android 两端各自验证完整,缺一不算完成**:
   - Qt 侧:`QT_QPA_PLATFORM=offscreen python -m pytest tests/ -q` 覆盖 `test_gui_specs.py`(每个分析实跑 + 主窗口离屏构建)与 `test_gui_inspector.py`(检查器页 + decides-nothing 守卫);
-  - Android 侧:同一套桌面测试里的 `test_android_bridge.py`(桥契约、scipy/numpy 调用面守卫、`native.*`↔Kotlin↔bridge 跨层接线、两端检查器区块一致)**加上**重新 dispatch 金标 job 并核对日志测试条数;
+  - Android 侧:同一套桌面测试里的 `test_android_bridge.py`(桥契约、scipy/numpy 调用面守卫、`native.*`↔Kotlin↔bridge 跨层接线、两端检查器区块一致)**加上**重新 dispatch 金标 job;端上实跑条数、失败数与跳过数由 job 自身的 `on-device tests actually ran` 步骤断言并在日志末尾打印清单——**新增端上测试时必须同步抬高该步骤里的条数下限**,否则它会退化成一个永远满足的空条件;
   - 只影响单端的改动同样要跑另一端——两端共用 `src/wifitrx/` 与 `app/` 数据层,"只改了 Android"往往不成立;
   - 若某能力有意只存在于一端(如 Self-check、≥160 MHz 护栏、Save 的平台惯例差异),必须写进 `android/README.md` 的功能对照表并注明理由,否则视为漏做而非设计。
-- 改动随 APK 出货的代码(`src/wifitrx/`、`app/specs.py`、`app/reference.py`、`app/inspector_data.py`、`android/`)或新增端上测试后,必须重新 dispatch `android.yml` 的金标 job 并核对日志里的测试条数——**构建绿不等于端上物理对**,而没跑过的端上守卫等于没有守卫(两次事故的教训:scipy/numpy 跨版本 API,以及守卫自身未验证)。
+- 改动随 APK 出货的代码(`src/wifitrx/`、`app/specs.py`、`app/reference.py`、`app/inspector_data.py`、`android/`)或新增端上测试后,必须重新 dispatch `android.yml` 的金标 job——**构建绿不等于端上物理对**,而没跑过的端上守卫等于没有守卫(两次事故的教训:scipy/numpy 跨版本 API,以及守卫自身未验证)。条数核对已由 job 内的断言步骤承担,不再依赖人工翻日志(人工翻日志本身也不可靠:日志接口按大小截断,取不到中段那几行)。
+- 变异验证守卫时,先确认**变异真的注入成功**再看结论——替换锚点跨行未匹配会让变异变成空操作,守卫"通过"其实什么都没证明(2026-08-24 实际踩到)。
 - 每个值得发布的变更配 `CHANGELOG.md` 条目(schema 或公开签名变化显式标注)+ `pyproject.toml` 与 `src/wifitrx/__init__.py` 版本号。
 - 决策与被推翻的假设记入 `docs/backlog_zh.md`——错误的转弯也要记,不只记修正。

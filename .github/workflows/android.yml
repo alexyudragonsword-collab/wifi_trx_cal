@@ -56,3 +56,40 @@ jobs:
           arch: x86_64
           working-directory: android
           script: gradle :app:connectedDebugAndroidTest
+
+      # A green job is not proof that the on-device guards ran: a test
+      # that never executes, or is skipped, leaves the build successful
+      # and the guard imaginary.  The count used to be checked by reading
+      # the gradle output by hand; the job asserts it here instead, and
+      # prints the roster where the end of the log always reaches it.
+      - name: on-device tests actually ran
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob
+          import sys
+          import xml.etree.ElementTree as ET
+
+          files = glob.glob("android/app/build/outputs/androidTest-results/"
+                            "connected/**/*.xml", recursive=True)
+          if not files:
+              sys.exit("no instrumented test results were written at all")
+          total = failed = skipped = 0
+          names = []
+          for path in files:
+              suite = ET.parse(path).getroot()
+              total += int(suite.get("tests", 0))
+              failed += int(suite.get("failures", 0)) + int(suite.get("errors", 0))
+              skipped += int(suite.get("skipped", 0))
+              for case in suite.iter("testcase"):
+                  names.append(f"{case.get('classname')}.{case.get('name')}")
+          print(f"on-device tests: {total} run, {failed} failed, "
+                f"{skipped} skipped")
+          for name in sorted(names):
+              print("  -", name)
+          if total < 4:
+              sys.exit(f"expected at least 4 on-device tests, ran {total} — "
+                       "raise this floor when adding one")
+          if failed or skipped:
+              sys.exit("on-device tests failed or were skipped")
+          PY
