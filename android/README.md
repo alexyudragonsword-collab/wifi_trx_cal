@@ -153,7 +153,7 @@ python android/tools/android_wheel.py --package wifitrx \
 # CI 里的交叉编译见 .github/workflows/android.yml 的 compiled job
 ```
 
-**两个必须钉死的前提**(实测,非推测):
+**三个必须钉死的前提**(实测,非推测):
 
 - **Cython 3.3.0 不可用**:在虚数字面量上编译器崩溃(`ImagNode` →
   `AttributeError`),而本仓是复基带、`1j` 遍地。3.0.11 / 3.1.6 可用。
@@ -161,6 +161,19 @@ python android/tools/android_wheel.py --package wifitrx \
   强制的 C 类型,而本仓标注是描述性的、numpy 标量四处流动
   (`max_db: float | None` 拒收 `np.float64`)。不加该选项时全量测试
   291 过 / 2 败,加上后 293 全过。
+- **必须显式导出模块初始化函数**:`-fvisibility=hidden` 会把
+  `PyInit_<模块名>` 一起隐藏,因为 **CPython 3.8 的 `PyMODINIT_FUNC` 不带
+  可见性属性**(3.9 起才由 `Py_EXPORTED_SYMBOL` 加上),而 Chaquopy 的
+  Android target 正是 3.8。表现是构建全绿、端上 import 报
+  `does not define module export function (PyInit_sync)`。所以命令行显式
+  `-DPyMODINIT_FUNC=__attribute__((visibility("default"))) PyObject*`。
+  **`--host` 试编译复现不了它**:宿主机 Python ≥3.9,头文件替你导出了。
+
+> **为什么这一条要有物理门禁。** 上面三条里,只有它在所有构建期信号上都
+> 看不出来:编译成功、wheel 完整、`--native` 通过、APK 里 `.so` 就在该在
+> 的位置。所以 CI 在打包前用 NDK 的 `llvm-nm` 逐个查 wheel 里每个 `.so`
+> 是否导出 `PyInit_<模块名>`(`android/tools/check_wheel_exports.py`);
+> 桌面侧另有守卫断言构建器拼出的命令行(见 `tests/test_android_bridge.py`)。
 
 > **这个变更买到什么,以及买不到什么。** 它把读**算法**的成本从"解压即读"
 > 抬到"要反汇编"。它**不**保护:WebView 资产(明文,写清了每个桥接口与

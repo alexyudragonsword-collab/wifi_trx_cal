@@ -143,27 +143,17 @@ jobs:
           done
           ls -la android/app/pysrc
 
-      # What symbol does the cross-compiled .so actually export?  Two
-      # runs have now failed asking for PyInit_<leaf>, which is CPython's
-      # own convention, while the host-built wheel exports exactly that
-      # (checked with nm).  Guessing costs a CI round each time; this
-      # prints the answer.
-      - name: what the Android .so exports
+      # Every compiled module must export the symbol the device's import
+      # system will look up.  Two runs failed on exactly that (PyInit_cal,
+      # then PyInit_sync) while every build-side signal stayed green — a
+      # wheel with an unexported init function is indistinguishable from a
+      # good one until an emulator says otherwise, twenty minutes later.
+      - name: every compiled module must export its init symbol
         run: |
-          set -o pipefail
           NDK="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
-          NM="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
-          work=$(mktemp -d)
-          whl=$(ls android/app/pysrc/*x86_64*.whl | head -1)
-          echo "wheel: $whl"
-          python -c "import sys,zipfile;zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$whl" "$work"
-          ls "$work/wifitrx/cal/" | head -5
-          for m in cal/sync cal/residuals metrics/evm; do
-            so="$work/wifitrx/$m.so"
-            echo "--- wifitrx/$m.so ---"
-            "$NM" -D --defined-only "$so" | grep -i pyinit || echo "  (no PyInit symbol at all)"
-            "$NM" --defined-only "$so" | grep -i pyinit | head -3 || true
-          done
+          python android/tools/check_wheel_exports.py \
+            "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm" \
+            android/app/pysrc/*.whl
 
       - name: assemble the compiled APK
         working-directory: android

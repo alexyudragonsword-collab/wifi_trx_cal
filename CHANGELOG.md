@@ -4,6 +4,34 @@
 或 `wifitrx.*` 公开签名的条目都在下面显式标注,交付方按此判断是否需要
 重新取包。日期为落地日期。
 
+## 0.7.7 — 2026-08-25
+
+### Android 编译版:交叉编译出的 `.so` 不导出 `PyInit_*`(根因与守卫)
+
+- **症状**:编译版 APK 构建全绿、`--native` 门禁通过、wheel 里 57 个 `.so`
+  一个不少,端上 import 却报
+  `dynamic module does not define module export function (PyInit_sync)`。
+- **根因**(已在本机用两版头文件证明,非推测):`android_wheel.py` 用
+  `-fvisibility=hidden` 编译,而 **CPython 3.8 的 `PyMODINIT_FUNC` 不带
+  可见性属性**——Python 3.9 才通过 `Py_EXPORTED_SYMBOL` 给它加上
+  `visibility("default")`。Chaquopy 的 Android target 正是 3.8,于是
+  模块初始化函数被隐藏;而宿主机是 3.11,同一份代码编出来的 wheel
+  `nm -D` 看得到 `PyInit_evm`。**宿主构建复现不了这个 bug,两边头文件不同。**
+  修法:命令行显式 `-DPyMODINIT_FUNC=__attribute__((visibility("default")))
+  PyObject*`(该宏在每个 CPython 里都由 `#ifndef` 兜底,不会与头文件冲突)。
+- **更正一条早先的判断**:上一版把同类失败(`PyInit_cal`)归因于"扩展模块
+  当包初始化器被 Chaquopy 导入器拒绝",并据此不再编译 `__init__.py`。
+  那个归因是错的——真因就是本条。不编译 `__init__.py` 的改动本身仍保留
+  (re-export 壳编译了也没保护价值),但理由已在
+  `android/tools/android_wheel.py` 文件头更正。
+- **两道守卫**:
+  - 桌面侧断言构建器**实际拼出的命令行**(不是文件文本):
+    `-fvisibility=hidden` 出现时必须同时出现带 `visibility("default")` 的
+    `-DPyMODINIT_FUNC=`(经变异验证会红);
+  - CI 侧新增 `android/tools/check_wheel_exports.py`,用 NDK 自带 `llvm-nm`
+    逐个检查 wheel 内**每一个** `.so` 是否导出 `PyInit_<模块名>`——出货件
+    上的物理检查,在装模拟器之前二十分钟就能否掉。
+
 ## 0.7.6 — 2026-08-25
 
 ### Android:并出一个编译版 APK(wifitrx 以 .so 出货)

@@ -2,6 +2,14 @@
 
 本文件按倒序记录实质性进展——最新条目在顶部、紧跟本行之下。每条尽量短——只写摘要与指针;结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-08-25 · R17:编译版端上 import 失败的根因是符号可见性(0.7.7)
+
+- 现象:构建全绿、`--native` 通过、`.so` 一个不少,端上 `ImportError: dynamic module does not define module export function (PyInit_sync)`。
+- **根因(本机两版头文件直接证明)**:`-fvisibility=hidden` 把模块初始化函数一起隐藏了,因为 **CPython 3.8 的 `PyMODINIT_FUNC` 不带可见性属性**(3.9 起才由 `Py_EXPORTED_SYMBOL` 加上),而 Chaquopy 的 Android target 就是 3.8。宿主机 3.11 头文件替你导出,所以 `--host` 试编译永远复现不了。修法:命令行显式 `-DPyMODINIT_FUNC=__attribute__((visibility("default"))) PyObject*`。
+- **更正 R16 的一个判断**:上一版把同类失败(`PyInit_cal`)归因为"扩展模块当包初始化器被导入器拒绝",错了;真因即本条。不编译 `__init__.py` 保留(re-export 壳无保护价值),理由已在 `android_wheel.py` 文件头更正。
+- **教训**:这类缺陷在**所有构建期信号上都是绿的**,只有出货件上的物理检查能拦。新增 `android/tools/check_wheel_exports.py`,用 NDK `llvm-nm` 逐个查每个 `.so` 是否导出 `PyInit_<模块名>`;桌面侧守卫断言构建器**拼出的命令行**(变异验证已红)。
+- 指针:`CHANGELOG.md` 0.7.7、`android/README.md`「三个必须钉死的前提」、`docs/backlog_zh.md` R1 增补。
+
 ## 2026-08-25 · R16:并出编译版 APK(0.7.6)
 
 - 新增 `compiled` flavor,wifitrx 以逐 ABI wheel(57 个 `.so`)进包;解释版不动。**编译版 srcDirs 必须不含 `../../src`**,否则源码遮蔽 `.so`、产出"自以为编译过"的解释版(守卫 + 变异验证)。

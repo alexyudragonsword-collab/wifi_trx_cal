@@ -547,10 +547,10 @@ def test_the_compiled_flavour_cannot_ship_source():
     assert '"-X", "annotation_typing=False"' in wheel_tool, \
         "without it, np.float64 fails the `float` annotations this tree " \
         "writes descriptively (metrics/ccdf.py is the shortest example)"
-    # local change 2: package initializers stay as source.  An extension
-    # module acting as a package initializer is what Chaquopy's importer
-    # rejected ("does not define module export function (PyInit_cal)")
-    # while the desktop loaded the same file happily.
+    # local change 2: package initializers stay as source — a re-export
+    # shim compiles to nothing worth protecting, and an extension module
+    # acting as a package initializer is the one construct an import
+    # system treats specially.
     # assert the call site, not the name: the function's own def
     # keeps the name in the file after the call is deleted
     assert "return _drop_package_initializers(sorted(set(sources)))" \
@@ -563,3 +563,49 @@ def test_the_compiled_flavour_cannot_ship_source():
     assert 'pip install "cython<3.3"' in workflow
     # both artefacts asserted, in the two directions that distinguish them
     assert "--native" in workflow and "--pure" in workflow
+    # and the wheels are checked for the symbol the device will look up,
+    # before an emulator spends twenty minutes discovering it is missing
+    assert "android/tools/check_wheel_exports.py" in workflow
+    assert (tools / "check_wheel_exports.py").exists()
+
+
+def _load_wheel_tool():
+    """Import the vendored builder, to call it instead of reading it."""
+    import importlib.util
+
+    path = (Path(__file__).resolve().parent.parent / "android" / "tools"
+            / "android_wheel.py")
+    spec = importlib.util.spec_from_file_location("android_wheel", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_compiled_modules_keep_their_init_symbol_visible(monkeypatch):
+    """A compiled module that hides PyInit_<mod> cannot be imported.
+
+    Chaquopy's Android CPython is 3.8, whose ``PyMODINIT_FUNC`` carries no
+    visibility attribute (3.9 added one via ``Py_EXPORTED_SYMBOL``).  So
+    ``-fvisibility=hidden`` — which upstream passes — hides the single
+    symbol the import system looks up, and the device answers "dynamic
+    module does not define module export function".  The host build does
+    not reproduce it: a 3.9+ header exports the symbol regardless.
+
+    Asserted on the command the builder actually assembles, not on the
+    text of the file: the vendoring note explains the flag in prose, and a
+    substring search would find the explanation after the flag was gone.
+    """
+    mod = _load_wheel_tool()
+    calls: list[list[str]] = []
+    monkeypatch.setattr(mod, "run",
+                        lambda cmd, **kw: calls.append([str(c) for c in cmd]))
+    mod.compile_c(Path("wifitrx/cal/sync.c"), [Path("/inc")], "clang",
+                  [], Path("/lib"), "python3.8")
+    cmd, = calls
+
+    hides = "-fvisibility=hidden" in cmd
+    exports = [a for a in cmd if a.startswith("-DPyMODINIT_FUNC=")
+               and 'visibility("default")' in a]
+    assert exports or not hides, (
+        "-fvisibility=hidden without an explicit export builds a .so that "
+        "defines no PyInit symbol on CPython 3.8 — the Android target")

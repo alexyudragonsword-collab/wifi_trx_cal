@@ -19,12 +19,23 @@
 #     re-export shims here — no algorithms, so compiling them buys no
 #     protection — while an extension module acting as a package
 #     initializer is the one construct an import system treats specially.
-#     Chaquopy's asset-based importer rejected ours: the desktop loads
-#     wifitrx/cal/__init__.so happily (it exports PyInit_cal, verified with
-#     nm), the device answered "dynamic module does not define module
-#     export function (PyInit_cal)".  Leaving them as source removes the
-#     construct rather than guessing at that importer's rules.
-#  3. Nothing else.  Keep it that way — the diff against upstream should
+#     Kept for that reason alone.
+#
+#     Correction (2026-08-25): this change was first made to explain a
+#     device-side "does not define module export function (PyInit_cal)",
+#     and that diagnosis was wrong — see change 3, which is the actual
+#     cause.  The same failure came back one level down as PyInit_sync.
+#  3. ``PyMODINIT_FUNC`` is redefined on the compiler command line so the
+#     module init function is exported.  Upstream compiles with
+#     ``-fvisibility=hidden``, which is safe only where the target's
+#     headers attach ``visibility("default")`` to that macro themselves.
+#     CPython does so from 3.9 (via ``Py_EXPORTED_SYMBOL``); **3.8, which
+#     is what Chaquopy ships for Android, does not** — its pyport.h falls
+#     through to a bare ``PyObject*``.  So the host build (3.11) exported
+#     PyInit_<mod> and the cross build silently did not, and the device
+#     answered "dynamic module does not define module export function".
+#     A host-built wheel cannot reproduce it; the two headers differ.
+#  4. Nothing else.  Keep it that way — the diff against upstream should
 #     stay readable.
 #
 # Cython 3.3.0 must NOT be used: it crashes on imaginary literals
@@ -248,10 +259,21 @@ def cythonize(package_name: str, tree: Path, sources: list[Path]) -> list[Path]:
     return [p.with_suffix(".c") for p in sources]
 
 
+#: Local change 3 (see the vendoring note): give the module init function
+#: default visibility explicitly, instead of trusting the target's headers
+#: to do it.  ``-fvisibility=hidden`` plus a ``PyMODINIT_FUNC`` that carries
+#: no visibility attribute hides the one symbol the import system looks up.
+#: Every CPython guards this macro with ``#ifndef``, so defining it here
+#: wins cleanly on every version rather than clashing with the header.
+PYMODINIT_EXPORT = ('-DPyMODINIT_FUNC=__attribute__((visibility("default"))) '
+                    'PyObject*')
+
+
 def compile_c(csrc: Path, include_dirs: list[Path], cc: str,
               extra: list[str], libdir: Path | None, pylib: str) -> Path:
     so = csrc.with_suffix(".so")
-    cmd = [cc, "-shared", "-fPIC", "-O2", "-fvisibility=hidden"]
+    cmd = [cc, "-shared", "-fPIC", "-O2", "-fvisibility=hidden",
+           PYMODINIT_EXPORT]
     for inc in include_dirs:
         cmd += ["-I", str(inc)]
     cmd += extra + ["-o", str(so), str(csrc)]
