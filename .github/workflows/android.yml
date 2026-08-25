@@ -71,39 +71,13 @@ jobs:
       # prints the roster where the end of the log always reaches it.
       - name: on-device tests actually ran
         if: always()
+        # prints each failure's message too: gradle's own
+        # report of why a test failed sits in a middle section
+        # of the log that a tail cannot reach
         run: |
-          python3 - <<'PY'
-          import glob
-          import sys
-          import xml.etree.ElementTree as ET
-
-          files = glob.glob("android/app/build/outputs/androidTest-results/"
-                            "connected/**/*.xml", recursive=True)
-          if not files:
-              sys.exit("no instrumented test results were written at all")
-          total = failed = skipped = 0
-          names = []
-          for path in files:
-              suite = ET.parse(path).getroot()
-              total += int(suite.get("tests", 0))
-              failed += int(suite.get("failures", 0)) + int(suite.get("errors", 0))
-              skipped += int(suite.get("skipped", 0))
-              for case in suite.iter("testcase"):
-                  names.append(f"{case.get('classname')}.{case.get('name')}")
-          print(f"on-device tests: {total} run, {failed} failed, "
-                f"{skipped} skipped")
-          for name in sorted(names):
-              print("  -", name)
-          # exact, not a floor: ">= 4" still passes if a new test is added
-          # while one of the old ones quietly stops running.  This job runs
-          # a single AVD, so the count is the test count.
-          expected = 5
-          if total != expected:
-              sys.exit(f"expected exactly {expected} on-device tests, ran "
-                       f"{total} — update this number when adding one")
-          if failed or skipped:
-              sys.exit("on-device tests failed or were skipped")
-          PY
+          python android/tools/check_ondevice_results.py \
+            android/app/build/outputs/androidTest-results/connected \
+            5 interpreted
 
   compiled:
     # The same app with wifitrx cross-compiled to .so instead of shipped as
@@ -200,33 +174,10 @@ jobs:
 
       - name: on-device tests actually ran
         if: always()
+        # prints each failure's message too: gradle's own
+        # report of why a test failed sits in a middle section
+        # of the log that a tail cannot reach
         run: |
-          python3 - <<'PY'
-          import glob
-          import sys
-          import xml.etree.ElementTree as ET
-
-          files = glob.glob("android/app/build/outputs/androidTest-results/"
-                            "connected/**/*.xml", recursive=True)
-          if not files:
-              sys.exit("no instrumented test results were written at all")
-          total = failed = skipped = 0
-          names = []
-          for path in files:
-              suite = ET.parse(path).getroot()
-              total += int(suite.get("tests", 0))
-              failed += int(suite.get("failures", 0)) + int(suite.get("errors", 0))
-              skipped += int(suite.get("skipped", 0))
-              for case in suite.iter("testcase"):
-                  names.append(f"{case.get('classname')}.{case.get('name')}")
-          print(f"compiled-flavour on-device tests: {total} run, "
-                f"{failed} failed, {skipped} skipped")
-          for name in sorted(names):
-              print("  -", name)
-          expected = 5
-          if total != expected:
-              sys.exit(f"expected exactly {expected} on-device tests, ran "
-                       f"{total} — update this number when adding one")
-          if failed or skipped:
-              sys.exit("on-device tests failed or were skipped")
-          PY
+          python android/tools/check_ondevice_results.py \
+            android/app/build/outputs/androidTest-results/connected \
+            5 compiled
