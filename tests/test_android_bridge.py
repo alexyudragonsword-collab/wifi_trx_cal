@@ -515,3 +515,43 @@ def test_the_phone_only_traps_stay_fixed():
         for path in (repo / folder).rglob("*.py"):
             assert "bbox_inches" not in path.read_text(encoding="utf-8"), \
                 f"{path} uses bbox_inches; the axes metadata would drift"
+
+
+def test_the_compiled_flavour_cannot_ship_source():
+    """The compiled variant's whole point is that wifitrx travels as .so.
+
+    A Chaquopy source dir takes import precedence over site-packages, so
+    leaving the repo's src/ in that flavour's source set would shadow every
+    compiled module and produce an interpreted APK that looks compiled —
+    and nothing in the build log would say so.
+    """
+    root = Path(__file__).resolve().parent.parent / "android"
+    gradle = (root / "app" / "build.gradle").read_text(encoding="utf-8")
+    tools = root / "tools"
+
+    assert 'productFlavors' in gradle and "compiled {" in gradle
+    # wifitrx as source belongs to the interpreted flavour alone
+    src_line = [ln for ln in gradle.splitlines() if '"../../src"' in ln]
+    assert len(src_line) == 1, src_line
+    interpreted = gradle.index("interpreted {\n            srcDirs")
+    assert gradle.index('"../../src"') > interpreted, \
+        "the repo's src/ must sit in the interpreted flavour's source set"
+    # and the wheels must resolve by tag, never by path
+    assert '--find-links' in gradle and 'install "wifitrx"' in gradle
+
+    # the vendored builder, with the change this tree depends on
+    wheel_tool = (tools / "android_wheel.py").read_text(encoding="utf-8")
+    # match the argument as it appears in the call, not the words: the
+    # vendoring note at the top of that file explains the flag in prose,
+    # and searching for the phrase finds the explanation, not the flag
+    assert '"-X", "annotation_typing=False"' in wheel_tool, \
+        "without it, np.float64 fails the `float` annotations this tree " \
+        "writes descriptively (metrics/ccdf.py is the shortest example)"
+    assert (tools / "inspect_apk.py").exists()
+
+    workflow = (Path(__file__).resolve().parent.parent / ".github"
+                / "workflows" / "android.yml").read_text(encoding="utf-8")
+    # 3.3.0 crashes on imaginary literals, and this tree is complex baseband
+    assert 'pip install "cython<3.3"' in workflow
+    # both artefacts asserted, in the two directions that distinguish them
+    assert "--native" in workflow and "--pure" in workflow

@@ -13,7 +13,7 @@ android {
         minSdk 24
         targetSdk 34
         versionCode 1
-        versionName "0.7.5"
+        versionName "0.7.6"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             // arm64 for devices, x86_64 for the emulator/CI golden tests.
@@ -30,6 +30,14 @@ android {
         release {
             minifyEnabled false       // Python assets dominate size anyway
         }
+    }
+    // Two ways to ship the same app.  `interpreted` is the default and
+    // what every existing job builds; `compiled` swaps the wifitrx source
+    // for per-ABI wheels whose modules are .so (see android/tools/).
+    flavorDimensions "code"
+    productFlavors {
+        interpreted { dimension "code" }
+        compiled { dimension "code" }
     }
 }
 
@@ -59,19 +67,40 @@ chaquopy {
             install "matplotlib"
         }
     }
+    productFlavors {
+        compiled {
+            pip {
+                // Wheels by tag, never by path: this build produces one
+                // wheel per ABI and only --find-links makes pip choose
+                // between them.  Installing a wheel by path skips tag
+                // matching and puts the arm64 wheel in the x86_64 variant
+                // too — it installs cleanly and fails at import.
+                // merged with defaultConfig's block, so numpy/scipy/
+                // matplotlib are already asked for — only wifitrx and the
+                // link to its wheels are added here
+                options "--find-links", file("pysrc").absolutePath
+                install "wifitrx"
+            }
+        }
+    }
     sourceSets {
         main {
             // bridge.py (src/main/python) + the unmodified analysis layer:
-            // repo src/ provides the wifitrx package, repo app/ provides
-            // the declarative registry (specs.py, reference.py).  main.py
-            // and the Qt pages ride along unimported — PySide6 is never
-            // imported on-device.
+            // repo app/ provides the declarative registry (specs.py,
+            // reference.py).  main.py and the Qt pages ride along
+            // unimported — PySide6 is never imported on-device.
             // build/python-assets carries the repo's assets/ tree (see the
             // stageAssets task below): the Reference tab reads the shipped
             // schematic SVGs off the filesystem, so they must travel with
             // the Python sources, not only as Android assets.
-            srcDirs = ["src/main/python", "../../src", "../../app",
-                       "build/python-assets"]
+            srcDirs = ["src/main/python", "../../app", "build/python-assets"]
+        }
+        // wifitrx as source, for the interpreted flavor only.  It must NOT
+        // appear for `compiled`: a source dir takes import precedence over
+        // site-packages, so the .py would shadow every .so and the build
+        // would ship an interpreted APK that looks compiled.
+        interpreted {
+            srcDirs = ["../../src"]
         }
     }
 }

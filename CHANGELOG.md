@@ -4,6 +4,36 @@
 或 `wifitrx.*` 公开签名的条目都在下面显式标注,交付方按此判断是否需要
 重新取包。日期为落地日期。
 
+## 0.7.6 — 2026-08-25
+
+### Android:并出一个编译版 APK(wifitrx 以 .so 出货)
+
+- 现有解释版不动,新增 `compiled` product flavor:`wifitrx` 不再以源码进包,
+  改由 `android/tools/android_wheel.py` 交叉编译成**逐 ABI 的 wheel**,
+  57 个模块为 `.so`。**编译版的 srcDirs 必须不含 `../../src`**——源码目录的
+  导入优先级高于 site-packages,漏进去就会遮蔽全部 `.so`,产出一个"自以为
+  编译过"的解释版,而构建日志对此只字不提(已加守卫,经变异验证)。
+- **两个必须钉死的前提**(都是实测,不是推测):
+  - **Cython 3.3.0 不可用**——在虚数字面量上编译器崩溃(`ImagNode` →
+    `AttributeError`),而本仓是复基带、`1j` 遍地;3.0.11 与 3.1.6 验证可用,
+    CI 钉 `cython<3.3`。
+  - **必须 `-X annotation_typing=False`**——cythonise 会把 Python 类型标注
+    变成运行时强制的 C 类型,而本仓标注是描述性的、numpy 标量四处流动:
+    `max_db: float | None` 会拒收 `metrics/ccdf.py` 赋给它的 `np.float64`。
+    首次编译后全量测试 291 过 / **2 败**即此;加该选项后 **293 全过**。
+    修法是让编译器别把标注当类型,而不是改分析层去迁就打包需求。
+- **两个脚本 vendoring 进仓库**(`android/tools/android_wheel.py` /
+  `inspect_apk.py`,出处与本地改动写在文件头):CI 只 checkout 仓库,
+  技能装在开发者 home 目录里,runner 看不见。
+- **两个 APK 双向卡住**:解释版断言 `--pure`、编译版断言 `--native`——
+  一个悄悄回退到相邻 `.py` 的模块,与正确编译的模块长得一模一样。
+  编译版另跑一遍端上金标(交叉编译干净 ≠ 能在设备上 import)。
+- **这个变更买到什么,说清楚**:它把读**算法**的成本从"解压即读"抬到
+  "要反汇编"。WebView 资产仍是明文(把每个桥接口与整个流程写得清清楚楚),
+  未编译模块仍是字节码,**字面常量原样留在常量池**——金标值、
+  `GAP_TOLERANCE_DB`、`RESIDUAL_SPEC` 里的文字照样可被精确搜出。
+  它不是许可保护,也不是对 UI 已展示内容的混淆。
+
 ## 0.7.5 — 2026-08-25
 
 ### Android:按 `python-android-apk` 技能清单体检,修掉四处只在手机上才犯的问题

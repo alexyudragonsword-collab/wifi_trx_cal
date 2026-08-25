@@ -138,6 +138,36 @@ gradle wrapper --gradle-version 8.9   # 首次;之后用 ./gradlew
 > 标为不吸附并附原因,该处游标自由定位并在读数里注明。隔离底板掩码点以
 > `null` 传输,游标不吸附——它们的含义就是"不可归因"。
 
+## 两种出货形态:解释版与编译版
+
+| flavor | wifitrx 如何进包 | 用途 |
+|---|---|---|
+| `interpreted`(默认) | 源码,走 Chaquopy srcDirs | 日常构建、金标对拍、端上守卫 |
+| `compiled` | 逐 ABI 的 wheel,57 个模块为 `.so` | 交付给外部时不想让算法被解压即读 |
+
+```bash
+# 本机试(不需要 NDK,用自己的编译器验"能编、编完测试还过不过")
+pip install "cython<3.3" build
+python android/tools/android_wheel.py --package wifitrx \
+    --compile cal,chain,impairments,metrics,link,dsp --host --outdir /tmp/w
+# CI 里的交叉编译见 .github/workflows/android.yml 的 compiled job
+```
+
+**两个必须钉死的前提**(实测,非推测):
+
+- **Cython 3.3.0 不可用**:在虚数字面量上编译器崩溃(`ImagNode` →
+  `AttributeError`),而本仓是复基带、`1j` 遍地。3.0.11 / 3.1.6 可用。
+- **必须 `-X annotation_typing=False`**:cythonise 会把类型标注变成运行时
+  强制的 C 类型,而本仓标注是描述性的、numpy 标量四处流动
+  (`max_db: float | None` 拒收 `np.float64`)。不加该选项时全量测试
+  291 过 / 2 败,加上后 293 全过。
+
+> **这个变更买到什么,以及买不到什么。** 它把读**算法**的成本从"解压即读"
+> 抬到"要反汇编"。它**不**保护:WebView 资产(明文,写清了每个桥接口与
+> 整个流程)、未编译模块(仍是字节码)、以及**字面常量**——它们原样留在
+> 常量池里,金标值、`GAP_TOLERANCE_DB`、`RESIDUAL_SPEC` 的文字说明都能被
+> 精确搜出。它不是许可保护,也不是对 UI 已展示内容的混淆。
+
 ## 已知代价(选型时已明示)
 
 - APK ~200 MB 量级(CPython + numpy + scipy + matplotlib × 2 ABI);

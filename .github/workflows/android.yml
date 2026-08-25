@@ -22,13 +22,20 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
-      - name: assembleDebug
+      - name: assemble the interpreted APK
         working-directory: android
-        run: gradle :app:assembleDebug
+        # flavour-specific: bare assembleDebug now aggregates both
+        # flavours, and the compiled one needs wheels this job never built
+        run: gradle :app:assembleInterpretedDebug
+      - name: the interpreted APK must actually be interpreted
+        run: |
+          python android/tools/inspect_apk.py \
+            android/app/build/outputs/apk/interpreted/debug/*.apk \
+            --package wifitrx --pure cal,chain,impairments,metrics,link,dsp
       - uses: actions/upload-artifact@v4
         with:
           name: wifitrx-debug-apk
-          path: android/app/build/outputs/apk/debug/*.apk
+          path: android/app/build/outputs/apk/interpreted/debug/*.apk
           retention-days: 14
 
   golden:
@@ -55,7 +62,7 @@ jobs:
           api-level: 34
           arch: x86_64
           working-directory: android
-          script: gradle :app:connectedDebugAndroidTest
+          script: gradle :app:connectedInterpretedDebugAndroidTest
 
       # A green job is not proof that the on-device guards ran: a test
       # that never executes, or is skipped, leaves the build successful
@@ -90,6 +97,132 @@ jobs:
           # exact, not a floor: ">= 4" still passes if a new test is added
           # while one of the old ones quietly stops running.  This job runs
           # a single AVD, so the count is the test count.
+          expected = 5
+          if total != expected:
+              sys.exit(f"expected exactly {expected} on-device tests, ran "
+                       f"{total} — update this number when adding one")
+          if failed or skipped:
+              sys.exit("on-device tests failed or were skipped")
+          PY
+
+  compiled:
+    # The same app with wifitrx cross-compiled to .so instead of shipped as
+    # source.  Manual only: two cross-compiles plus a second APK plus an
+    # emulator run is real runner time, and most changes do not affect it.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      COMPILE_SET: cal,chain,impairments,metrics,link,dsp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: build tools
+        # NOT 3.3.0: it crashes on imaginary literals (ImagNode ->
+        # AttributeError) and this is a complex-baseband tree where 1j is
+        # everywhere.  3.0.11 and 3.1.6 are verified good.
+        run: pip install "cython<3.3" build
+
+      - name: resolve Chaquopy's Android CPython build
+        id: target
+        run: |
+          set -o pipefail
+          ver=$(curl -sS https://repo.maven.apache.org/maven2/com/chaquo/python/target/maven-metadata.xml \
+                | grep -o '<version>3\.8\.[^<]*</version>' \
+                | sed 's/<[^>]*>//g' | tail -1)
+          test -n "$ver" || { echo "no 3.8 target build found"; exit 1; }
+          # On 3.10 and below Cython's generated C stays on the public API
+          # (the internal-header include is behind PY_VERSION_HEX >=
+          # 0x030b00a6), so the patch level is not load-bearing here.  It
+          # would be on 3.11+.
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          echo "Android CPython target: $ver"
+
+      - name: cross-compile wifitrx, one wheel per ABI
+        run: |
+          set -o pipefail
+          NDK="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
+          test -d "$NDK" || { echo "no NDK at '$NDK'"; exit 1; }
+          rm -rf android/app/pysrc
+          mkdir -p android/app/pysrc
+          for abi in arm64-v8a x86_64; do
+            python android/tools/android_wheel.py \
+              --package wifitrx --compile "$COMPILE_SET" \
+              --abi "$abi" --ndk "$NDK" \
+              --target-version "${{ steps.target.outputs.version }}" \
+              --outdir android/app/pysrc
+          done
+          ls -la android/app/pysrc
+
+      - name: assemble the compiled APK
+        working-directory: android
+        run: gradle :app:assembleCompiledDebug
+
+      - name: the compiled APK must actually be compiled
+        # A module that quietly fell back to its neighbouring .py looks
+        # exactly like one that compiled correctly.  Nothing in the build
+        # log distinguishes the two APKs.
+        run: |
+          python android/tools/inspect_apk.py \
+            android/app/build/outputs/apk/compiled/debug/*.apk \
+            --package wifitrx --native "$COMPILE_SET"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wifitrx-compiled-apk
+          path: android/app/build/outputs/apk/compiled/debug/*.apk
+          retention-days: 14
+
+      - name: enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+
+      - uses: reactivecircus/android-emulator-runner@v2
+        # A clean cross-compile and a correct-looking wheel are not a
+        # successful import on a device, and the golden cases are the only
+        # thing that says the compiled build still computes the same
+        # physics.
+        with:
+          api-level: 34
+          arch: x86_64
+          working-directory: android
+          script: gradle :app:connectedCompiledDebugAndroidTest
+
+      - name: on-device tests actually ran
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob
+          import sys
+          import xml.etree.ElementTree as ET
+
+          files = glob.glob("android/app/build/outputs/androidTest-results/"
+                            "connected/**/*.xml", recursive=True)
+          if not files:
+              sys.exit("no instrumented test results were written at all")
+          total = failed = skipped = 0
+          names = []
+          for path in files:
+              suite = ET.parse(path).getroot()
+              total += int(suite.get("tests", 0))
+              failed += int(suite.get("failures", 0)) + int(suite.get("errors", 0))
+              skipped += int(suite.get("skipped", 0))
+              for case in suite.iter("testcase"):
+                  names.append(f"{case.get('classname')}.{case.get('name')}")
+          print(f"compiled-flavour on-device tests: {total} run, "
+                f"{failed} failed, {skipped} skipped")
+          for name in sorted(names):
+              print("  -", name)
           expected = 5
           if total != expected:
               sys.exit(f"expected exactly {expected} on-device tests, ran "

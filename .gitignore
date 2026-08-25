@@ -13,3 +13,6 @@ android/local.properties
 android/app/build/
 android/build/
 android/.idea/
+
+# per-ABI wheels for the compiled flavor (build output)
+android/app/pysrc/
