@@ -5,6 +5,7 @@ import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.system.Os
 import android.util.Base64
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
@@ -41,6 +42,14 @@ class MainActivity : ComponentActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Writable caches BEFORE Python.start(): matplotlib builds a font
+        // cache on first import and dies on a read-only config dir.  It
+        // happens to work today, which is the worst kind of dependency —
+        // two lines pin it to a directory this app certainly owns.
+        Os.setenv("MPLCONFIGDIR", File(filesDir, "mpl").apply { mkdirs() }
+                  .absolutePath, true)
+        Os.setenv("XDG_CACHE_HOME", File(filesDir, "cache").apply { mkdirs() }
+                  .absolutePath, true)
         if (!Python.isStarted()) Python.start(AndroidPlatform(this))
 
         val assets = WebViewAssetLoader.Builder()

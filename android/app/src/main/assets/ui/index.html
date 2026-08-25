@@ -2,20 +2,27 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
 <title>wifitrx workbench</title>
 <style>
   :root { --fg:#1a1a1a; --bg:#fff; --mut:#667; --line:#d8dce2;
           --acc:#0a5bd3; --bad:#b3261e; }
   * { box-sizing:border-box; margin:0; }
   body { font:15px/1.45 system-ui, sans-serif; color:var(--fg);
-         background:var(--bg); padding-bottom:3.2rem; }
+         background:var(--bg);
+         padding-bottom:calc(3.2rem + env(safe-area-inset-bottom)); }
+  /* notches and gesture bars: without these the first control hides under
+     the status bar and the tab strip under the gesture bar — only ever
+     visible on a real phone */
   nav { display:flex; position:fixed; bottom:0; left:0; right:0;
-        border-top:1px solid var(--line); background:var(--bg); z-index:9; }
+        border-top:1px solid var(--line); background:var(--bg); z-index:9;
+        padding-bottom:env(safe-area-inset-bottom); }
   nav button { flex:1; padding:.7rem 0; border:0; background:none;
                font:inherit; color:var(--mut); }
   nav button.on { color:var(--acc); font-weight:600; }
-  main { padding:.8rem; }
+  main { padding:calc(.8rem + env(safe-area-inset-top))
+                 calc(.8rem + env(safe-area-inset-right)) .8rem
+                 calc(.8rem + env(safe-area-inset-left)); }
   h2 { font-size:1.05rem; margin:.4rem 0; }
   select,input[type=number] { font:inherit; padding:.35rem .5rem;
       border:1px solid var(--line); border-radius:6px; width:9rem; }
@@ -40,6 +47,9 @@
          overflow:hidden; touch-action:none; position:relative; }
   #fig>div { transform-origin:0 0; }
   #fig svg { display:block; }
+  /* an author display: beats the UA's [hidden] { display:none }, so an
+     element toggled with `hidden` needs saying so explicitly */
+  #fig-cursors[hidden] { display:none; }
   #figbar { display:flex; gap:.3rem; align-items:center; margin:.4rem 0;
             flex-wrap:wrap; }
   #figbar select { flex:1 1 7rem; }

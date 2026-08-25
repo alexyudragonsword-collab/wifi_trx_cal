@@ -471,3 +471,47 @@ def test_page_series_is_bounded_and_refuses_unknown_pages():
     assert page["points"] <= bridge.PAGE_POINT_BUDGET
     bad = json.loads(bridge.page_series(99))
     assert bad["ok"] is False and "error" in bad
+
+
+def test_the_phone_only_traps_stay_fixed():
+    """Five things that are invisible on a desktop and only bite on a
+    phone.  Each is cheap to keep and expensive to rediscover."""
+    root = Path(__file__).resolve().parent.parent / "android" / "app" / "src"
+    kt = (root / "main" / "java" / "com" / "wifitrx" / "workbench"
+          / "MainActivity.kt").read_text(encoding="utf-8")
+    ui = root / "main" / "assets" / "ui"
+    html = (ui / "index.html").read_text(encoding="utf-8")
+    js = (ui / "app.js").read_text(encoding="utf-8")
+
+    # 1. matplotlib builds a font cache on first import; a read-only config
+    # dir turns that into a crash on the first calculation
+    for var in ("MPLCONFIGDIR", "XDG_CACHE_HOME"):
+        assert f'Os.setenv("{var}"' in kt, f"{var} is not pinned"
+    # match the call, not the word: the comment above it says
+    # "Python.start()" too, and searching for prose finds that first
+    assert kt.index("MPLCONFIGDIR") < kt.index("Python.start(AndroidPlatform"), \
+        "the cache directories must be set before Python starts"
+
+    # 2. an author `display` beats the UA's [hidden] { display:none }, so a
+    # toggled element stays on screen — invisible content that still exists
+    assert "#fig svg { display:block; }" in html
+    assert "#fig-cursors[hidden] { display:none; }" in html
+
+    # 3. notches and gesture bars
+    assert "viewport-fit=cover" in html
+    assert "safe-area-inset-bottom" in html and "safe-area-inset-top" in html
+
+    # 4. the first bridge call pays the whole import; without a loading
+    # state an empty form sits there looking hung
+    assert "starting Python" in js
+    assert js.index("starting Python") < js.index("init();"), \
+        "the loading state must be shown before the blocking first call"
+
+    # 5. bbox_inches silently changes a figure's extent, so the axes
+    # rectangles the cursor and the readout are computed from would
+    # describe a different image than the one on screen
+    repo = Path(__file__).resolve().parent.parent
+    for folder in ("src", "app", "android"):
+        for path in (repo / folder).rglob("*.py"):
+            assert "bbox_inches" not in path.read_text(encoding="utf-8"), \
+                f"{path} uses bbox_inches; the axes metadata would drift"

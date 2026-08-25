@@ -763,4 +763,17 @@ function loadReference(version) {
   }
 }
 
-init();
+/* Paint the shell before the first bridge call.
+ *
+ * list_specs() pays the import of the whole analysis stack — numpy, scipy
+ * and matplotlib — plus, on a phone, byte-compiling every module the first
+ * time (the APK ships no .pyc for this interpreter).  Measured cold on a
+ * desktop: 14 s.  Called straight from page load it leaves an empty form
+ * on screen with nothing to say why, which reads as a hung app.
+ */
+setStatus("starting Python — first launch imports numpy/scipy/matplotlib " +
+          "and can take a while");
+requestAnimationFrame(() => setTimeout(() => {
+  init();
+  if ($("status").textContent.startsWith("starting Python")) setStatus("");
+}, 0));
