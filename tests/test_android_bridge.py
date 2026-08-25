@@ -547,6 +547,14 @@ def test_the_compiled_flavour_cannot_ship_source():
     assert '"-X", "annotation_typing=False"' in wheel_tool, \
         "without it, np.float64 fails the `float` annotations this tree " \
         "writes descriptively (metrics/ccdf.py is the shortest example)"
+    # local change 2: package initializers stay as source.  An extension
+    # module acting as a package initializer is what Chaquopy's importer
+    # rejected ("does not define module export function (PyInit_cal)")
+    # while the desktop loaded the same file happily.
+    # assert the call site, not the name: the function's own def
+    # keeps the name in the file after the call is deleted
+    assert "return _drop_package_initializers(sorted(set(sources)))" \
+        in wheel_tool
     assert (tools / "inspect_apk.py").exists()
 
     workflow = (Path(__file__).resolve().parent.parent / ".github"

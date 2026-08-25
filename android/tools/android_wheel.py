@@ -15,7 +15,16 @@
 #     Two tests caught it; the untested paths are the reason the fix is
 #     "stop enforcing annotations" rather than "edit the analysis layer
 #     until the compiler is happy".
-#  2. Nothing else.  Keep it that way — the diff against upstream should
+#  2. Package ``__init__.py`` files are never compiled.  They are
+#     re-export shims here — no algorithms, so compiling them buys no
+#     protection — while an extension module acting as a package
+#     initializer is the one construct an import system treats specially.
+#     Chaquopy's asset-based importer rejected ours: the desktop loads
+#     wifitrx/cal/__init__.so happily (it exports PyInit_cal, verified with
+#     nm), the device answered "dynamic module does not define module
+#     export function (PyInit_cal)".  Leaving them as source removes the
+#     construct rather than guessing at that importer's rules.
+#  3. Nothing else.  Keep it that way — the diff against upstream should
 #     stay readable.
 #
 # Cython 3.3.0 must NOT be used: it crashes on imaginary literals
@@ -161,6 +170,7 @@ def select_sources(tree: Path, spec: list[str]) -> list[Path]:
     """
     if spec == ["all"]:
         sources = sorted(tree.rglob("*.py"))
+    # (local change 2: package initializers stay as source — see the top)
     else:
         sources = []
         for entry in spec:
@@ -184,7 +194,7 @@ def select_sources(tree: Path, spec: list[str]) -> list[Path]:
             sources += hits
     if not sources:
         raise SystemExit(f"nothing to compile under {tree}")
-    return sorted(set(sources))
+    return _drop_package_initializers(sorted(set(sources)))
 
 
 # ------------------------------------------------------------- the toolchain
@@ -209,6 +219,11 @@ def fetch_target(abi: str, target_version: str, work: Path) -> tuple[Path, Path]
     if not libdir.is_dir():
         raise SystemExit(f"no jniLibs/{abi} in {dest}; wrong ABI name?")
     return include, libdir
+
+
+def _drop_package_initializers(sources: list[Path]) -> list[Path]:
+    """Local change 2 (see the vendoring note): never compile __init__.py."""
+    return [p for p in sources if p.name != "__init__.py"]
 
 
 def cythonize(package_name: str, tree: Path, sources: list[Path]) -> list[Path]:
