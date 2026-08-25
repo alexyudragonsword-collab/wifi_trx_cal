@@ -87,6 +87,13 @@ jobs:
     runs-on: ubuntu-latest
     env:
       COMPILE_SET: cal,chain,impairments,metrics,link,dsp
+      # What the APK gate asserts is native.  Leaf modules, not the
+      # subpackages: package __init__.py files deliberately stay as source
+      # (an extension module acting as a package initializer is what
+      # Chaquopy's importer rejected), and --native requires *no* source
+      # under the prefix it is given.  One leaf per compiled subpackage, so
+      # a flavour-wide regression still fails here.
+      NATIVE_PROBE: cal/residuals,chain/tx,impairments/phase_noise,metrics/evm,link/mcs,dsp
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -147,7 +154,7 @@ jobs:
         run: |
           python android/tools/inspect_apk.py \
             android/app/build/outputs/apk/compiled/debug/*.apk \
-            --package wifitrx --native "$COMPILE_SET"
+            --package wifitrx --native "$NATIVE_PROBE"
 
       - uses: actions/upload-artifact@v4
         with:
