@@ -8,7 +8,7 @@
 
 ### Android 编译版:交叉编译出的 `.so` 不导出 `PyInit_*`(根因与守卫)
 
-- **症状**:编译版 APK 构建全绿、`--native` 门禁通过、wheel 里 57 个 `.so`
+- **症状**:编译版 APK 构建全绿、`--native` 门禁通过、wheel 里 52 个 `.so`
   一个不少,端上 import 却报
   `dynamic module does not define module export function (PyInit_sync)`。
 - **根因**(已在本机用两版头文件证明,非推测):`android_wheel.py` 用
@@ -31,6 +31,23 @@
   - CI 侧新增 `android/tools/check_wheel_exports.py`,用 NDK 自带 `llvm-nm`
     逐个检查 wheel 内**每一个** `.so` 是否导出 `PyInit_<模块名>`——出货件
     上的物理检查,在装模拟器之前二十分钟就能否掉。
+- **裁决**:编译版端上金标 5/5 通过(0 失败 0 跳过),含
+  `GoldenTest.metricsMatchDesktopGolden`。至此编译版与解释版同为可交付形态;
+  wheel 内 52 个 `.so`(每 ABI)全部通过导出检查。
+
+### 顺带修掉两件在同一轮里暴露出来的事
+
+- **两处构建暂存目录被误提交进仓库**:`build-android-wheel/`(197 个文件
+  7.7 MB,混在 0.7.6 的 `git add -A` 里)与 `build/`(setuptools 暂存,
+  96 个文件,0.7.5 混进去的)。前者**不是占地方而已**:`android_wheel.py`
+  会缓存一个"参考 wheel"来取 dist-info,于是这个陈旧副本让编译版的
+  METADATA 冻在 0.7.6——连续两个版本的 wheel 都打着 0.7.6 的名字与依赖表
+  出货,而仓库里 `pyproject.toml` 早已是 0.7.7。两者均已 `git rm --cached`
+  并加进 `.gitignore`;CI 增一步断言 wheel 文件名必须带 `pyproject.toml`
+  里的版本号(匹配与不匹配两个方向都本地验过)。
+- **模块数更正**:0.7.6 条目写的"57 个模块"是把 5 个包 `__init__.py` 一并
+  算了,而那一版恰好开始不编译它们;实际为 **52**(CI 日志
+  `cythonised 52 modules`,导出检查 52 × 2 ABI 全过)。
 
 ## 0.7.6 — 2026-08-25
 

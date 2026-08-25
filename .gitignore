@@ -16,3 +16,12 @@ android/.idea/
 
 # per-ABI wheels for the compiled flavor (build output)
 android/app/pysrc/
+
+# scratch tree for android_wheel.py: cythonised copies, the fetched Android
+# CPython, and a cached reference wheel.  It was committed by accident once,
+# and the cached wheel then froze the compiled flavour's metadata at that
+# version — see CHANGELOG 0.7.7.
+build-android-wheel/
+
+# setuptools staging dir, likewise committed by accident once (0.7.5)
+/build/

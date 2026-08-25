@@ -143,7 +143,7 @@ gradle wrapper --gradle-version 8.9   # 首次;之后用 ./gradlew
 | flavor | wifitrx 如何进包 | 用途 |
 |---|---|---|
 | `interpreted`(默认) | 源码,走 Chaquopy srcDirs | 日常构建、金标对拍、端上守卫 |
-| `compiled` | 逐 ABI 的 wheel,57 个模块为 `.so` | 交付给外部时不想让算法被解压即读 |
+| `compiled` | 逐 ABI 的 wheel,52 个模块为 `.so` | 交付给外部时不想让算法被解压即读 |
 
 ```bash
 # 本机试(不需要 NDK,用自己的编译器验"能编、编完测试还过不过")

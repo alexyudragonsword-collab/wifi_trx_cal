@@ -8,6 +8,8 @@
 - **根因(本机两版头文件直接证明)**:`-fvisibility=hidden` 把模块初始化函数一起隐藏了,因为 **CPython 3.8 的 `PyMODINIT_FUNC` 不带可见性属性**(3.9 起才由 `Py_EXPORTED_SYMBOL` 加上),而 Chaquopy 的 Android target 就是 3.8。宿主机 3.11 头文件替你导出,所以 `--host` 试编译永远复现不了。修法:命令行显式 `-DPyMODINIT_FUNC=__attribute__((visibility("default"))) PyObject*`。
 - **更正 R16 的一个判断**:上一版把同类失败(`PyInit_cal`)归因为"扩展模块当包初始化器被导入器拒绝",错了;真因即本条。不编译 `__init__.py` 保留(re-export 壳无保护价值),理由已在 `android_wheel.py` 文件头更正。
 - **教训**:这类缺陷在**所有构建期信号上都是绿的**,只有出货件上的物理检查能拦。新增 `android/tools/check_wheel_exports.py`,用 NDK `llvm-nm` 逐个查每个 `.so` 是否导出 `PyInit_<模块名>`;桌面侧守卫断言构建器**拼出的命令行**(变异验证已红)。
+- **裁决**:修后编译版端上金标 5/5 通过(0 失败 0 跳过),含 `metricsMatchDesktopGolden`;52 个 `.so` × 2 ABI 全部通过导出检查。编译版自此与解释版同为可交付形态。
+- **同轮暴露的第二件事**:`build-android-wheel/`(197 文件 7.7 MB)被 0.7.6 的 `git add -A` 误提交。危害不在体积——构建器会缓存参考 wheel 取 dist-info,陈旧副本把编译版 METADATA 冻在 0.7.6,连续两版打着旧版本号与旧依赖表出货。已 untrack + ignore,并加 CI 断言"wheel 文件名必须带 pyproject 的版本号"。
 - 指针:`CHANGELOG.md` 0.7.7、`android/README.md`「三个必须钉死的前提」、`docs/backlog_zh.md` R1 增补。
 
 ## 2026-08-25 · R16:并出编译版 APK(0.7.6)

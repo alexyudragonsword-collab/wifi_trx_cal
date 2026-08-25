@@ -567,6 +567,11 @@ def test_the_compiled_flavour_cannot_ship_source():
     # before an emulator spends twenty minutes discovering it is missing
     assert "android/tools/check_wheel_exports.py" in workflow
     assert (tools / "check_wheel_exports.py").exists()
+    # and the wheels must carry this tree's version: the builder caches a
+    # reference wheel for the dist-info, so a stale one ships the wrong
+    # METADATA — dependencies included, not just the filename.  Match the
+    # case pattern that does the rejecting, not the step's prose.
+    assert 'wifitrx-"$v"-*)' in workflow
 
 
 def _load_wheel_tool():
