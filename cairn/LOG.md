@@ -11,7 +11,8 @@
 - **量出预算问题**:`EvmBudget.cpe_tracked_fraction=0.5` 实为 6.6%,相噪项乐观 2.7 dB;未改默认值,待用户裁决(backlog 头部)。
 - 测试自身纠错留档:type-II 远端滚降是 −20 不是 −40 dB/dec。7 处守卫经变异验证。
 - 金标案例 3 → 4(`pn_cpe_study`),端上条数仍 5;job 结论追记于本条末尾。
-- **run #44 裁决**:解释版金标 **5 run / 0 failed / 0 skipped**,`metricsMatchDesktopGolden` 含第四案例通过——端上 numpy 1.19.5 复现了 Generator + irfft + `np.sinc` 这条物理。编译版**未裁决**:两个 flavour 的 `upload-artifact` 撞上 GitHub **artifact 存储配额**("Artifact storage quota has been hit",与代码无关),而编译版的上传排在模拟器之前,把唯一的物理检查跳过了。修法:上传移到端上门禁之后、`continue-on-error`、保留期 14→7 天;守卫断言顺序与非致命(变异 3 处已红)。编译版结论见后续 run。
+- **run #44 裁决**:解释版金标 **5 run / 0 failed / 0 skipped**,`metricsMatchDesktopGolden` 含第四案例通过——端上 numpy 1.19.5 复现了 Generator + irfft + `np.sinc` 这条物理。编译版**未裁决**:两个 flavour 的 `upload-artifact` 撞上 GitHub **artifact 存储配额**("Artifact storage quota has been hit",与代码无关),而编译版的上传排在模拟器之前,把唯一的物理检查跳过了。修法:上传移到端上门禁之后、`continue-on-error`、保留期 14→7 天;守卫断言顺序与非致命(变异 3 处已红)。
+- **run #47 裁决(修后重跑,commit 3f04e8c)**:三个 job 全绿。编译版 wheel `wifitrx-0.7.8-cp38-cp38-android_21_{arm64_v8a,x86_64}`、`cythonised 52 modules`、版本门禁与 `PyInit_*` 导出检查通过,端上 **compiled tests: 5 run / 0 failed / 0 skipped**(含 `metricsMatchDesktopGolden` 第四案例);解释版同样 5/5。配额恰好重算,两处上传也成功(77 MB)。**0.7.8 两种出货形态均已裁决。**
 - 指针:`CHANGELOG.md` 0.7.8、`docs/backlog_zh.md` B15、`app/specs.py::run_pn_cpe_study`。
 
 ## 2026-08-25 · R17:编译版端上 import 失败的根因是符号可见性(0.7.7)
