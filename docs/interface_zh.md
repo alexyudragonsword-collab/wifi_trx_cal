@@ -113,7 +113,7 @@ Schema(`wifitrx-cal-state-v1`):
 }
 ```
 
-**GUI 工作台**(`python app/main.py`)三个页签:Analyses(七个分析,含基带噪声扫描)、
+**GUI 工作台**(`python app/main.py`)三个页签:Analyses(八个分析,含基带噪声扫描与 LO 相噪 vs CPE 去除研究)、
 Cal-state inspector(打开本文件读结论)、Reference(信号链框图、校准顺序表、
 依赖图与逐边理由、AGC 档位与损伤参数——与教程同源,现算不落库;跑完一次
 校准后顺序表的验收列与捕获成本表填入本次实测值)。

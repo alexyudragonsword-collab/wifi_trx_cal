@@ -4,6 +4,51 @@
 或 `wifitrx.*` 公开签名的条目都在下面显式标注,交付方按此判断是否需要
 重新取包。日期为落地日期。
 
+## 0.7.8 — 2026-09-04
+
+### 新增分析:LO 相噪 vs CPE 去除(四种测量配置的隔离研究)
+
+- **起因**:讨论"基带在信道估计/CPE 去除过程中会不会因 LO 相噪引入额外
+  误差"时发现,本模型的 `correct_cpe()` 是 genie 估计器(全部子载波对理想
+  参考做 LS 相位),EVM 均衡器又是对被测点自拟合、不走 LTF——于是"信道估计
+  被相噪污染"与"导频估计噪声共模注入"两条机理在模型里**结构性不可见**。
+  本版把这件事做成可量的东西,而不是留在讨论里。
+- **`pn_cpe_study`**(`app/specs.py`,两端共用注册表):相噪是唯一损伤
+  (隔离法,真信道恒为 1,配置 1/2 不用均衡器、无自拟合自由度偏差),四种
+  配置直接读数:① 不去 CPE;② genie CPE;③ genie CPE + 收到的 LTF 信道
+  估计;④ N_p 导频估 CPE + LTF 估计(modem 形态)。三页:LO 谱按
+  `1 − sinc²(f·T_FFT)` 权重拆成 CPE 可去除/ICI 两部分;type-II PLL 家族
+  扫环路带宽(rms jitter 最优 vs 去 CPE 后 EVM 最优);四配置随相噪电平扫描,
+  配置 1/2 叠加闭式解 ∫S_φ df 与 ∫S_φ·[1 − sinc²] df 做对拍。
+- **实测(80 MHz / 11ax,单 LO,8 帧)**:配置 1/2 读数 −43.94 / −44.22 dB,
+  闭式解 −43.81 / −44.10 dB(残差 0.13 / 0.12 dB,单帧散布 ~0.3 dB rms)——
+  模型的 ICI 加权与 PSD 约定(DSB)对得上;**CPE 只买回 0.29 dB**(12.8 µs
+  符号下 CPE 可去除带宽 35 kHz,只追掉出货 LO 谱 6.6% 的相位功率;11ac 的
+  3.2 µs 符号是 138 kHz / 28.7%,买回 1.66 dB);**LTF 信道估计的冻结 ICI
+  使相噪 EVM 贡献再 +1.74 dB**(不随符号数平均,两次 LTF 平均后仍如此);
+  8 导频 CPE 再 +0.33 dB(320 MHz 32 导频时 0.03 dB)。
+- **一条被自己的数据推翻的判断**:讨论时我说"PLL 环路带宽的去 CPE 后 EVM
+  最优点与最小 rms jitter 最优点不是同一个"。对 11ax/be 数制**不成立**:
+  type-II 家族(平台 −104.1、VCO −116.1 dBc/Hz@1 MHz)两者同在 300 kHz,
+  差 0.00 dB;对 11ac/n 才成立(300 vs 139 kHz,差 0.58 dB)。原因就是上一条:
+  35 kHz 以下 CPE 才管得着,而这类 PLL 的噪声都在其上。详见 backlog B15。
+- **顺带暴露**:`link/evm_budget.py::EvmBudget.cpe_tracked_fraction` 默认 0.5
+  ("modem 追掉一半相位功率")——按出货谱与 11ax 数制实算是 **6.6%**,预算表
+  的相噪项因此**乐观约 2.7 dB**。本版未改默认值(改它会动交付数字,须用户
+  裁决),`cpe_partition()` 已提供按谱与符号长度算出的准确值。
+- **公开接口变化**(向后兼容):`impairments.phase_noise` 新增
+  `ici_weight()`、`cpe_partition()`、`TypeIIPllPhase`;`metrics.cpe` 新增
+  `correct_cpe_pilots()`;`waveform.preamble.build_frame()` 新增可选
+  `data=` 形参。cal-state schema 不变。
+- **守卫**(全部经变异验证会红):闭式分解对白噪声 PSD 的 sinc² 积分恒等式;
+  11ax vs 11ac 的 CPE 可去除比例 4× 关系;type-II 环路带宽即 |H|² 的 −3 dB
+  点(首稿把远端滚降写成 −40 dB/dec,实为 −20 dB/dec——type-II 的零点决定,
+  测试文档里留了这条纠错);研究级:模型读数对闭式解 ±0.3 dB、四配置单调
+  (② ≤ ①、③ 比 ② 高 1–3 dB、④ > ③)、导频估计器全音时与 genie 逐位一致。
+- **Android**:金标案例由三个增为四个(`pn_cpe_study` 80M/2 帧——numpy
+  Generator + irfft 合成 + `np.sinc` 闭式,是桌面守卫核不到的端上物理面),
+  `golden.json` 重生成;端上测试条数不变(5)。金标 job 结论见 LOG R18。
+
 ## 0.7.7 — 2026-08-25
 
 ### Android 编译版:交叉编译出的 `.so` 不导出 `PyInit_*`(根因与守卫)

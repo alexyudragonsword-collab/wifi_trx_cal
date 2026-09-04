@@ -190,7 +190,7 @@ def test_self_check_is_the_one_golden_comparison():
     assert out["passed"], out["cases"]
     assert out["tolerance_abs_db"] == 0.05 and out["tolerance_rel"] == 1e-3
     assert {c["key"] for c in out["cases"]} == {
-        "full_cal", "rx_evm_sweep", "spur_planner"}
+        "full_cal", "rx_evm_sweep", "spur_planner", "pn_cpe_study"}
     for case in out["cases"]:
         assert case["rows"], case["key"]
         for row in case["rows"]:

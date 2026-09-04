@@ -26,6 +26,8 @@ FAST_PARAMS = {
     "drift_tracking": {"bw_mhz": 80, "n_states": 3},
     "blocker_desense": {"bw_mhz": 160, "offset_mhz": 200.0,
                         "p_sig_dbm": -60.0},
+    "pn_cpe_study": {"bw_mhz": 80, "std": "11ax/be", "lo_count": "single",
+                     "n_frames": 2, "vco_1f3_khz": 0.0, "seed": 0},
     "spur_planner": {"bw_mhz": 320, "band": "6g"},
 }
 
@@ -209,3 +211,46 @@ def test_bb_noise_knob_sweeps_the_stage_not_the_rf_ladder():
     # t = (2*IIP3 + NF + const)/3 moves a third of that with it —
     # thresholds rise, never fall
     assert all(y >= x for x, y in zip(t5, t40))
+
+
+def test_pn_study_reads_the_closed_form_and_orders_the_mechanisms():
+    """The phase-noise/CPE study is an isolation measurement (phase
+    noise only) whose two genie configurations have closed forms:
+    config 1 = int S_phi df, config 2 = int S_phi [1 - sinc^2(f T)] df.
+    Eight frames at 80 MHz / 11ax read -43.94 / -44.22 dB against
+    -43.81 / -44.10 dB closed form (single-frame spread ~0.3 dB rms).
+    The mechanisms then stack in one direction: CPE removal can only
+    help (config 2 <= 1); the LTF channel estimate freezes its own ICI
+    into every symbol (config 3 sits 1.7 dB above 2, no averaging
+    across the packet); the 8-pilot CPE adds its estimator noise
+    common-mode (config 4 above 3, +0.33 dB measured)."""
+    from specs import run_pn_cpe_study
+
+    m = run_pn_cpe_study(dict(FAST_PARAMS["pn_cpe_study"], n_frames=8)).metrics
+    assert abs(m["evm_no_cpe_db"] - m["closed_form_total_db"]) < 0.3
+    assert abs(m["evm_genie_cpe_db"] - m["closed_form_ici_db"]) < 0.3
+    assert m["evm_genie_cpe_db"] <= m["evm_no_cpe_db"]
+    assert 1.0 < m["ltf_penalty_db"] < 3.0        # 3 dB = single LTF bound
+    assert m["pilot_penalty_db"] > 0.05
+    assert m["n_pilots"] == 8
+    assert m["f_cpe_3db_khz"] == pytest.approx(34.6, abs=0.1)
+    assert 4.0 < m["cpe_tracked_pct"] < 10.0
+
+
+def test_pilot_cpe_reduces_to_the_genie_when_every_tone_is_a_pilot():
+    """Same estimator, different averaging set: with all tones declared
+    pilots the two must agree to rounding, and a pure common rotation is
+    taken out exactly by the pilot form."""
+    import numpy as np
+    from wifitrx.metrics.cpe import correct_cpe, correct_cpe_pilots
+
+    rng = np.random.default_rng(3)
+    ref = rng.choice([-1.0, 1.0], size=(4, 64)) + 0j
+    rot = np.exp(1j * rng.uniform(-1.0, 1.0, size=(4, 1)))
+    rx = ref * rot + 0.05 * (rng.standard_normal((4, 64))
+                             + 1j * rng.standard_normal((4, 64)))
+    cols = np.arange(64)
+    assert np.allclose(correct_cpe_pilots(rx, cols, ref), correct_cpe(rx, ref))
+    clean = correct_cpe_pilots(ref * rot, np.array([3, 17, 40, 61]),
+                               ref[:, [3, 17, 40, 61]])
+    assert np.allclose(clean, ref)

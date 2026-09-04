@@ -51,7 +51,7 @@ bridge.py  →  specs.ALL_ANALYSES / reference / inspector / save_cal_state
 
 **arm64 已由真机裁决(Self-check 页签)**:CI 只能为它跑的 ABI 背书
 (x86_64),而真机是 arm64、OpenBLAS 也不同。金标值随 APK 出货,应用内
-Self-check 页签一键在**本机**重放三个案例并逐指标对比,给出 PASS/FAIL、
+Self-check 页签一键在**本机**重放四个案例并逐指标对比,给出 PASS/FAIL、
 平台信息(ABI / numpy / scipy / Python)与每项 delta。
 
 > **实测结果(2026-08-23,用户真机 arm64,0.7.0):PASS。**
@@ -85,8 +85,9 @@ gradle wrapper --gradle-version 8.9   # 首次;之后用 ./gradlew
   在主测试套件里跑——list_specs 与注册表逐键一致、run 返回 SVG 页与
   metrics、错误以 JSON 返回而非崩溃、reference 两类条目齐全。
 - **端上金标对拍(模拟器/真机)**:
-  `./gradlew :app:connectedDebugAndroidTest` 跑三个代表分析
-  (full_cal 80M/256/seed5、rx_evm_sweep 80M、spur_planner 320M),与
+  `./gradlew :app:connectedDebugAndroidTest` 跑四个代表分析
+  (full_cal 80M/256/seed5、rx_evm_sweep 80M、spur_planner 320M、
+  pn_cpe_study 80M——随机数发生器 + FFT 合成对闭式解,0.7.8 起),与
   `src/androidTest/assets/golden.json`(桌面同参数生成,
   `python android/tools/make_golden.py` 重生成)逐指标对拍:数值容差
   0.05 dB / 相对 1e-3(BLAS/FFT 实现差异,不追位一致),非数值精确相等。
@@ -101,7 +102,7 @@ gradle wrapper --gradle-version 8.9   # 首次;之后用 ./gradlew
 
 | 功能 | Qt | Android | 说明 |
 |---|---|---|---|
-| 七个分析 + 参数表单 | ✅ | ✅ | 同一份 `list_specs()` 注册表 |
+| 八个分析 + 参数表单 | ✅ | ✅ | 同一份 `list_specs()` 注册表 |
 | 结果 metrics / 文本 / 多页图 | ✅ | ✅ | |
 | **图形工具栏** | NavigationToolbar2QT | **Home / ◀ / ▶ / Pan / Zoom(框选)** | 0.7.3 补齐;桌面由 matplotlib 提供,端上自实现 |
 | **数据坐标读数** | 工具栏右下角 | **图上方一行,触摸即读** | 0.7.3;SVG 不含数据范围,由 `bridge.run()` 的 `axes` 元数据支撑 |

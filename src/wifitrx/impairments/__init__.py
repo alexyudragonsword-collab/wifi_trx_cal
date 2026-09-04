@@ -2,6 +2,9 @@ from .phase_noise import (
     FlickerFloorPhase,
     LeesonOscillator,
     TabulatedPhase,
+    TypeIIPllPhase,
+    cpe_partition,
+    ici_weight,
     integrate_pn,
     ipn_dbc,
     ldbc_from_sphi,
@@ -13,6 +16,7 @@ from .phase_noise import (
 
 __all__ = [
     "FlickerFloorPhase", "LeesonOscillator", "TabulatedPhase",
-    "synth_from_psd", "sphi_from_ldbc", "ldbc_from_sphi",
+    "TypeIIPllPhase", "synth_from_psd", "sphi_from_ldbc", "ldbc_from_sphi",
     "integrate_pn", "ipn_dbc", "rms_jitter_s", "rms_jitter_fs",
+    "ici_weight", "cpe_partition",
 ]

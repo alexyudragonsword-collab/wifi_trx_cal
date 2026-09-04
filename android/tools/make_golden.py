@@ -5,12 +5,13 @@ numbers (and say so in CHANGELOG):
 
     python android/tools/make_golden.py
 
-The instrumented test replays the same three analyses on-device through
+The instrumented test replays the same four analyses on-device through
 the same bridge and compares metric-by-metric: numeric within 0.05 dB
 absolute or 1e-3 relative (BLAS/FFT implementations differ — bit
-identity is not the claim), everything else exact.  Three cases cover the
-three compute classes: full calibration sequence, RX sweep with isolation
-splits, and the pure-arithmetic spur planner.
+identity is not the claim), everything else exact.  Four cases cover the
+compute classes: full calibration sequence, RX sweep with isolation
+splits, the pure-arithmetic spur planner, and the phase-noise/CPE study
+(random-number generator + FFT synthesis against closed forms).
 """
 import json
 import sys
@@ -27,6 +28,11 @@ CASES = [
                       "std": "11ax/be", "rx_hp": False, "baseband": False,
                       "agc_rebw": False, "bb_noise_nv": 5}),
     ("spur_planner", {"bw_mhz": 320, "band": "6g"}),
+    # phase-noise-only isolation study: numpy Generator draws, irfft
+    # synthesis, np.sinc closed forms — the numpy-1.19 surface the
+    # desktop guard cannot exercise physically
+    ("pn_cpe_study", {"bw_mhz": 80, "std": "11ax/be", "lo_count": "single",
+                      "n_frames": 2, "vco_1f3_khz": 0.0, "seed": 0}),
 ]
 
 

@@ -1,6 +1,6 @@
 # Android workbench (android/): build on every push that touches it; the
 # emulator golden-replay job is manual-dispatch only (20+ min of emulator
-# boot + three analyses — same reasoning as windows-build.yml: heavy
+# boot + four analyses — same reasoning as windows-build.yml: heavy
 # artifacts never gate every push).  The bridge's Python contract is
 # covered on every push by tests/test_android_bridge.py in ci.yml.
 name: android

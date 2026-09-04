@@ -809,6 +809,317 @@ def run_blocker_desense(p: dict) -> AnalysisResult:
                           figure=fig)
 
 
+def _pn_config(p: dict):
+    """OFDM numerology for the phase-noise study: the run bandwidth at the
+    selected standard, with the capture held at the same duration across
+    standards (20 symbols of 12.8 us, 80 of 3.2 us) so every estimator
+    averages over the same time."""
+    from wifitrx.waveform import OFDMConfig
+
+    bw = float(p["bw_mhz"]) * 1e6
+    if p.get("std", "11ax/be") == "11ac/n":
+        if bw > 160e6:
+            raise ValueError("802.11ac/n supports at most 160 MHz — "
+                             "select the 11ax/be standard for 320 MHz")
+        return OFDMConfig(bandwidth_hz=bw, qam_order=1024, n_symbols=80,
+                          oversampling=4, subcarrier_spacing_hz=312.5e3,
+                          cp_fraction=1 / 4)
+    return OFDMConfig(bandwidth_hz=bw, qam_order=1024, n_symbols=20,
+                      oversampling=4)
+
+
+def _pn_four_configs(frame, cols, pilots, phi) -> np.ndarray:
+    """EVM [dB] of the four measurement configurations for one
+    phase-noise realization ``phi`` applied to ``frame``.
+
+    1  no CPE correction, true channel (H = 1): CPE + ICI total
+    2  genie CPE (all tones vs ideal reference), true channel: ICI floor
+    3  genie CPE, channel estimate from the received LTF pair
+    4  pilot-only CPE (N_p tones), LTF channel estimate: the modem form
+
+    Phase noise is the only impairment and the channel is flat, so the
+    true channel is exactly unity and configs 1/2 need no equalizer at
+    all — no self-fitted gain, hence no degrees-of-freedom correction.
+    Data tones are scored in every config; pilot tones are excluded.
+    """
+    from wifitrx.metrics.cpe import correct_cpe, correct_cpe_pilots
+    from wifitrx.waveform.ofdm import demodulate_ofdm
+    from wifitrx.waveform.preamble import channel_estimate
+
+    cfg = frame.config
+    y = frame.x * np.exp(1j * phi)
+    tx = frame.data.tx_symbols
+    rx = demodulate_ofdm(y[frame.preamble_len:], frame.data)
+    data = np.ones(cfg.n_active, dtype=bool)
+    data[cols] = False
+    ref = tx[:, data]
+    p_ref = float((np.abs(ref) ** 2).mean())
+
+    def score(sym):
+        return 10.0 * np.log10(float((np.abs(sym[:, data] - ref) ** 2).mean())
+                               / p_ref)
+
+    h = channel_estimate(y, frame)
+    req = rx / h
+    return np.array([score(rx), score(correct_cpe(rx, tx)),
+                     score(correct_cpe(req, tx)),
+                     score(correct_cpe_pilots(req, cols, pilots))])
+
+
+def _pn_sweep_point(profile, frame, cols, pilots, n_lo, n_frames, rng):
+    """Power-average the four readings over ``n_frames`` independent
+    phase-noise realizations (``n_lo`` independent LOs summed)."""
+    from wifitrx.impairments.phase_noise import LOModel
+
+    fs = frame.config.sample_rate_hz
+    n = frame.x.size
+    lo = LOModel(profile=profile)
+    acc = np.zeros(4)
+    for _ in range(n_frames):
+        phi = np.zeros(n)
+        for _k in range(n_lo):
+            phi = phi + lo.phase(n, fs, rng)
+        acc += 10.0 ** (_pn_four_configs(frame, cols, pilots, phi) / 10.0)
+    return 10.0 * np.log10(acc / n_frames)
+
+
+def run_pn_cpe_study(p: dict) -> AnalysisResult:
+    """LO phase noise through the baseband's CPE removal: four measurement
+    configurations, isolation method (phase noise is the only impairment).
+
+    Three pages.  (a) The LO profile split by the per-symbol weight
+    1 - sinc^2(f T_FFT) into what a common-phase rotation removes and
+    what stays as ICI.  (b) A type-II PLL family anchored on the shipped
+    profile's plateau/VCO/floor, loop bandwidth swept: rms jitter and
+    the post-CPE EVM do not have to share an optimum, because jitter
+    integrates the spectrum with unit weight while EVM ignores what CPE
+    removes.  (c) The four configurations vs LO phase-noise level, with
+    the closed forms overlaid on configs 1 and 2 — the cross-check that
+    the model's ICI weighting (and PSD convention) is right.  Each
+    configuration is a direct reading; the differences are mechanisms
+    and do not add in power.
+    """
+    from wifitrx.impairments.phase_noise import (
+        DEFAULT_WIFI7_LO_PROFILE, TabulatedPhase, TypeIIPllPhase,
+        cpe_partition, ici_weight, integrate_pn, ldbc_from_sphi)
+    from wifitrx.waveform.pilots import generate_ofdm_with_pilots, pilot_sequence
+    from wifitrx.waveform.preamble import build_frame
+
+    cfg = _pn_config(p)
+    n_lo = 2 if p.get("lo_count", "single") == "tx+rx" else 1
+    n_frames = max(1, int(p.get("n_frames", 8)))
+    seed = int(p.get("seed", 0))
+    f_1f3 = float(p.get("vco_1f3_khz", 0.0)) * 1e3
+    t_fft = 1.0 / cfg.subcarrier_spacing_hz
+
+    wf, cols = generate_ofdm_with_pilots(cfg)
+    frame = build_frame(cfg, data=wf)
+    pilots = pilot_sequence(cfg.n_symbols, cols.size)
+    fs = cfg.sample_rate_hz
+    n = frame.x.size
+    f_lo, f_hi = fs / n, fs / 2          # the synthesized band, exactly
+    base = DEFAULT_WIFI7_LO_PROFILE
+    f_carrier = 6.0e9
+
+    def scaled(off_db):
+        return TabulatedPhase("lo", f_pts=base.f_pts,
+                              l_dbc_pts=tuple(v + off_db
+                                              for v in base.l_dbc_pts))
+
+    def closed(profile):
+        part = cpe_partition(lambda f: n_lo * profile.psd(f), t_fft,
+                             f_lo, f_hi)
+        return (10.0 * np.log10(part["total_rad2"]),
+                10.0 * np.log10(part["ici_rad2"]), part)
+
+    # ---------------------------------------------- (c) level sweep
+    offsets = np.arange(-10.0, 21.0, 5.0)
+    rng = np.random.default_rng(seed)
+    readings = np.array([_pn_sweep_point(scaled(o), frame, cols, pilots,
+                                         n_lo, n_frames, rng)
+                         for o in offsets])
+    cf = [closed(scaled(o)) for o in offsets]
+    cf_total = np.array([c[0] for c in cf])
+    cf_ici = np.array([c[1] for c in cf])
+    i0 = int(np.argmin(np.abs(offsets)))
+    c1, c2, c3, c4 = readings[i0]
+    part0 = cf[i0][2]
+
+    # ---------------------------------------------- (b) loop-bandwidth sweep
+    plateau_dbc, vco_dbc, floor_dbc = -104.1, -116.1, -155.0
+    loop_bws = np.logspace(np.log10(30e3), np.log10(3e6), 13)
+    f_int = np.logspace(np.log10(f_lo), np.log10(f_hi), 6000)
+    lb_total, lb_ici, lb_jit, lb_td = [], [], [], []
+    rng_lb = np.random.default_rng(seed + 1)
+    for lbw in loop_bws:
+        prof = TypeIIPllPhase.from_spot("pll", lbw, plateau_dbc, vco_dbc,
+                                        floor_dbc, zeta=1.0, f_1f3=f_1f3)
+        tot, ici, _ = closed(prof)
+        lb_total.append(tot)
+        lb_ici.append(ici)
+        pwr = integrate_pn(f_int, n_lo * prof.psd(f_int), f_lo, f_hi)
+        lb_jit.append(1e15 * np.sqrt(pwr) / (2 * np.pi * f_carrier))
+        lb_td.append(_pn_sweep_point(prof, frame, cols, pilots, n_lo,
+                                     n_frames, rng_lb)[:2])
+    lb_total, lb_ici = np.array(lb_total), np.array(lb_ici)
+    lb_jit, lb_td = np.array(lb_jit), np.array(lb_td)
+    i_jit = int(np.argmin(lb_jit))
+    i_evm = int(np.argmin(lb_ici))
+
+    # ---------------------------------------------- page (a): PSD partition
+    f_plot = np.logspace(3, 8, 600)
+    fig_a = new_figure(figsize=(8.6, 5.2))
+    ax = fig_a.add_subplot(111)
+    ax.semilogx(f_plot, ldbc_from_sphi(base.psd(f_plot)), color="tab:blue",
+                lw=1.8, label="shipped LO profile L(f)")
+    prof_nom = TypeIIPllPhase.from_spot("pll", loop_bws[i_jit], plateau_dbc,
+                                        vco_dbc, floor_dbc, zeta=1.0,
+                                        f_1f3=f_1f3)
+    ax.semilogx(f_plot, ldbc_from_sphi(prof_nom.psd(f_plot)), "--",
+                color="tab:purple", lw=1.2,
+                label=f"type-II PLL family at its jitter optimum "
+                      f"({loop_bws[i_jit] / 1e3:.0f} kHz loop BW)")
+    ax.set_xlabel("Offset from carrier [Hz]")
+    ax.set_ylabel("L(f) [dBc/Hz]")
+    ax.set_ylim(-165, -85)
+    ax.grid(True, which="both", alpha=0.3)
+    ax2 = ax.twinx()
+    ax2.semilogx(f_plot, ici_weight(f_plot, t_fft), color="tab:red", lw=1.4,
+                 label="ICI weight 1 - sinc²(f·T_FFT)")
+    ax2.set_ylabel("share left after CPE removal", color="tab:red")
+    ax2.set_ylim(0, 1.05)
+    f3 = part0["f_3db_hz"]
+    ax.axvspan(1e3, f3, color="tab:green", alpha=0.10)
+    ax.axvline(f3, color="tab:green", ls=":", lw=1.2)
+    ax.annotate(f"CPE-removable\nbelow {f3 / 1e3:.0f} kHz\n"
+                f"(T_FFT = {t_fft * 1e6:.1f} µs)", (f3, -90), fontsize=8,
+                ha="right", va="top", color="tab:green",
+                xytext=(-4, 0), textcoords="offset points")
+    h1, l1 = ax.get_legend_handles_labels()
+    h2, l2 = ax2.get_legend_handles_labels()
+    ax.legend(h1 + h2, l1 + l2, fontsize=7.5, loc="lower left")
+    ax.set_title(
+        f"LO phase noise vs per-symbol CPE removal — {p['bw_mhz']} MHz "
+        f"{p.get('std', '11ax/be')}\nCPE tracks out "
+        f"{100 * part0['tracked_fraction']:.1f}% of the phase power "
+        f"({f_lo / 1e3:.1f} kHz – {f_hi / 1e6:.0f} MHz); the rest is ICI "
+        f"(closed form {cf_ici[i0]:.1f} dB, no CPE {cf_total[i0]:.1f} dB)",
+        fontsize=9.5)
+    fig_a.tight_layout()
+
+    # ---------------------------------------------- page (b): loop BW sweep
+    fig_b = new_figure(figsize=(8.6, 5.2))
+    ax = fig_b.add_subplot(111)
+    ax.semilogx(loop_bws / 1e3, lb_total, "--", color="gray", lw=1.2,
+                label="closed form, no CPE removal")
+    ax.semilogx(loop_bws / 1e3, lb_ici, "-", color="tab:red", lw=1.6,
+                label="closed form, after CPE removal (ICI)")
+    ax.semilogx(loop_bws / 1e3, lb_td[:, 0], "s", ms=4, mfc="none",
+                color="gray", label="model: config 1 (no CPE)")
+    ax.semilogx(loop_bws / 1e3, lb_td[:, 1], "o", ms=4, color="tab:red",
+                label="model: config 2 (genie CPE)")
+    ax.axvline(loop_bws[i_jit] / 1e3, color="tab:blue", ls=":", lw=1.2)
+    ax.axvline(loop_bws[i_evm] / 1e3, color="tab:red", ls=":", lw=1.2)
+    ax.set_xlabel("PLL loop bandwidth (-3 dB of |H|²) [kHz]")
+    ax.set_ylabel("phase-noise EVM contribution [dB]")
+    ax.grid(True, which="both", alpha=0.3)
+    ax3 = ax.twinx()
+    ax3.semilogx(loop_bws / 1e3, lb_jit, "-", color="tab:blue", lw=1.2,
+                 label="rms jitter (right axis)")
+    ax3.set_ylabel("rms jitter [fs]", color="tab:blue")
+    h1, l1 = ax.get_legend_handles_labels()
+    h2, l2 = ax3.get_legend_handles_labels()
+    ax.legend(h1 + h2, l1 + l2, fontsize=7.5, loc="upper center")
+    gain = lb_ici[i_jit] - lb_ici[i_evm]
+    ax.set_title(
+        f"Type-II PLL family (plateau {plateau_dbc} dBc/Hz, VCO {vco_dbc} "
+        f"dBc/Hz @1 MHz, 1/f³ corner {f_1f3 / 1e3:.0f} kHz, zeta 1.0)\n"
+        f"jitter optimum {loop_bws[i_jit] / 1e3:.0f} kHz "
+        f"({lb_jit[i_jit]:.0f} fs), post-CPE EVM optimum "
+        f"{loop_bws[i_evm] / 1e3:.0f} kHz — moving there buys "
+        f"{gain:.2f} dB", fontsize=9.5)
+    fig_b.tight_layout()
+
+    # ---------------------------------------------- page (c): four configs
+    fig_c = new_figure(figsize=(8.6, 5.6))
+    ax = fig_c.add_subplot(111)
+    styles = (("1  no CPE correction, true channel", "s-", "gray"),
+              ("2  genie CPE, true channel (ICI floor)", "o-", "tab:red"),
+              ("3  genie CPE, LTF channel estimate", "^-", "tab:orange"),
+              ("4  pilot CPE (N_p tones), LTF estimate — modem form",
+               "v-", "tab:purple"))
+    for k, (lab, st, col) in enumerate(styles):
+        ax.plot(offsets, readings[:, k], st, ms=4.5, color=col, label=lab)
+    ax.plot(offsets, cf_total, "--", color="gray", lw=1.0,
+            label="closed form ∫S_φ df (config 1)")
+    ax.plot(offsets, cf_ici, "--", color="tab:red", lw=1.0,
+            label="closed form ∫S_φ·[1 − sinc²(fT)] df (config 2)")
+    ax.axhline(-38.0, color="k", ls="-.", lw=0.8)
+    ax.annotate("4096-QAM TX EVM target −38 dB", (offsets[0], -38.0),
+                fontsize=7.5, va="bottom", xytext=(2, 2),
+                textcoords="offset points")
+    ax.set_xlabel("LO phase-noise level relative to the shipped profile [dB]")
+    ax.set_ylabel("EVM, phase noise only [dB]")
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=7.5, loc="upper left")
+    lo_txt = "TX + RX independent LOs" if n_lo == 2 else "single LO"
+    ax.set_title(
+        f"Four measurement configurations — {p['bw_mhz']} MHz "
+        f"{p.get('std', '11ax/be')}, {lo_txt}, N_p = {cols.size}, "
+        f"{n_frames} frame(s)\nat 0 dB: CPE buys {c1 - c2:.2f} dB, "
+        f"LTF estimate costs {c3 - c2:.2f} dB, pilot CPE costs "
+        f"{c4 - c3:.2f} dB (direct readings, not power-additive)",
+        fontsize=9.5)
+    fig_c.tight_layout()
+
+    metrics = {
+        "evm_no_cpe_db": round(float(c1), 2),
+        "evm_genie_cpe_db": round(float(c2), 2),
+        "evm_ltf_ce_db": round(float(c3), 2),
+        "evm_pilot_cpe_db": round(float(c4), 2),
+        "closed_form_total_db": round(float(cf_total[i0]), 2),
+        "closed_form_ici_db": round(float(cf_ici[i0]), 2),
+        "cpe_gain_db": round(float(c1 - c2), 2),
+        "ltf_penalty_db": round(float(c3 - c2), 2),
+        "pilot_penalty_db": round(float(c4 - c3), 2),
+        "cpe_tracked_pct": round(100.0 * float(part0["tracked_fraction"]), 2),
+        "f_cpe_3db_khz": round(float(part0["f_3db_hz"]) / 1e3, 1),
+        "n_pilots": int(cols.size),
+        "loopbw_opt_jitter_khz": round(float(loop_bws[i_jit]) / 1e3, 1),
+        "loopbw_opt_evm_khz": round(float(loop_bws[i_evm]) / 1e3, 1),
+        "loopbw_evm_gain_db": round(float(gain), 2),
+    }
+    text = (
+        "Isolation method: phase noise is the only impairment, so the true "
+        "channel is unity and configs 1/2 use no equalizer.  Each "
+        "configuration is a direct reading; the deltas are mechanisms and "
+        "do not add in power.\n"
+        f"Config 1 (no CPE) {c1:.2f} dB vs closed form {cf_total[i0]:.2f} "
+        f"dB; config 2 (genie CPE) {c2:.2f} dB vs closed form "
+        f"{cf_ici[i0]:.2f} dB — residuals {c1 - cf_total[i0]:+.2f} / "
+        f"{c2 - cf_ici[i0]:+.2f} dB (single-frame realization spread is "
+        "~0.3 dB rms; the closed form is the expectation).\n"
+        f"CPE removal buys {c1 - c2:.2f} dB with this profile and "
+        f"T_FFT = {t_fft * 1e6:.1f} µs: it tracks out "
+        f"{100 * part0['tracked_fraction']:.1f}% of the phase power, the "
+        f"part below {part0['f_3db_hz'] / 1e3:.0f} kHz.\n"
+        f"Config 3: the LTF-derived channel estimate carries its own "
+        f"frozen ICI onto every data symbol, +{c3 - c2:.2f} dB — it does "
+        "not average down with symbol count (two LTF repeats averaged).\n"
+        f"Config 4: estimating the CPE from N_p = {cols.size} pilots "
+        f"instead of every tone costs a further {c4 - c3:.2f} dB, common-"
+        "mode across all data subcarriers.\n"
+        f"Loop-bandwidth family: jitter optimum {loop_bws[i_jit] / 1e3:.0f} "
+        f"kHz, post-CPE EVM optimum {loop_bws[i_evm] / 1e3:.0f} kHz "
+        f"(choosing the latter changes the phase-noise EVM by {gain:.2f} "
+        "dB).")
+    return AnalysisResult(metrics=metrics, figure=fig_c,
+                          figures=(("PSD partition", fig_a),
+                                   ("PLL loop bandwidth", fig_b),
+                                   ("Four configurations", fig_c)),
+                          text=text)
+
+
 def run_spur_planner(p: dict) -> AnalysisResult:
     from wifitrx.link.spur_planning import channel_spur_table
 
@@ -1009,6 +1320,47 @@ ALL_ANALYSES: tuple[AnalysisSpec, ...] = (
             ParamSpec("p_sig_dbm", "Signal power [dBm]", "float", -60.0),
         ),
         run=run_blocker_desense),
+    AnalysisSpec(
+        key="pn_cpe_study", title="LO phase noise vs CPE removal",
+        description="Isolation study of LO phase noise through the "
+                    "baseband's common-phase-error removal: four "
+                    "measurement configurations (no CPE / genie CPE / "
+                    "LTF channel estimate / pilot CPE) vs phase-noise "
+                    "level with closed-form cross-checks, the "
+                    "CPE-vs-ICI partition of the LO profile, and a PLL "
+                    "loop-bandwidth sweep (jitter optimum vs post-CPE "
+                    "EVM optimum)",
+        params=(
+            ParamSpec("bw_mhz", "Bandwidth [MHz]", "choice", 80,
+                      choices=(20, 40, 80, 160, 320),
+                      tooltip="Sets the pilot count N_p (4/6/8/16/32) "
+                              "and the tone plan"),
+            ParamSpec("std", "Standard", "choice", "11ax/be",
+                      choices=("11ax/be", "11ac/n"),
+                      tooltip="11ax/be: 12.8 us symbol, CPE removes "
+                              "below ~35 kHz; 11ac/n: 3.2 us symbol, "
+                              "~138 kHz (max 160 MHz)"),
+            ParamSpec("lo_count", "LO configuration", "choice", "single",
+                      choices=("single", "tx+rx"),
+                      tooltip="single: one LO, the TX-EVM (or RX-EVM) "
+                              "sign-off view; tx+rx: two independent "
+                              "LOs as in an OTA link (phase PSD doubles)"),
+            ParamSpec("n_frames", "Frames averaged", "int", 8, minimum=1,
+                      maximum=64,
+                      tooltip="Independent phase-noise realizations "
+                              "power-averaged per point; one frame's "
+                              "reading scatters ~0.3 dB rms around the "
+                              "closed form (the LTF-estimate config "
+                              "~0.7 dB, its error being frozen per frame)"),
+            ParamSpec("vco_1f3_khz", "VCO 1/f³ corner [kHz]", "float", 0.0,
+                      minimum=0.0, maximum=5000.0,
+                      tooltip="For the loop-bandwidth page only: the "
+                              "type-II family's VCO flicker corner. 0 "
+                              "matches the shipped table's pure 1/f² "
+                              "roll-off"),
+            ParamSpec("seed", "Noise seed", "int", 0, minimum=0),
+        ),
+        run=run_pn_cpe_study),
     AnalysisSpec(
         key="spur_planner", title="Frac-N dirty-channel planner",
         description="Predicted in-band fractional spurs across a WiFi band",

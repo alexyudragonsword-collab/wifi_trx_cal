@@ -46,9 +46,18 @@ class Frame:
         return self.gi2_len, self.gi2_len + self.ltf_len
 
 
-def build_frame(config: OFDMConfig, ltf_seed: int = 7) -> Frame:
-    """Assemble [GI2 | LTF | LTF | data]."""
-    data = generate_ofdm(config)
+def build_frame(config: OFDMConfig, ltf_seed: int = 7,
+                data: OFDMWaveform | None = None) -> Frame:
+    """Assemble [GI2 | LTF | LTF | data].
+
+    ``data`` optionally supplies the payload waveform (e.g. one carrying
+    pilot tones from ``pilots.generate_ofdm_with_pilots``); it must have
+    been generated from ``config``.  Default: plain random QAM payload.
+    """
+    if data is None:
+        data = generate_ofdm(config)
+    elif data.tx_symbols.shape != (config.n_symbols, config.n_active):
+        raise ValueError("data waveform does not match config")
     ltf = ltf_tones(config, ltf_seed)
 
     os_nfft = config.fft_size * config.oversampling

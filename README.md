@@ -30,9 +30,11 @@ python examples/run_mimo_2x2.py
 python examples/run_yield.py --runs 20
 
 # GUI 工作台 (pip install -e .[gui]):三个页签 ——
-#   Analyses  七个分析:全量校准(含逐步检查模式)、RX EVM/灵敏度扫描
+#   Analyses  八个分析:全量校准(含逐步检查模式)、RX EVM/灵敏度扫描
 #             (含隔离贡献分解曲线)、基带噪声扫描(5–40 nV/√Hz 逐密度
-#             重解 AGC 门限)、漂移跟踪、阻塞退敏、杂散规划;校准类分析
+#             重解 AGC 门限)、漂移跟踪、阻塞退敏、LO 相噪 vs CPE 去除
+#             (四种测量配置隔离读数 + 闭式对拍 + PLL 环路带宽扫描)、
+#             杂散规划;校准类分析
 #             支持 11ax/be 与 11ac/n 两种制式、64~4096-QAM,基带噪声
 #             密度做成参数旋钮(RF-only 前端固定在 6 nV 参考下反嵌)
 #   Cal-state inspector  打开交付 JSON,读检查器结论

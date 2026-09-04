@@ -2,6 +2,17 @@
 
 本文件按倒序记录实质性进展——最新条目在顶部、紧跟本行之下。每条尽量短——只写摘要与指针;结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-09-04 · R18:LO 相噪 vs CPE 去除——四配置隔离研究做成分析(0.7.8)
+
+- 起因:用户问 CPE 去除会不会因 LO 相噪引入额外误差。读码结论:模型的 `correct_cpe()` 是 genie、EVM 均衡不走 LTF,机理 B(LTF 估计被相噪污染并冻结)与 C(导频估计噪声共模注入)在模型里**结构性不可见**。用户拍板把四配置做成 `AnalysisSpec`。
+- 落地 `pn_cpe_study`(两端共用注册表,三页):谱按 `1 − sinc²(f·T_FFT)` 拆分;type-II PLL 环路带宽扫描;四配置随相噪电平扫描 + 闭式对拍。新增 `cpe_partition`/`ici_weight`/`TypeIIPllPhase`、`correct_cpe_pilots`、`build_frame(data=)`。
+- **实测**(80 MHz/11ax/单 LO/8 帧):①/② 对闭式残差 0.13/0.12 dB(ICI 加权与 DSB 约定对上);CPE 只买回 0.29 dB(追掉 6.6%);LTF 估计 +1.74 dB;8 导频 +0.33 dB。
+- **推翻自己一条断言**:11ax/be 下 PLL 环路带宽的"jitter 最优"与"去 CPE 后 EVM 最优"**重合**(300 kHz,差 0 dB);只有 11ac/n 才分开(0.58 dB)。原因即 35 kHz 可去除带宽——与"CPE 几乎帮不上忙"是同一件事。
+- **量出预算问题**:`EvmBudget.cpe_tracked_fraction=0.5` 实为 6.6%,相噪项乐观 2.7 dB;未改默认值,待用户裁决(backlog 头部)。
+- 测试自身纠错留档:type-II 远端滚降是 −20 不是 −40 dB/dec。7 处守卫经变异验证。
+- 金标案例 3 → 4(`pn_cpe_study`),端上条数仍 5;job 结论追记于本条末尾。
+- 指针:`CHANGELOG.md` 0.7.8、`docs/backlog_zh.md` B15、`app/specs.py::run_pn_cpe_study`。
+
 ## 2026-08-25 · R17:编译版端上 import 失败的根因是符号可见性(0.7.7)
 
 - 现象:构建全绿、`--native` 通过、`.so` 一个不少,端上 `ImportError: dynamic module does not define module export function (PyInit_sync)`。

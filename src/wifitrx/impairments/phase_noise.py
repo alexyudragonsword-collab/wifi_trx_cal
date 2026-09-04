@@ -174,6 +174,88 @@ def rms_jitter_fs(f: np.ndarray, s_phi: np.ndarray, f0: float,
     return 1e15 * rms_jitter_s(f, s_phi, f0, f1, f2)
 
 
+# ------------------------------------------------ OFDM CPE / ICI partition
+def ici_weight(f, t_fft: float) -> np.ndarray:
+    """Share of phase-noise power at offset ``f`` that survives per-symbol
+    common-phase-error (CPE) removal: ``1 - sinc^2(f * T_FFT)``.
+
+    Within one OFDM symbol of FFT length T_FFT, phase noise splits into
+    the symbol-mean rotation J0 (the CPE, removable by a single complex
+    rotation) and inter-carrier interference (ICI).  A phase-noise
+    component at offset f contributes sinc^2(f T) to the mean and the
+    rest to ICI; the -3 dB hand-over sits at 0.443 / T_FFT — ~35 kHz for
+    the 12.8 us 11ax/be symbol, ~138 kHz for the 3.2 us legacy symbol.
+    """
+    return 1.0 - np.sinc(np.asarray(f, dtype=float) * t_fft) ** 2
+
+
+def cpe_partition(psd_func, t_fft: float, f1: float, f2: float,
+                  n: int = 6000) -> dict:
+    """Closed-form split of a DSB S_phi(f) into CPE-removable and ICI
+    phase power over [f1, f2] (log grid, trapezoid).
+
+    Returns rad^2 totals plus the fraction the modem's CPE tracking takes
+    out and the -3 dB hand-over frequency.  ``ici_rad2`` is the phase-
+    noise error-vector power a genie CPE correction leaves behind — the
+    analytic twin of a time-domain post-CPE EVM reading, which is what
+    makes the two comparable (and the PSD convention checkable).
+    """
+    f = np.logspace(np.log10(f1), np.log10(f2), n)
+    s = np.asarray(psd_func(f), dtype=float)
+    w = ici_weight(f, t_fft)
+    total = float(_trapezoid(s, f))
+    ici = float(_trapezoid(s * w, f))
+    return {"total_rad2": total, "ici_rad2": ici,
+            "cpe_rad2": total - ici,
+            "tracked_fraction": (total - ici) / total if total > 0 else 0.0,
+            "f_3db_hz": 0.443 / t_fft}
+
+
+@dataclass
+class TypeIIPllPhase(NoiseSource):
+    """Parametric closed-loop synthesizer profile for loop-bandwidth studies.
+
+    S_phi(f) = |H|^2 * S_ib + |1 - H|^2 * S_vco(f) + floor   [rad^2/Hz DSB]
+
+    with the type-II second-order closed-loop response
+    H(s) = (2 zeta wn s + wn^2) / (s^2 + 2 zeta wn s + wn^2).  ``loop_bw_hz``
+    is the -3 dB frequency of |H|^2 (wn is solved from it and zeta), so
+    sweeping it moves the in-band-plateau-to-VCO hand-over without moving
+    either asymptote — the question a PLL team asks when trading loop
+    bandwidth.  The in-band plateau (reference/PFD/CP/divider noise times
+    N^2) is flat and independent of the loop bandwidth; the VCO follows
+    Leeson (1/f^2 with an optional 1/f^3 corner).
+    """
+
+    loop_bw_hz: float = 250e3
+    zeta: float = 1.0
+    plateau: float = 0.0      # in-band S_phi [rad^2/Hz]
+    k2: float = 0.0           # VCO: S = k2/f^2 in the 1/f^2 region [rad^2*Hz]
+    f_1f3: float = 0.0        # VCO 1/f^3 corner [Hz]
+    floor: float = 0.0        # far-out floor [rad^2/Hz]
+
+    @classmethod
+    def from_spot(cls, name: str, loop_bw_hz: float, plateau_dbchz: float,
+                  vco_dbchz_at_1mhz: float, floor_dbchz: float = -155.0,
+                  zeta: float = 1.0, f_1f3: float = 0.0) -> "TypeIIPllPhase":
+        return cls(name=name, unit="rad^2/Hz", loop_bw_hz=loop_bw_hz,
+                   zeta=zeta, plateau=float(sphi_from_ldbc(plateau_dbchz)),
+                   k2=float(sphi_from_ldbc(vco_dbchz_at_1mhz)) * 1e12,
+                   f_1f3=f_1f3, floor=float(sphi_from_ldbc(floor_dbchz)))
+
+    def psd(self, f: np.ndarray) -> np.ndarray:
+        f = np.asarray(f, dtype=float)
+        w = TWOPI * f
+        a = 1.0 + 2.0 * self.zeta ** 2
+        # |H|^2 = 1/2 at w3 = wn * sqrt(a + sqrt(a^2 + 1))
+        wn = TWOPI * self.loop_bw_hz / np.sqrt(a + np.sqrt(a * a + 1.0))
+        den = (wn ** 2 - w ** 2) ** 2 + 4.0 * self.zeta ** 2 * wn ** 2 * w ** 2
+        h2 = (wn ** 4 + 4.0 * self.zeta ** 2 * wn ** 2 * w ** 2) / den
+        e2 = w ** 4 / den
+        s_vco = self.k2 / f ** 2 * (1.0 + self.f_1f3 / f)
+        return h2 * self.plateau + e2 * s_vco + self.floor
+
+
 # ------------------------------------------------------------------ LO model
 # Default WiFi 7 fractional-N synthesizer closed-loop profile (offset, dBc/Hz):
 # in-band plateau, mild loop peaking near 200 kHz, VCO roll-off, far-out

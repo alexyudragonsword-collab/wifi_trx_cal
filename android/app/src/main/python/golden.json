@@ -54,5 +54,34 @@
    "n_dirty": 7
   },
   "n_pages": 1
+ },
+ {
+  "key": "pn_cpe_study",
+  "params": {
+   "bw_mhz": 80,
+   "std": "11ax/be",
+   "lo_count": "single",
+   "n_frames": 2,
+   "vco_1f3_khz": 0.0,
+   "seed": 0
+  },
+  "metrics": {
+   "evm_no_cpe_db": -43.69,
+   "evm_genie_cpe_db": -43.99,
+   "evm_ltf_ce_db": -42.22,
+   "evm_pilot_cpe_db": -41.95,
+   "closed_form_total_db": -43.81,
+   "closed_form_ici_db": -44.1,
+   "cpe_gain_db": 0.3,
+   "ltf_penalty_db": 1.76,
+   "pilot_penalty_db": 0.27,
+   "cpe_tracked_pct": 6.62,
+   "f_cpe_3db_khz": 34.6,
+   "n_pilots": 8,
+   "loopbw_opt_jitter_khz": 300.0,
+   "loopbw_opt_evm_khz": 300.0,
+   "loopbw_evm_gain_db": 0.0
+  },
+  "n_pages": 3
  }
 ]
