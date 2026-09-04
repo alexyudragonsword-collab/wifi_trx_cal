@@ -572,6 +572,20 @@ def test_the_compiled_flavour_cannot_ship_source():
     # METADATA — dependencies included, not just the filename.  Match the
     # case pattern that does the rejecting, not the step's prose.
     assert 'wifitrx-"$v"-*)' in workflow
+    # and the APK upload sits AFTER the on-device gate, non-fatal: run 44
+    # hit GitHub's artifact storage quota at that step and, placed ahead
+    # of the emulator, skipped the only physics check the compiled build
+    # has.  Match the step's working lines (the results path the count
+    # script reads, the artifact name the upload declares), not prose.
+    gate = workflow.index("android/app/build/outputs/androidTest-results/connected \\\n"
+                          "            5 compiled")
+    upload = workflow.index("name: wifitrx-compiled-apk")
+    assert gate < upload, "compiled APK upload must follow the on-device gate"
+    for name in ("wifitrx-compiled-apk", "wifitrx-debug-apk"):
+        step = workflow[workflow.rfind("- uses: actions/upload-artifact@v4",
+                                       0, workflow.index(f"name: {name}")):
+                        workflow.index(f"name: {name}")]
+        assert "continue-on-error: true" in step, name
 
 
 def _load_wheel_tool():

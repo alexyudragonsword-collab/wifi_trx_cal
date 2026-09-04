@@ -47,7 +47,18 @@
   (② ≤ ①、③ 比 ② 高 1–3 dB、④ > ③)、导频估计器全音时与 genie 逐位一致。
 - **Android**:金标案例由三个增为四个(`pn_cpe_study` 80M/2 帧——numpy
   Generator + irfft 合成 + `np.sinc` 闭式,是桌面守卫核不到的端上物理面),
-  `golden.json` 重生成;端上测试条数不变(5)。金标 job 结论见 LOG R18。
+  `golden.json` 重生成;端上测试条数不变(5)。**run #44**:解释版金标
+  5/5 通过(含第四案例);编译版当轮未跑到——见下一条。
+
+### CI:APK 上传撞存储配额不得掩盖端上裁决
+
+- run #44 两个 flavour 的 `upload-artifact` 均报 "Artifact storage quota has
+  been hit"(GitHub 账户级配额,每 6–12 小时重算,与本仓代码无关),而编译版
+  的上传步骤排在模拟器之前——上传一失败,编译版**唯一的物理检查被跳过**,
+  job 红的原因却是存储记账。改法:两处上传 `continue-on-error: true`(APK
+  下载是便利,不是门禁),编译版上传移到 `on-device tests actually ran` 之后,
+  保留期 14→7 天以少吃配额;桌面守卫断言顺序与非致命标记(匹配干活的行,
+  变异 3 处已红)。
 
 ## 0.7.7 — 2026-08-25
 
