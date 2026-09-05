@@ -1224,9 +1224,12 @@ def run_pn_cpe_study(p: dict) -> AnalysisResult:
                  f"{per_std['11ax/be'][3]:.2f} dB vs 11ac/n "
                  f"{per_std['11ac/n'][3]:.2f} dB — 11ax/be is "
                  f"{std_gap:+.2f} dB; same LO, the difference is what the 4x "
-                 "longer symbol denies CPE removal.  The gap scatters ~0.4 dB "
-                 f"rms at {n_frames} frame(s) because the LTF frozen error is "
-                 "one realization per frame; 32 frames settle it.")
+                 "longer symbol denies CPE removal.  Each bar's modem-form "
+                 "reading scatters seed to seed because the LTF frozen error "
+                 "is one realization per frame: measured 1-sigma 0.3 dB at 8 "
+                 "frames and 0.15 dB at 32 (40 MHz, 6 seeds), so the gap "
+                 f"carries ~{0.42 / (n_frames / 8) ** 0.5:.2f} dB rms at "
+                 f"{n_frames} frame(s).  Config 2 alone scatters 0.05 dB.")
     return AnalysisResult(metrics=metrics, figure=fig_c,
                           figures=(("PSD partition", fig_a),
                                    ("PLL loop bandwidth", fig_b),
