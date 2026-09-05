@@ -8,7 +8,8 @@
 - **口径要点**:堆叠用误差功率,不用 dB;三段 = ②、③−②、④−③,每段顶边即一个配置的直接读数,不违反"隔离曲线不功率相加"——这里是同一条链上逐步加机理,本来就是累加。
 - **结论(32 帧)**:11ax 差 1.4 dB,几乎全部来自 CPE 可去除带宽 138 → 35 kHz(买回 1.55 vs 0.36 dB);LTF 冻结误差两边比例持平;导频项最薄。40 MHz 两制式导频均为 6 个(用户说 8,已纠正)。
 - **散布**:8 帧时差值 ±0.4 dB rms,同点 8 帧读 0.6 / 32 帧读 1.4——页内文字注明。
-- 指针:`CHANGELOG.md` 0.7.10、`app/specs.py::run_pn_cpe_study` 页 (d)。金标 job 结论追记于本条末尾。
+- 指针:`CHANGELOG.md` 0.7.10、`app/specs.py::run_pn_cpe_study` 页 (d)。
+- **run #51 裁决(6bdd523)**:三 job 全绿。解释版与编译版端上均 **5 run / 0 failed / 0 skipped**,`metricsMatchDesktopGolden` 按 4 页 / 18 指标的新金标通过;编译版 wheel `wifitrx-0.7.10-cp38-cp38-android_21_{arm64_v8a,x86_64}`,`cythonised 52 modules`。0.7.10 两种出货形态均已裁决。
 
 ## 2026-09-05 · R19:EVM 预算的 CPE 追踪份额改为物理现算(0.7.9)
 
