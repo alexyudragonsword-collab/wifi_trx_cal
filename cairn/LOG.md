@@ -8,7 +8,8 @@
 - **份额随积分带走**:B15 写的 6.6% 是 3.3 kHz–160 MHz 下的数,与 `ipn_rad2` 同带(10 kHz–100 MHz)是 **5.48%**;因此带宽做成显式字段,不再让份额与总量各取各的带。
 - **交付数字变动**:示例预算预测 EVM −40.3 → −39.5 dB,4096-QAM 裕量 2.3 → 1.5 dB(相噪项 +2.7 dB)。仓库内无 docx 引用该数。
 - 守卫:默认 == 同带同符号闭式值、11ac > 3.5×、显式 0.5 相对物理值 −2.7 dB;变异(默认改回 0.5)已红。
-- 指针:`CHANGELOG.md` 0.7.9、`docs/backlog_zh.md` B15 末尾、`src/wifitrx/link/evm_budget.py`。金标 job 结论追记于本条末尾。
+- 指针:`CHANGELOG.md` 0.7.9、`docs/backlog_zh.md` B15 末尾、`src/wifitrx/link/evm_budget.py`。
+- **run #49 裁决(adc1306)**:三 job 全绿。解释版与编译版端上均 **5 run / 0 failed / 0 skipped**(含 `metricsMatchDesktopGolden` 四案例);编译版 wheel `wifitrx-0.7.9-cp38-cp38-android_21_{arm64_v8a,x86_64}`,`cythonised 52 modules`,版本门禁与导出检查通过。0.7.9 两种出货形态均已裁决。
 
 ## 2026-09-04 · R18:LO 相噪 vs CPE 去除——四配置隔离研究做成分析(0.7.8)
 
