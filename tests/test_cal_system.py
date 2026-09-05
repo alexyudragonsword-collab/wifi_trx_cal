@@ -1,5 +1,6 @@
 """M4 tests: DPD, AGC sweep, link budget and EVM budget."""
 import numpy as np
+import pytest
 
 from wifitrx.cal.agc_cal import calibrate_agc
 from wifitrx.cal.dpd_cal import calibrate_dpd
@@ -86,6 +87,35 @@ def test_evm_budget_rss():
     doc = b.report(measured_evm_db=-40.0)
     assert -45.0 < doc["predicted_evm_db"] < -35.0
     assert abs(doc["delta_db"]) < 5.0
+
+
+def test_evm_budget_tracks_out_what_the_symbol_length_allows():
+    """The CPE-tracked share defaults to the physics, not to 0.5: for
+    the shipped LO profile under the 12.8 us 11ax/be symbol it is the
+    sinc^2-weighted share of the 10 kHz - 100 MHz phase power (measured
+    5.5 %), ~4x that under the 3.2 us legacy symbol (27.8 %), and the
+    phase-noise term moves accordingly.  An explicit fraction still
+    wins, so a modem with a different tracker can be described."""
+    from wifitrx.impairments.phase_noise import (DEFAULT_WIFI7_LO_PROFILE,
+                                                 cpe_partition)
+    from wifitrx.link.evm_budget import cpe_tracked_fraction
+
+    ipn = (np.deg2rad(0.5)) ** 2
+    ax = EvmBudget(ipn_rad2=ipn)
+    frac = ax.effective_cpe_tracked_fraction()
+    assert frac == pytest.approx(cpe_partition(
+        DEFAULT_WIFI7_LO_PROFILE.psd, 12.8e-6, 1e4, 1e8)["tracked_fraction"])
+    assert 0.04 < frac < 0.08                       # measured 0.0548
+    assert frac == cpe_tracked_fraction()
+    legacy = EvmBudget(ipn_rad2=ipn, t_fft_s=3.2e-6)
+    assert legacy.effective_cpe_tracked_fraction() > 3.5 * frac
+    # the term is ipn * (1 - tracked): the old 0.5 default sat 2.7 dB low
+    assert ax.components_db()["phase_noise"] == pytest.approx(
+        10 * np.log10(ipn * (1 - frac)))
+    pinned = EvmBudget(ipn_rad2=ipn, cpe_tracked_fraction=0.5)
+    assert pinned.components_db()["phase_noise"] - \
+        ax.components_db()["phase_noise"] == pytest.approx(-2.7, abs=0.1)
+    assert ax.report()["cpe_tracked_fraction"] == frac
 
 
 def test_evm_budget_matches_measured_simple_case():

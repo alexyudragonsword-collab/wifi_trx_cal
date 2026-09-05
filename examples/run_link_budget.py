@@ -52,9 +52,10 @@ def main() -> None:
     nf0 = nf_by_state[0]
     for m in MCS_TABLE:
         sens = sensitivity_dbm(nf0, bw, m.snr_req_db)
+        # the CPE-tracked share is computed from the LO profile and the
+        # 11ax/be symbol over the same 10 kHz - 100 MHz band as ipn_rad2
         budget = EvmBudget(snr_db=45.0, irr_db=52.0, ipn_rad2=ipn_rad2,
-                           cpe_tracked_fraction=0.5, pa_nmse_db=-45.0,
-                           sqnr_db=55.0)
+                           pa_nmse_db=-45.0, sqnr_db=55.0)
         pred = budget.predicted_evm_db()
         margin = m.tx_evm_limit_db - pred
         lines.append(f"| {m.index} | {m.modulation} r{m.coding_rate} | "
