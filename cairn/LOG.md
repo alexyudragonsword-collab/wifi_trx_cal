@@ -8,6 +8,7 @@
 - **总体结论**:40 MHz 单 LO,11ax 差 **1.4 ± 0.2 dB**(均值 −42.06 vs −43.47)。1.86 是 ~2σ 一次实现。
 - **更正自己 R20 的措辞**:"32 帧 settle it"过头了——32 帧把差值 1σ 从 0.4 压到 0.2 dB,不是零。页内文字改为报告实测散布律 0.42/√(帧数/8) dB。
 - 指针:`CHANGELOG.md` 0.7.11、`docs/backlog_zh.md` B15 末尾。
+- **归档(0.7.12)**:英文短文 `docs/pn_cpe_note_11ac_vs_11ax.pdf`(推导 + 数字 + 三联图),由 `tools/build_pn_cpe_note.py` 现算生成;只动 docs/tools,不重跑金标。
 - **run #53 裁决(bdc6a81)**:三 job 全绿。解释版与编译版端上均 **5 run / 0 failed / 0 skipped**;编译版 wheel `wifitrx-0.7.11-cp38-cp38-android_21_{arm64_v8a,x86_64}`,`cythonised 52 modules`。0.7.11 两种出货形态均已裁决。
 
 ## 2026-09-05 · R20:`pn_cpe_study` 第四页——两制式误差功率堆叠(0.7.10)

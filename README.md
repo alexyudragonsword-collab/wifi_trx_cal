@@ -87,6 +87,9 @@ python app/main.py
 - `docs/units.md` — 全链路单位约定
 - `docs/cal_order_zh.md` — 校准顺序依据
 - `docs/handoff_zh.md` — 交付/联合验证流程;`docs/circuit_data_zh.md` — 电路数据导入格式
+- `docs/pn_cpe_note_11ac_vs_11ax.pdf` — 英文技术短文(3 页):为什么 11ax/be 数制下逐符号
+  去 CPE 对相噪 EVM 的收益远小于 11ac/n(推导 + 出货 LO 谱的数字 + 三联图);
+  由 `python tools/build_pn_cpe_note.py --out docs/` 生成,数字来自库本身
 - `docs/backlog_zh.md` — 待办与已落地项的决策记录
 - `CHANGELOG.md` — 版本变更(交付格式的改动在这里显式标注)
 - `PROVENANCE.md` — 拷贝代码来源
