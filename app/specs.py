@@ -883,11 +883,25 @@ def _pn_sweep_point(profile, frame, cols, pilots, n_lo, n_frames, rng):
     return 10.0 * np.log10(acc / n_frames)
 
 
+def _pn_nominal(cfg, n_lo: int, n_frames: int, seed: int) -> np.ndarray:
+    """The four readings at the shipped LO profile for one numerology:
+    frame with pilots + LTF pair, ``n_frames`` realizations averaged."""
+    from wifitrx.impairments.phase_noise import DEFAULT_WIFI7_LO_PROFILE
+    from wifitrx.waveform.pilots import generate_ofdm_with_pilots, pilot_sequence
+    from wifitrx.waveform.preamble import build_frame
+
+    wf, cols = generate_ofdm_with_pilots(cfg)
+    frame = build_frame(cfg, data=wf)
+    pilots = pilot_sequence(cfg.n_symbols, cols.size)
+    return _pn_sweep_point(DEFAULT_WIFI7_LO_PROFILE, frame, cols, pilots, n_lo,
+                           n_frames, np.random.default_rng(seed))
+
+
 def run_pn_cpe_study(p: dict) -> AnalysisResult:
     """LO phase noise through the baseband's CPE removal: four measurement
     configurations, isolation method (phase noise is the only impairment).
 
-    Three pages.  (a) The LO profile split by the per-symbol weight
+    Four pages.  (a) The LO profile split by the per-symbol weight
     1 - sinc^2(f T_FFT) into what a common-phase rotation removes and
     what stays as ICI.  (b) A type-II PLL family anchored on the shipped
     profile's plateau/VCO/floor, loop bandwidth swept: rms jitter and
@@ -897,7 +911,13 @@ def run_pn_cpe_study(p: dict) -> AnalysisResult:
     the closed forms overlaid on configs 1 and 2 — the cross-check that
     the model's ICI weighting (and PSD convention) is right.  Each
     configuration is a direct reading; the differences are mechanisms
-    and do not add in power.
+    and do not add in power.  (d) The two standards side by side at this
+    bandwidth and LO configuration, stacked in error POWER (where the
+    mechanisms do add along the chain 2 -> 3 -> 4): ICI floor, the LTF
+    estimate's frozen error, the pilot estimator's noise, with the
+    no-CPE reading as a level — the 12.8 us symbol leaves CPE removal
+    almost nothing to take out, so 11ax/be reads ~1.4 dB worse than
+    11ac/n for the same LO (40 MHz, measured).
     """
     from wifitrx.impairments.phase_noise import (
         DEFAULT_WIFI7_LO_PROFILE, TabulatedPhase, TypeIIPllPhase,
@@ -1072,6 +1092,87 @@ def run_pn_cpe_study(p: dict) -> AnalysisResult:
         fontsize=9.5)
     fig_c.tight_layout()
 
+    # ---------------------------------------------- page (d): standards
+    std_here = p.get("std", "11ax/be")
+    other_std = "11ac/n" if std_here == "11ax/be" else "11ax/be"
+    per_std = {std_here: readings[i0]}
+    bw_mhz = float(p["bw_mhz"])
+    if other_std == "11ac/n" and bw_mhz > 160:
+        other_note = "\n11ac/n is undefined above 160 MHz — omitted"
+    else:
+        other_note = ""
+        per_std[other_std] = _pn_nominal(
+            _pn_config({**p, "std": other_std}), n_lo, n_frames, seed + 2)
+    order = [s for s in ("11ac/n", "11ax/be") if s in per_std]
+
+    def lin(db):
+        return 10.0 ** (db / 10.0) * 1e5    # error power / signal, in 1e-5
+
+    fig_d = new_figure(figsize=(8.6, 5.6))
+    ax = fig_d.add_subplot(111)
+    xs = np.arange(len(order))
+    bar_w = 0.5
+    seg_style = (("ICI floor (config 2: genie CPE, true channel)", "tab:red"),
+                 ("+ LTF channel-estimate frozen error (config 3 − 2)",
+                  "tab:orange"),
+                 (f"+ pilot-CPE estimator noise, N_p = {cols.size} "
+                  "(config 4 − 3)", "tab:purple"))
+    top = 0.0
+    top_guess = max(lin(v[0]) for v in per_std.values()) * 1.3
+    for i, std in enumerate(order):
+        d1, d2, d3, d4 = per_std[std]
+        segs = (lin(d2), lin(d3) - lin(d2), lin(d4) - lin(d3))
+        bottom = 0.0
+        for seg, (lab, col) in zip(segs, seg_style):
+            ax.bar(xs[i], seg, bar_w, bottom=bottom, color=col,
+                   edgecolor="white", label=lab if i == 0 else None)
+            bottom += seg
+        # boundary labels, nudged apart when a thin segment would stack
+        # two of them on top of each other (32-pilot 320 MHz: 0.03 dB)
+        ys = [lin(d2), lin(d3), lin(d4)]
+        for k in range(1, 3):
+            ys[k] = max(ys[k], ys[k - 1] + 0.035 * top_guess)
+        for lvl, db in zip(ys, (d2, d3, d4)):
+            ax.annotate(f"{db:.1f} dB", (xs[i] + bar_w / 2 + 0.03, lvl),
+                        fontsize=7.5, va="center", ha="left")
+        ax.hlines(lin(d1), xs[i] - bar_w / 2, xs[i] + bar_w / 2, colors="k",
+                  linestyles="--", lw=1.2,
+                  label="no CPE removal at all (config 1)" if i == 0 else None)
+        # below the dashed level, inside the bar: above it the label would
+        # collide with the total when CPE removes little (11ax/be)
+        ax.annotate(f"CPE removes\n{d1 - d2:.2f} dB", (xs[i], lin(d1)),
+                    fontsize=7, ha="center", va="top", xytext=(0, -3),
+                    textcoords="offset points",
+                    bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none",
+                              alpha=0.85))
+        ax.annotate(f"total {d4:.2f} dB", (xs[i], bottom), fontsize=9.5,
+                    ha="center", va="bottom", xytext=(0, 4),
+                    textcoords="offset points", fontweight="bold")
+        top = max(top, bottom, lin(d1))
+    ax.set_xticks(xs)
+    ax.set_xticklabels([f"{std}  ({'3.2' if std == '11ac/n' else '12.8'} µs "
+                        "symbol)" for std in order])
+    ax.set_ylabel("phase-noise error power / signal power  [×1e-5]\n"
+                  "(−50 dB = 1, −40 dB = 10)")
+    ax.set_ylim(0, top * 1.25)
+    if len(order) == 1:                 # one bar: centre it, legend beside
+        ax.set_xlim(-1.0, 1.0)
+        ax.legend(fontsize=8, loc="upper right")
+    else:
+        ax.set_xlim(-0.6, len(order) - 0.4)
+        ax.legend(fontsize=8, loc="upper left")
+    ax.grid(True, axis="y", alpha=0.3)
+    ax.set_title(
+        f"Standards side by side — modem form (N_p = {cols.size} pilot CPE + "
+        f"LTF estimate), {p['bw_mhz']} MHz, {lo_txt}, {n_frames} frame(s)\n"
+        "stacked in error POWER so the segments add: every boundary is the "
+        f"direct reading of one configuration{other_note}", fontsize=9.5)
+    fig_d.tight_layout()
+    if len(order) == 2:
+        std_gap = float(per_std["11ax/be"][3] - per_std["11ac/n"][3])
+    else:
+        std_gap = None
+
     metrics = {
         "evm_no_cpe_db": round(float(c1), 2),
         "evm_genie_cpe_db": round(float(c2), 2),
@@ -1088,6 +1189,11 @@ def run_pn_cpe_study(p: dict) -> AnalysisResult:
         "loopbw_opt_jitter_khz": round(float(loop_bws[i_jit]) / 1e3, 1),
         "loopbw_opt_evm_khz": round(float(loop_bws[i_evm]) / 1e3, 1),
         "loopbw_evm_gain_db": round(float(gain), 2),
+        "evm_pilot_cpe_11ac_db": (round(float(per_std["11ac/n"][3]), 2)
+                                  if "11ac/n" in per_std else None),
+        "evm_pilot_cpe_11ax_db": (round(float(per_std["11ax/be"][3]), 2)
+                                  if "11ax/be" in per_std else None),
+        "std_gap_db": None if std_gap is None else round(std_gap, 2),
     }
     text = (
         "Isolation method: phase noise is the only impairment, so the true "
@@ -1113,10 +1219,19 @@ def run_pn_cpe_study(p: dict) -> AnalysisResult:
         f"kHz, post-CPE EVM optimum {loop_bws[i_evm] / 1e3:.0f} kHz "
         f"(choosing the latter changes the phase-noise EVM by {gain:.2f} "
         "dB).")
+    if std_gap is not None:
+        text += (f"\nStandards side by side (modem form): 11ax/be "
+                 f"{per_std['11ax/be'][3]:.2f} dB vs 11ac/n "
+                 f"{per_std['11ac/n'][3]:.2f} dB — 11ax/be is "
+                 f"{std_gap:+.2f} dB; same LO, the difference is what the 4x "
+                 "longer symbol denies CPE removal.  The gap scatters ~0.4 dB "
+                 f"rms at {n_frames} frame(s) because the LTF frozen error is "
+                 "one realization per frame; 32 frames settle it.")
     return AnalysisResult(metrics=metrics, figure=fig_c,
                           figures=(("PSD partition", fig_a),
                                    ("PLL loop bandwidth", fig_b),
-                                   ("Four configurations", fig_c)),
+                                   ("Four configurations", fig_c),
+                                   ("Standards side by side", fig_d)),
                           text=text)
 
 

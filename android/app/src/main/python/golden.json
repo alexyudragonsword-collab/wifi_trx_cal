@@ -80,8 +80,11 @@
    "n_pilots": 8,
    "loopbw_opt_jitter_khz": 300.0,
    "loopbw_opt_evm_khz": 300.0,
-   "loopbw_evm_gain_db": 0.0
+   "loopbw_evm_gain_db": 0.0,
+   "evm_pilot_cpe_11ac_db": -43.66,
+   "evm_pilot_cpe_11ax_db": -41.95,
+   "std_gap_db": 1.71
   },
-  "n_pages": 3
+  "n_pages": 4
  }
 ]

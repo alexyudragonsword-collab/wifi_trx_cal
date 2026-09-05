@@ -226,7 +226,8 @@ def test_pn_study_reads_the_closed_form_and_orders_the_mechanisms():
     common-mode (config 4 above 3, +0.33 dB measured)."""
     from specs import run_pn_cpe_study
 
-    m = run_pn_cpe_study(dict(FAST_PARAMS["pn_cpe_study"], n_frames=8)).metrics
+    result = run_pn_cpe_study(dict(FAST_PARAMS["pn_cpe_study"], n_frames=8))
+    m = result.metrics
     assert abs(m["evm_no_cpe_db"] - m["closed_form_total_db"]) < 0.3
     assert abs(m["evm_genie_cpe_db"] - m["closed_form_ici_db"]) < 0.3
     assert m["evm_genie_cpe_db"] <= m["evm_no_cpe_db"]
@@ -235,6 +236,14 @@ def test_pn_study_reads_the_closed_form_and_orders_the_mechanisms():
     assert m["n_pilots"] == 8
     assert m["f_cpe_3db_khz"] == pytest.approx(34.6, abs=0.1)
     assert 4.0 < m["cpe_tracked_pct"] < 10.0
+    # page (d): the two standards at this bandwidth, same LO — the 12.8 us
+    # symbol denies CPE removal most of the profile, so 11ax/be reads
+    # worse in the modem form (measured +1.4 dB at 40 MHz, +1.5 at 80)
+    assert [t for t, _ in result.figures][-1] == "Standards side by side"
+    assert m["evm_pilot_cpe_11ax_db"] == m["evm_pilot_cpe_db"]
+    assert 0.8 < m["std_gap_db"] < 2.5
+    assert m["std_gap_db"] == pytest.approx(
+        m["evm_pilot_cpe_11ax_db"] - m["evm_pilot_cpe_11ac_db"], abs=0.011)
 
 
 def test_pilot_cpe_reduces_to_the_genie_when_every_tone_is_a_pilot():
