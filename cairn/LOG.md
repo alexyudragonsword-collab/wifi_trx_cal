@@ -8,7 +8,8 @@
 - **闭式解**:去 CPE 后自由 1/f² VCO 留下 $\tfrac{\pi^2}{3}k_2T$(∫(1−sinc²u)/u² du = π²/3,收敛)。地板随 T 线性:3.2 µs −42.9、12.8 µs −36.8 dB;相对各自最优 0.9 vs 5.0 dB——这就是"平坦"与"尖谷"。时域 8 帧圆点落在闭式线上。
 - **含义**:11ax 环路带宽容差比 11ac 严得多;谷值由 k₂ 定,环路帮不了;11ac 的收窄环路经验不能搬到 11ax。R18 的"11ax 上 jitter 最优 = EVM 最优"由此得到机理。
 - 落地:`free_vco_ici_floor()` 进库,PLL 页画地板 + 指标 `vco_floor_post_cpe_db`;第二篇短文 `docs/pn_cpe_note_loop_bandwidth.pdf` 由同一脚本现算生成。守卫经变异验证。
-- 指针:`CHANGELOG.md` 0.7.13、`docs/backlog_zh.md` B15 末尾。金标 job 结论追记于本条末尾。
+- 指针:`CHANGELOG.md` 0.7.13、`docs/backlog_zh.md` B15 末尾。
+- **run #56 裁决(9bdbdbc)**:三 job 全绿。解释版与编译版端上均 **5 run / 0 failed / 0 skipped**,`metricsMatchDesktopGolden` 按 19 指标 / 4 页的新金标通过;编译版 wheel `wifitrx-0.7.13-cp38-cp38-android_21_{arm64_v8a,x86_64}`,`cythonised 52 modules`。0.7.13 两种出货形态均已裁决。
 
 ## 2026-09-05 · R21:两制式差值的散布量出来了——更正"32 帧钉死"(0.7.11)
 
