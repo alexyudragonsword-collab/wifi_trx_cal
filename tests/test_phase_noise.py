@@ -5,7 +5,7 @@ import pytest
 from wifitrx.impairments import (
     LeesonOscillator, TabulatedPhase, TypeIIPllPhase, synth_from_psd,
     integrate_pn, ipn_dbc, sphi_from_ldbc, ldbc_from_sphi,
-    cpe_partition, ici_weight,
+    cpe_partition, free_vco_ici_floor, ici_weight,
 )
 
 
@@ -109,3 +109,23 @@ def test_typeii_pll_loop_bandwidth_is_the_minus_3db_point():
     in_band = ldbc_from_sphi(vco.psd(np.array([1e3, 1e4])))
     assert in_band[1] - in_band[0] == pytest.approx(20.0, abs=0.3)
     assert in_band[0] < -128.0        # measured -132.2 dBc/Hz at 1 kHz
+
+
+def test_free_vco_floor_is_the_weighted_integral_of_a_1_over_f2_oscillator():
+    """pi^2/3 * k2 * T equals int k2/f^2 [1 - sinc^2(fT)] df taken over a
+    band wide enough on both sides (the integrand is finite at DC), so a
+    type-II loop opened to 1 kHz with the plateau and floor removed
+    reads the same number: measured -42.87 vs -42.92 dB (3.2 us) and
+    -36.85 vs -37.04 dB (12.8 us) at 40 MHz.  The floor scales with the
+    symbol length — 4x (6.02 dB) between the two numerologies."""
+    k2 = float(sphi_from_ldbc(-116.1)) * 1e12
+    for t_fft in (3.2e-6, 12.8e-6):
+        vco = TypeIIPllPhase.from_spot("pll", 1e3, plateau_dbchz=-300.0,
+                                       vco_dbchz_at_1mhz=-116.1,
+                                       floor_dbchz=-300.0)
+        numeric = cpe_partition(vco.psd, t_fft, 3e3, 80e6)["ici_rad2"]
+        assert free_vco_ici_floor(k2, t_fft) == pytest.approx(numeric, rel=0.06)
+    ratio = free_vco_ici_floor(k2, 12.8e-6) / free_vco_ici_floor(k2, 3.2e-6)
+    assert ratio == pytest.approx(4.0)
+    assert free_vco_ici_floor(k2, 12.8e-6, n_lo=2) == pytest.approx(
+        2 * free_vco_ici_floor(k2, 12.8e-6))

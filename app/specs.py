@@ -921,7 +921,8 @@ def run_pn_cpe_study(p: dict) -> AnalysisResult:
     """
     from wifitrx.impairments.phase_noise import (
         DEFAULT_WIFI7_LO_PROFILE, TabulatedPhase, TypeIIPllPhase,
-        cpe_partition, ici_weight, integrate_pn, ldbc_from_sphi)
+        cpe_partition, free_vco_ici_floor, ici_weight, integrate_pn,
+        ldbc_from_sphi)
     from wifitrx.waveform.pilots import generate_ofdm_with_pilots, pilot_sequence
     from wifitrx.waveform.preamble import build_frame
 
@@ -985,6 +986,11 @@ def run_pn_cpe_study(p: dict) -> AnalysisResult:
     lb_jit, lb_td = np.array(lb_jit), np.array(lb_td)
     i_jit = int(np.argmin(lb_jit))
     i_evm = int(np.argmin(lb_ici))
+    # the level a narrow loop saturates at: the VCO running free, its
+    # in-symbol random walk minus the symbol mean (pi^2/3 k2 T, pure
+    # 1/f^2 — a 1/f^3 corner only raises it)
+    vco_floor_db = 10.0 * np.log10(free_vco_ici_floor(
+        prof.k2, t_fft, n_lo))
 
     # ---------------------------------------------- page (a): PSD partition
     f_plot = np.logspace(3, 8, 600)
@@ -1040,6 +1046,12 @@ def run_pn_cpe_study(p: dict) -> AnalysisResult:
                 label="model: config 2 (genie CPE)")
     ax.axvline(loop_bws[i_jit] / 1e3, color="tab:blue", ls=":", lw=1.2)
     ax.axvline(loop_bws[i_evm] / 1e3, color="tab:red", ls=":", lw=1.2)
+    ax.axhline(vco_floor_db, color="tab:red", ls=":", lw=1.2,
+               label="free-running-VCO floor after CPE, π²·k₂·T/3")
+    ax.annotate(f"loop open: {vco_floor_db:.1f} dB  (T_FFT = {t_fft * 1e6:.1f} µs; "
+                f"{vco_floor_db - lb_ici[i_evm]:.1f} dB above the optimum)",
+                (loop_bws[0] / 1e3, vco_floor_db), fontsize=7, color="tab:red",
+                va="bottom", xytext=(0, 2), textcoords="offset points")
     ax.set_xlabel("PLL loop bandwidth (-3 dB of |H|²) [kHz]")
     ax.set_ylabel("phase-noise EVM contribution [dB]")
     ax.grid(True, which="both", alpha=0.3)
@@ -1189,6 +1201,7 @@ def run_pn_cpe_study(p: dict) -> AnalysisResult:
         "loopbw_opt_jitter_khz": round(float(loop_bws[i_jit]) / 1e3, 1),
         "loopbw_opt_evm_khz": round(float(loop_bws[i_evm]) / 1e3, 1),
         "loopbw_evm_gain_db": round(float(gain), 2),
+        "vco_floor_post_cpe_db": round(float(vco_floor_db), 2),
         "evm_pilot_cpe_11ac_db": (round(float(per_std["11ac/n"][3]), 2)
                                   if "11ac/n" in per_std else None),
         "evm_pilot_cpe_11ax_db": (round(float(per_std["11ax/be"][3]), 2)
@@ -1218,7 +1231,12 @@ def run_pn_cpe_study(p: dict) -> AnalysisResult:
         f"Loop-bandwidth family: jitter optimum {loop_bws[i_jit] / 1e3:.0f} "
         f"kHz, post-CPE EVM optimum {loop_bws[i_evm] / 1e3:.0f} kHz "
         f"(choosing the latter changes the phase-noise EVM by {gain:.2f} "
-        "dB).")
+        f"dB).  Opening the loop saturates at the free-running-VCO floor "
+        f"π²k₂T/3 = {vco_floor_db:.1f} dB, {vco_floor_db - lb_ici[i_evm]:.1f} "
+        "dB above the optimum: with the 3.2 us legacy symbol that step is "
+        "under 1 dB (the curve is flat left of the optimum), with the 12.8 "
+        "us symbol it is ~5 dB (a sharp valley) — the loop must hold the "
+        "VCO near the plateau/VCO crossing.")
     if std_gap is not None:
         text += (f"\nStandards side by side (modem form): 11ax/be "
                  f"{per_std['11ax/be'][3]:.2f} dB vs 11ac/n "

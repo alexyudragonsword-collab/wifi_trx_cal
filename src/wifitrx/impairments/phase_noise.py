@@ -211,6 +211,23 @@ def cpe_partition(psd_func, t_fft: float, f1: float, f2: float,
             "f_3db_hz": 0.443 / t_fft}
 
 
+def free_vco_ici_floor(k2: float, t_fft: float, n_lo: int = 1) -> float:
+    """Phase-noise error power [rad^2] that per-symbol CPE removal leaves
+    from a free-running 1/f^2 oscillator: (pi^2 / 3) * k2 * T_FFT.
+
+    The weighted integral int k2/f^2 [1 - sinc^2(f T)] df converges —
+    the integrand tends to (pi T)^2 / 3 at low offset — because a random
+    walk cannot travel far inside one symbol and the symbol mean absorbs
+    the rest.  What survives scales with the symbol length, so the
+    12.8 us 11ax/be symbol keeps 4x (6 dB) more than the 3.2 us legacy
+    one.  This is the floor a PLL loop-bandwidth sweep saturates at once
+    the loop no longer holds the VCO: with a quiet in-band plateau the
+    post-CPE EVM cannot get worse than this however narrow the loop.
+    ``n_lo`` independent LOs add their k2.
+    """
+    return float(np.pi ** 2 / 3.0 * k2 * t_fft * n_lo)
+
+
 @dataclass
 class TypeIIPllPhase(NoiseSource):
     """Parametric closed-loop synthesizer profile for loop-bandwidth studies.

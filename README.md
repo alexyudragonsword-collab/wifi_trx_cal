@@ -90,6 +90,8 @@ python app/main.py
 - `docs/pn_cpe_note_11ac_vs_11ax.pdf` — 英文技术短文(3 页):为什么 11ax/be 数制下逐符号
   去 CPE 对相噪 EVM 的收益远小于 11ac/n(推导 + 出货 LO 谱的数字 + 三联图);
   由 `python tools/build_pn_cpe_note.py --out docs/` 生成,数字来自库本身
+- `docs/pn_cpe_note_loop_bandwidth.pdf` — 同一脚本生成的第二篇:去 CPE 后 PLL 环路带宽
+  为何在 11ax/be 有尖锐最优、在 11ac/n 左侧几乎平坦——自由 VCO 地板 π²k₂T/3
 - `docs/backlog_zh.md` — 待办与已落地项的决策记录
 - `CHANGELOG.md` — 版本变更(交付格式的改动在这里显式标注)
 - `PROVENANCE.md` — 拷贝代码来源

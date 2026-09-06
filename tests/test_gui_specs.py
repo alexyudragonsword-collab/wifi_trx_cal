@@ -236,6 +236,11 @@ def test_pn_study_reads_the_closed_form_and_orders_the_mechanisms():
     assert m["n_pilots"] == 8
     assert m["f_cpe_3db_khz"] == pytest.approx(34.6, abs=0.1)
     assert 4.0 < m["cpe_tracked_pct"] < 10.0
+    # the loop-bandwidth page's free-VCO floor: above the post-CPE optimum
+    # (it is what a narrow loop saturates at) and, under the 12.8 us
+    # symbol, by several dB — measured 5.0 dB at 40 MHz, 5.1 at 80
+    assert 3.0 < m["vco_floor_post_cpe_db"] - m["closed_form_ici_db"] < 12.0
+    assert m["vco_floor_post_cpe_db"] == pytest.approx(-36.85, abs=0.3)
     # page (d): the two standards at this bandwidth, same LO — the 12.8 us
     # symbol denies CPE removal most of the profile, so 11ax/be reads
     # worse in the modem form (measured +1.4 dB at 40 MHz, +1.5 at 80)

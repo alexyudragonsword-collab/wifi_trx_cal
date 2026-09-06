@@ -1,10 +1,16 @@
-"""Build docs/pn_cpe_note_11ac_vs_11ax.pdf — why per-symbol CPE removal
-buys less phase-noise EVM on the 11ax/be numerology than on 11ac/n.
+"""Build the two English technical notes of the phase-noise / CPE study.
 
-Three pages: the derivation (symbol-mean phase -> sinc^2 weight ->
-hand-over at 0.443/T), the numbers for the shipped LO profile, and a
-three-panel figure (time domain, weight over L(f), cumulative removed
-share).  Typeset with matplotlib mathtext, so it builds without LaTeX::
+docs/pn_cpe_note_11ac_vs_11ax.pdf — why per-symbol CPE removal buys less
+phase-noise EVM on the 11ax/be numerology than on 11ac/n: the symbol-mean
+phase -> sinc^2 weight -> hand-over at 0.443/T, the numbers for the
+shipped LO profile, and a three-panel figure.
+
+docs/pn_cpe_note_loop_bandwidth.pdf — why the post-CPE EVM shows a sharp
+PLL loop-bandwidth optimum on 11ax/be and a flat left side on 11ac/n:
+the free-running-VCO floor pi^2/3 k2 T that a narrow loop saturates at,
+6 dB lower for the 3.2 us symbol.
+
+Typeset with matplotlib mathtext, so it builds without LaTeX::
 
     MPLBACKEND=Agg python tools/build_pn_cpe_note.py --out docs/
 
@@ -29,8 +35,8 @@ from matplotlib.lines import Line2D
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from wifitrx.impairments.phase_noise import (  # noqa: E402
-    DEFAULT_WIFI7_LO_PROFILE, LOModel, cpe_partition, ldbc_from_sphi,
-    sphi_from_ldbc)
+    DEFAULT_WIFI7_LO_PROFILE, LOModel, TypeIIPllPhase, cpe_partition,
+    free_vco_ici_floor, ldbc_from_sphi, sphi_from_ldbc)
 
 matplotlib.rcParams["mathtext.fontset"] = "cm"
 
@@ -166,6 +172,12 @@ class Page:
     def para(self, s, width=92, size=BODY, gap=0.12):
         for line in textwrap.wrap(s, width=width):
             self.text(line, size=size, gap=0.0)
+        self.y -= gap
+
+    def bullet(self, s, width=88, size=BODY, gap=0.08):
+        for i, line in enumerate(textwrap.wrap(s, width=width)):
+            self.text(("•  " if i == 0 else "    ") + line, size=size, gap=0.0,
+                      x=LM + 0.1)
         self.y -= gap
 
     def heading(self, s):
@@ -314,12 +326,218 @@ def build(out_dir: Path) -> Path:
     return pdf_path
 
 
+# ------------------------------------------------ note 2: loop bandwidth
+PLATEAU_DBC, VCO_DBC, FLOOR_DBC = -104.1, -116.1, -155.0
+BW_HZ = 40e6
+
+
+def loop_curves() -> dict:
+    """Closed-form config-1/2 curves vs loop bandwidth for both
+    numerologies, the model's config-2 points, and the free-VCO floors."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
+    from specs import _pn_config, _pn_sweep_point  # noqa: E402
+    from wifitrx.waveform.pilots import generate_ofdm_with_pilots, pilot_sequence
+    from wifitrx.waveform.preamble import build_frame
+
+    lbws = np.logspace(np.log10(10e3), np.log10(3e6), 25)
+    k2 = float(sphi_from_ldbc(VCO_DBC)) * 1e12
+    s0 = float(sphi_from_ldbc(PLATEAU_DBC))
+    out = {"lbws": lbws, "k2": k2, "fx": float(np.sqrt(k2 / s0))}
+    for std, T in (("11ac/n", T_AC), ("11ax/be", T_AX)):
+        cfg = _pn_config({"bw_mhz": BW_HZ / 1e6, "std": std})
+        wf, cols = generate_ofdm_with_pilots(cfg)
+        frame = build_frame(cfg, data=wf)
+        pil = pilot_sequence(cfg.n_symbols, cols.size)
+        f_lo, f_hi = cfg.sample_rate_hz / frame.x.size, cfg.sample_rate_hz / 2
+        ici, tot, td = [], [], []
+        for lbw in lbws:
+            prof = TypeIIPllPhase.from_spot("pll", lbw, PLATEAU_DBC, VCO_DBC,
+                                            FLOOR_DBC, zeta=1.0)
+            part = cpe_partition(prof.psd, T, f_lo, f_hi)
+            ici.append(10 * np.log10(part["ici_rad2"]))
+            tot.append(10 * np.log10(part["total_rad2"]))
+        for lbw in lbws[::4]:
+            prof = TypeIIPllPhase.from_spot("pll", lbw, PLATEAU_DBC, VCO_DBC,
+                                            FLOOR_DBC, zeta=1.0)
+            td.append((lbw, float(_pn_sweep_point(
+                prof, frame, cols, pil, 1, 8, np.random.default_rng(1))[1])))
+        ici, tot = np.array(ici), np.array(tot)
+        out[std] = {"T": T, "ici": ici, "tot": tot, "td": td,
+                    "floor_db": 10 * np.log10(free_vco_ici_floor(k2, T)),
+                    "i_min": int(np.argmin(ici))}
+    return out
+
+
+def loop_figure(lc: dict, path: Path) -> None:
+    lbws, fx = lc["lbws"], lc["fx"]
+    fig = Figure(figsize=(10, 6.2))
+    ax = fig.add_subplot(111)
+    for std, col in (("11ac/n", "tab:green"), ("11ax/be", "tab:red")):
+        d = lc[std]
+        ax.semilogx(lbws / 1e3, d["tot"], "--", color=col, lw=1.0, alpha=0.6,
+                    label=f"{std}: no CPE removal (config 1, closed form)")
+        ax.semilogx(lbws / 1e3, d["ici"], "-", color=col, lw=2.0,
+                    label=f"{std}: after CPE removal (config 2, closed form)")
+        ax.semilogx([bw / 1e3 for bw, _ in d["td"]], [v for _, v in d["td"]], "o",
+                    color=col, ms=5, mfc="white",
+                    label=f"{std}: model, config 2 (8 frames)")
+        ax.axhline(d["floor_db"], color=col, ls=":", lw=1.3)
+        ax.annotate(f"free-running-VCO floor after CPE:  k₂·T·π²/3 = "
+                    f"{d['floor_db']:.1f} dB  (T = {d['T'] * 1e6:.1f} µs)",
+                    (11, d["floor_db"]), fontsize=8, color=col, va="bottom",
+                    xytext=(0, 2), textcoords="offset points")
+        fc = 0.443 / d["T"]
+        ax.axvline(fc / 1e3, color=col, ls="-.", lw=0.9, alpha=0.7)
+        ax.annotate(f"f_c = 0.443/T\n= {fc / 1e3:.0f} kHz", (fc / 1e3, -33.6),
+                    fontsize=7.5, color=col, ha="center", va="top")
+        i = d["i_min"]
+        ax.annotate(f"min {d['ici'][i]:.1f} dB @ {lbws[i] / 1e3:.0f} kHz",
+                    (lbws[i] / 1e3, d["ici"][i]), fontsize=8, color=col,
+                    ha="center", va="top", xytext=(0, -8), textcoords="offset points")
+    ax.axvline(fx / 1e3, color="k", ls=":", lw=0.9)
+    ax.annotate(f"plateau/VCO crossing f_x = √(k₂/S₀) = {fx / 1e3:.0f} kHz",
+                (fx / 1e3, -47.3), fontsize=7.5, ha="center", va="bottom")
+    ax.set_xlabel("PLL loop bandwidth (−3 dB of |H|²) [kHz]")
+    ax.set_ylabel("phase-noise EVM contribution [dB]")
+    ax.set_ylim(-48, -33)
+    ax.grid(True, which="both", alpha=0.3)
+    ax.legend(fontsize=7.5, loc="upper left", ncol=2)
+    ax.set_title(f"Type-II PLL family (plateau {PLATEAU_DBC} dBc/Hz, VCO {VCO_DBC} "
+                 f"dBc/Hz @ 1 MHz, ζ = 1), {BW_HZ / 1e6:.0f} MHz, single LO\n"
+                 "left of the optimum the post-CPE curve saturates at the "
+                 "free-running-VCO floor k₂·T·π²/3 — 4× lower (−6 dB) for the "
+                 "3.2 µs symbol", fontsize=9.5)
+    fig.tight_layout()
+    fig.savefig(path, dpi=130)
+
+
+def build_loop_note(out_dir: Path) -> Path:
+    lc = loop_curves()
+    ac, ax_ = lc["11ac/n"], lc["11ax/be"]
+    png = out_dir / "pn_cpe_note_loop_bandwidth.png"
+    loop_figure(lc, png)
+    pdf_path = out_dir / "pn_cpe_note_loop_bandwidth.pdf"
+    foot = "wifitrx — pn_cpe_study, PLL loop-bandwidth page — page {} / 3"
+    lbws = lc["lbws"]
+
+    def opt(d):
+        return f"{d['ici'][d['i_min']]:.1f} dB @ {lbws[d['i_min']] / 1e3:.0f} kHz"
+
+    with PdfPages(pdf_path) as pdf:
+        p = Page(pdf, "PLL loop bandwidth after CPE removal: 11ax/be vs 11ac/n")
+        p.text("Why 11ax/be shows a sharp loop-bandwidth optimum and 11ac/n does not",
+               size=9.5, style="italic", color="0.35", gap=0.0)
+        p.text("pn_cpe_study, config 2 (genie CPE, true channel), 40 MHz, single LO, "
+               "type-II PLL family", size=9.5, style="italic", color="0.35", gap=0.14)
+        p.para("Both shapes come from one closed form: after CPE removal, the ICI left "
+               "by a free-running VCO is finite, and it is proportional to the symbol "
+               "length.")
+        p.heading("1.  What takes over when the loop bandwidth drops below the optimum")
+        p.para("The type-II family is")
+        p.formula(r"$S_\varphi(f) \;=\; |H(f)|^2\,S_0 \;+\; |1-H(f)|^2\,"
+                  r"S_{\mathrm{VCO}}(f),\qquad S_{\mathrm{VCO}}(f)=\dfrac{k_2}{f^2}$",
+                  height=0.6)
+        p.para("with S₀ the in-band plateau and k₂ the VCO's 1/f² coefficient.  Once the "
+               "loop bandwidth f_bw falls below the plateau/VCO crossing")
+        p.formula(r"$f_x \;=\; \sqrt{k_2/S_0} \;=\; " + f"{lc['fx'] / 1e3:.0f}"
+                  r"\ \mathrm{kHz}$", height=0.5)
+        p.para("the band between f_bw and f_x is taken over by the VCO, whose noise there "
+               "is higher than the plateau.  Without CPE removal (dashed curves, identical "
+               "for both standards) all of that noise counts, so the curve rises "
+               "monotonically as the loop is narrowed — this is why the jitter optimum "
+               "sits near f_x.")
+        p.heading("2.  After CPE removal: the free-running-VCO floor")
+        p.para("CPE removal weights the spectrum by 1 − sinc²(fT).  Push the loop "
+               "bandwidth to zero and let the VCO run free; what remains as ICI is")
+        p.formula(r"$\sigma^2_{\mathrm{ICI,VCO}} \;=\; \int_0^{\infty}\dfrac{k_2}{f^2}"
+                  r"\left[1-\mathrm{sinc}^2(fT)\right]df \;=\; k_2\,T\int_0^{\infty}"
+                  r"\dfrac{1-\mathrm{sinc}^2 u}{u^2}\,du \;=\; \dfrac{\pi^2}{3}\,k_2\,T$",
+                  size=12.5, height=0.8)
+        p.para("The integrand tends to (πT)²/3 at low frequency, so the integral does not "
+               "diverge: the VCO's random walk cannot travel far within one symbol, and "
+               "the symbol mean absorbs most of it.  What is left depends only on how "
+               "much phase the VCO accumulates inside one symbol — hence proportional to "
+               "T.  That horizontal line is the dotted floor in the figure: with CPE "
+               "removal, narrowing the loop can never make things worse than this.")
+        p.table(("", "T", "floor  π²k₂T/3", "optimum", "optimum → floor"),
+                (("11ac/n", "3.2 µs", f"{ac['floor_db']:.1f} dB", opt(ac),
+                  f"{ac['floor_db'] - ac['ici'][ac['i_min']]:.1f} dB"),
+                 ("11ax/be", "12.8 µs", f"{ax_['floor_db']:.1f} dB", opt(ax_),
+                  f"{ax_['floor_db'] - ax_['ici'][ax_['i_min']]:.1f} dB")),
+                (0.0, 1.1, 2.1, 3.7, 5.5))
+        p.para(f"(k₂ = {lc['k2']:.1f} rad²·Hz from {VCO_DBC} dBc/Hz at 1 MHz; the "
+               "time-domain model's 8-frame points in the figure sit on the closed-form "
+               "curves.  Every number on this page is computed by the build script from "
+               "the library.)")
+        p.footer(foot.format(1))
+        p.close()
+
+        p = Page(pdf)
+        p.heading("3.  Why the two curves look different")
+        p.bullet(f"11ac/n (3.2 µs): the floor is only "
+                 f"{ac['floor_db'] - ac['ici'][ac['i_min']]:.1f} dB above the optimum.  "
+                 "Narrowing the loop from the optimum all the way to 10 kHz does let the "
+                 "VCO noise in, but it enters mostly below f_c = 0.443/T = 138 kHz, "
+                 "exactly where the sinc² weight removes it — the curve is nearly flat "
+                 "left of the optimum.  For 11ac, any loop bandwidth at or below f_x is "
+                 "good enough; going lower costs almost nothing and gains almost nothing.")
+        p.bullet(f"11ax/be (12.8 µs): f_c is only 35 kHz.  The VCO noise between f_c and "
+                 "f_x (35–250 kHz) carries a weight close to 1, so the moment the loop "
+                 f"loosens it all becomes ICI; the floor is "
+                 f"{ax_['floor_db'] - ax_['ici'][ax_['i_min']]:.1f} dB above the optimum.  "
+                 "The curve has a clear valley — 11ax needs the loop to pin the VCO near "
+                 "f_x, and an octave of error costs 1–2 dB.")
+        p.para("The two curves coincide on the right for the same reason seen from the "
+               "other side: for f_bw > f_x the plateau extends to higher offsets, where "
+               "both standards' weights are ≈ 1 and neither escapes.")
+        p.heading("4.  What this means for the PLL")
+        p.bullet("The same PLL has a far tighter loop-bandwidth tolerance on 11ax than on "
+                 "11ac.  11ac tolerates anything from 10 kHz to 200 kHz within ±0.5 dB; "
+                 "11ax must land within roughly 180–450 kHz to stay within 0.5 dB of its "
+                 "optimum.  A 2× process/temperature drift of the loop bandwidth is "
+                 "invisible on 11ac and shows up directly in EVM on 11ax.")
+        p.bullet("The floor formula is a hard specification: no loop tuning takes the "
+                 "11ax phase-noise term below the valley, and the valley is set mainly by "
+                 "the VCO's k₂ (the plateau S₀ decides where the valley sits and how steep "
+                 "the right side is).  To push this term below −45 dB on 11ax, k₂ must "
+                 "drop by ~3 dB — VCO phase noise from −116 to −119 dBc/Hz at 1 MHz.  That "
+                 "is the VCO's job; the loop cannot do it.")
+        p.bullet("The 11ac rule of thumb 'CPE lets you narrow the loop to suppress "
+                 "reference/PFD noise' does not carry over to 11ax: narrowing is almost "
+                 "free on 11ac and is paid for in VCO noise on 11ax.  This is the same "
+                 "π²k₂T/3 behind the earlier finding that the jitter optimum and the EVM "
+                 "optimum coincide on 11ax but not on 11ac.")
+        p.heading("Boundaries")
+        p.para("This is the type-II second-order family (−20 dB/dec far-out roll-off, no "
+               "extra pole) with a pure 1/f² VCO.  A real loop's extra pole steepens the "
+               "right side; a 1/f³ VCO corner raises both the floor and the valley "
+               "(0.7.8 swept 300 kHz and 1 MHz corners; the conclusion's direction is "
+               "unchanged).  Numbers are 40 MHz, single LO; two independent LOs add 3 dB "
+               "across the board.  The floor is free_vco_ici_floor() in "
+               "wifitrx.impairments.phase_noise and is drawn on the study's "
+               "loop-bandwidth page (0.7.13).")
+        p.footer(foot.format(2))
+        p.close()
+
+        p = Page(pdf, "Figure: config 2 vs loop bandwidth, both standards, 40 MHz")
+        p.image(png)
+        p.para("Solid: closed form after CPE removal; dashed: no CPE removal (identical "
+               "for both standards); circles: time-domain model, config 2, 8 frames.  "
+               "Dotted horizontals: the free-running-VCO floors π²k₂T/3.  Dash-dotted "
+               "verticals: f_c = 0.443/T; dotted vertical: the plateau/VCO crossing f_x.",
+               size=9.5)
+        p.footer(foot.format(3))
+        p.close()
+    return pdf_path
+
+
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--out", type=Path, default=Path("docs"))
     a = ap.parse_args(argv)
     a.out.mkdir(parents=True, exist_ok=True)
     print("written:", build(a.out))
+    print("written:", build_loop_note(a.out))
 
 
 if __name__ == "__main__":
