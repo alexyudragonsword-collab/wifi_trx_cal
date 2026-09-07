@@ -93,6 +93,8 @@ python app/main.py
   由 `python tools/build_pn_cpe_note.py --out docs/` 生成,数字来自库本身
 - `docs/pn_cpe_note_loop_bandwidth.pdf` — 同一脚本生成的第二篇:去 CPE 后 PLL 环路带宽
   为何在 11ax/be 有尖锐最优、在 11ac/n 左侧几乎平坦——自由 VCO 地板 π²k₂T/3
+- `docs/pn_cpe_note_estimation_ladder.pdf` — 第三篇:配置 ② → ③ → ④ 的三级台阶,
+  每一级加的是哪种误差、随什么平均、随残余 CFO 怎么变、各自靠什么消
 - `docs/backlog_zh.md` — 待办与已落地项的决策记录
 - `CHANGELOG.md` — 版本变更(交付格式的改动在这里显式标注)
 - `PROVENANCE.md` — 拷贝代码来源

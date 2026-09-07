@@ -10,6 +10,12 @@ PLL loop-bandwidth optimum on 11ax/be and a flat left side on 11ac/n:
 the free-running-VCO floor pi^2/3 k2 T that a narrow loop saturates at,
 6 dB lower for the 3.2 us symbol.
 
+docs/pn_cpe_note_estimation_ladder.pdf — the three-step ladder from the
+ICI floor (config 2) through the LTF channel estimate's frozen error
+(config 3) to the pilot CPE estimator's noise (config 4): what each step
+adds, what it averages with, how it depends on a residual CFO, and what
+removes it.
+
 Typeset with matplotlib mathtext, so it builds without LaTeX::
 
     MPLBACKEND=Agg python tools/build_pn_cpe_note.py --out docs/
@@ -531,6 +537,200 @@ def build_loop_note(out_dir: Path) -> Path:
     return pdf_path
 
 
+# ------------------------------------------------ note 3: the ladder 2 -> 3 -> 4
+def ladder_readings() -> dict:
+    """Configs 2/3/4 at 40 MHz 11ax, shipped LO, single LO, 8 frames, at
+    no offset and at 2 kHz residual CFO — the modem chain read step by
+    step, straight from the study's helpers."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
+    from specs import _pn_config, _pn_nominal  # noqa: E402
+    from wifitrx.waveform.pilots import pilot_positions
+
+    cfg = _pn_config({"bw_mhz": BW_HZ / 1e6, "std": "11ax/be"})
+    n_p = int(pilot_positions(cfg).size)
+    out = {"n_p": n_p, "n_active": cfg.n_active,
+           "pilot_theory_db": 10 * np.log10(1 + 1 / (2 * n_p)),
+           "ltf_theory_db": 10 * np.log10(1.5)}
+    for cfo in (0.0, 2e3):
+        out[cfo] = _pn_nominal(cfg, 1, 8, 0, cfo)
+    return out
+
+
+def ladder_figure(lr: dict, path: Path) -> None:
+    fig = Figure(figsize=(11, 5.4))
+    ax, ax2 = fig.subplots(1, 2, gridspec_kw={"width_ratios": (1.35, 1)})
+    names = ("2  genie CPE,\ntrue channel", "3  + acquisition\n+ LTF estimate",
+             "4  genie CPE ->\npilot CPE")
+    xs = np.arange(3)
+    for k, (cfo, col, lab) in enumerate(((0.0, "tab:blue", "Δf = 0"),
+                                         (2e3, "tab:red", "Δf = 2 kHz"))):
+        vals = lr[cfo][1:4]
+        ax.bar(xs + (k - 0.5) * 0.36, vals - (-50), 0.34, bottom=-50, color=col,
+               alpha=0.85, label=lab)
+        for x, v in zip(xs, vals):
+            ax.annotate(f"{v:.1f}", (x + (k - 0.5) * 0.36, v), fontsize=8,
+                        ha="center", va="bottom", xytext=(0, 2),
+                        textcoords="offset points", color=col)
+    v0 = lr[0.0]
+    # the two Δf = 0 steps, called out in the empty band above the bars
+    for x0, x1, col, lab in ((0, 1, "tab:orange", "frozen LTF error"),
+                             (1, 2, "tab:purple", "pilot estimator noise")):
+        ax.annotate("", xy=(x1 - 0.18, v0[x1 + 1]), xytext=(x0 - 0.18, v0[x0 + 1]),
+                    arrowprops=dict(arrowstyle="->", color=col, lw=1.2,
+                                    connectionstyle="arc3,rad=-0.25"))
+        # the label sits right of the arrow's mid-point so it clears the
+        # tall Δf = 2 kHz bar of config 2 (that bar reaches -26.7 dB)
+        ax.annotate(f"+{v0[x1 + 1] - v0[x0 + 1]:.2f} dB  {lab}",
+                    ((x0 + x1) / 2 + 0.05, -38.6) if x0 == 0 else (2.45, -37.5),
+                    fontsize=8, ha="left" if x0 == 0 else "right", color=col)
+    ax.set_xticks(xs)
+    ax.set_xticklabels(names, fontsize=8.5)
+    ax.set_ylabel("EVM [dB]")
+    ax.set_ylim(-50, -20)
+    ax.grid(True, axis="y", alpha=0.3)
+    ax.legend(fontsize=8, loc="upper left")
+    ax.set_title(f"The estimation ladder — {BW_HZ / 1e6:.0f} MHz 11ax/be, shipped LO, "
+                 f"single LO, 8 frames, N_p = {lr['n_p']}\nconfig 2 is the only step "
+                 "that moves with a residual CFO (no acquisition stage)", fontsize=9.5)
+
+    n_p = np.array([4, 6, 8, 16, 32])
+    ax2.plot(n_p, 10 * np.log10(1 + 1 / (2 * n_p)), "o-", color="tab:purple",
+             label="pilot step, theory 10·log₁₀(1 + 1/(2N_p))")
+    ax2.plot([lr["n_p"]], [v0[3] - v0[2]], "s", ms=8, mfc="none", color="tab:purple",
+             label=f"measured, N_p = {lr['n_p']}: {v0[3] - v0[2]:.2f} dB")
+    ax2.axhline(lr["ltf_theory_db"], color="tab:orange", ls="--", lw=1.2,
+                label="LTF step, theory 10·log₁₀(1 + ρ/2), ρ = 1, two repeats")
+    ax2.plot([lr["n_p"]], [v0[2] - v0[1]], "^", ms=8, mfc="none", color="tab:orange",
+             label=f"measured: {v0[2] - v0[1]:.2f} dB")
+    for n, bw in zip(n_p, (20, 40, 80, 160, 320)):
+        ax2.annotate(f"{bw} MHz", (n, 10 * np.log10(1 + 1 / (2 * n))), fontsize=7,
+                     ha="left", va="bottom", xytext=(3, 3), textcoords="offset points")
+    ax2.set_xscale("log", base=2)
+    ax2.set_xticks(n_p)
+    ax2.set_xticklabels([str(n) for n in n_p])
+    ax2.set_xlabel("pilots per symbol N_p")
+    ax2.set_ylabel("step above the previous config [dB]")
+    ax2.set_ylim(0, 2.5)
+    ax2.grid(True, which="both", alpha=0.3)
+    ax2.legend(fontsize=7.5, loc="upper right")
+    ax2.set_title("The two estimation steps: one averages with pilots,\n"
+                  "the other with LTF repeats — neither with symbols", fontsize=9.5)
+    fig.tight_layout()
+    fig.savefig(path, dpi=130)
+
+
+def build_ladder_note(out_dir: Path) -> Path:
+    lr = ladder_readings()
+    v0, v2 = lr[0.0], lr[2e3]
+    png = out_dir / "pn_cpe_note_estimation_ladder.png"
+    ladder_figure(lr, png)
+    pdf_path = out_dir / "pn_cpe_note_estimation_ladder.pdf"
+    foot = "wifitrx — pn_cpe_study, the estimation ladder — page {} / 3"
+    with PdfPages(pdf_path) as pdf:
+        p = Page(pdf, "The estimation ladder: configs 2, 3 and 4")
+        p.text("What each step of the modem chain adds to the phase-noise EVM, and "
+               "what removes it", size=9.5, style="italic", color="0.35", gap=0.0)
+        p.text(f"pn_cpe_study, {BW_HZ / 1e6:.0f} MHz 11ax/be, shipped LO, single LO, "
+               f"8 frames, N_p = {lr['n_p']} pilots, {lr['n_active']} active tones",
+               size=9.5, style="italic", color="0.35", gap=0.14)
+        p.para("Configs 2, 3 and 4 form a chain in which each step adds exactly one "
+               "kind of error:")
+        p.bullet("2  genie CPE, true channel — only the ICI the phase noise itself "
+                 "leaves.")
+        p.bullet("3  2 + CFO acquisition (LTF pair, then the pilots' phase slope) + LTF "
+                 "channel estimate — plus one frozen estimation error.")
+        p.bullet("4  3 with the genie CPE replaced by the N_p-pilot CPE — plus one "
+                 "estimation error that is independent per symbol.")
+        p.heading("Readings")
+        p.table(("", "Δf = 0", "Δf = 2 kHz", "vs the previous step (Δf = 0)"),
+                (("2", f"{v0[1]:.2f} dB", f"{v2[1]:.2f} dB", "—"),
+                 ("3", f"{v0[2]:.2f} dB", f"{v2[2]:.2f} dB",
+                  f"+{v0[2] - v0[1]:.2f} dB"),
+                 ("4", f"{v0[3]:.2f} dB", f"{v2[3]:.2f} dB",
+                  f"+{v0[3] - v0[2]:.2f} dB")),
+                (0.0, 0.6, 1.9, 3.3))
+        p.heading("Three errors of different nature")
+        p.para("Within one symbol the equalized subcarriers are X_k(1 + ε_k) + ICI_k, "
+               "where ε_k is the frozen error of the LTF channel estimate and ICI_k "
+               "this symbol's phase-noise ICI.  Config 2 reads σ²_ICI alone.  The "
+               "channel estimate divides the LTF symbol's own ICI into Ĥ_k, so every "
+               "symbol of the packet pays it again:")
+        p.formula(r"$\dfrac{P_{e,3}}{P_{e,2}} \;\approx\; 1+\dfrac{\rho}{2}\quad"
+                  r"(\text{two LTF repeats averaged},\ \rho\approx 1)\;\Rightarrow\;"
+                  r"+1.76\ \mathrm{dB\ theory},\ " + f"+{v0[2] - v0[1]:.2f}"
+                  r"\ \mathrm{dB\ measured}$", size=11.5, height=0.55)
+        p.para("An LS phase estimate over N subcarriers has error variance "
+               "(σ²_ICI + σ²_ε)/(2N); applied to all of the symbol's data points it "
+               "adds that fraction of error power common-mode:")
+        p.formula(r"$\dfrac{P_{e,4}}{P_{e,3}} \;\approx\; 1+\dfrac{1}{2N_p}"
+                  r"-\dfrac{1}{2N_{\mathrm{active}}}\;\Rightarrow\;"
+                  + f"10\\log_{{10}}(1+1/{2 * lr['n_p']}) = {lr['pilot_theory_db']:.2f}"
+                  r"\ \mathrm{dB\ theory},\ " + f"+{v0[3] - v0[2]:.2f}"
+                  r"\ \mathrm{dB\ measured}$", size=11.5, height=0.55)
+        p.table(("", "2: ICI floor", "3 − 2: frozen LTF error", "4 − 3: pilot noise"),
+                (("averages with", "nothing", "the number of LTFs", "the number of pilots"),
+                 ("with symbols?", "—", "no (frozen per packet)", "no (common-mode)"),
+                 ("vs residual Δf", "adds 1 − sinc²(ΔfT)", "unchanged", "unchanged"),
+                 ("vs LO level", "follows it", "constant dB gap", "constant dB gap"),
+                 ("vs symbol length T", "grows with T", "ratio unchanged", "ratio unchanged")),
+                (0.0, 1.35, 2.75, 4.65), size=9.5)
+        p.footer(foot.format(1))
+        p.close()
+
+        p = Page(pdf)
+        p.heading("Three things worth noting")
+        p.bullet("Step 3 is the second-largest term, an order of magnitude above the "
+                 "pilot term.  Intuition focuses on 'are there enough pilots', but the "
+                 "real cost sits in the channel estimate: the LTF is received once, "
+                 "its share of ICI is frozen into Ĥ, and every symbol of the packet "
+                 "pays for it again.  This is where 'phase noise's EVM contribution "
+                 "roughly doubles in the modem form' comes from (1.5× → 1.76 dB; the "
+                 "two LTF repeats' ICI is correlated at low offset, hence the slightly "
+                 "larger measured value).")
+        p.bullet("Config 2 is the only one that depends on Δf, because it has no "
+                 "acquisition stage; configs 3 and 4 read identically at Δf = 0 and "
+                 "2 kHz.  The tracking's value shows in the Δf-dependence of the 2 → 3 "
+                 "step; the estimation's cost shows in the two Δf = 0 steps of "
+                 "2 → 3 → 4 — one chain, two readings.")
+        p.bullet("Each term has its own remedy.  Config 2 only through the LO (k₂, "
+                 "loop bandwidth) or a shorter symbol.  Step 3 through more LTFs (each "
+                 "de-rotated by its own CPE before averaging, otherwise the magnitude "
+                 "is biased), smoothing Ĥ across tones on a flat channel (here the "
+                 "channel is exactly unity, so tone-averaging would drive it to zero; a "
+                 "real frequency-selective channel limits it by its coherence "
+                 "bandwidth), or decision-directed channel tracking.  Step 4 through "
+                 "N_p, pilot power (this model runs pilots at data power) or "
+                 "decision-directed CPE.  The three do not add into one 'total gain', "
+                 "but each step of the staircase can be attributed on its own.")
+        p.heading("Expected pilot step by bandwidth")
+        p.table(("bandwidth", "20 MHz", "40 MHz", "80 MHz", "160 MHz", "320 MHz"),
+                (("N_p", "4", "6", "8", "16", "32"),
+                 ("10·log₁₀(1 + 1/(2N_p))", "0.51 dB", "0.35 dB", "0.26 dB", "0.13 dB",
+                  "0.07 dB")),
+                (0.0, 1.7, 2.6, 3.5, 4.4, 5.4), size=9.5)
+        p.para("On an OFDMA 26-tone RU with two pilots the same term is 0.97 dB — the "
+               "only place where it becomes the dominant one.")
+        p.heading("Where the numbers come from")
+        p.para("All readings are computed by this script through the study's own "
+               "helpers (_pn_nominal at 40 MHz / 11ax / single LO / 8 frames, seed 0); "
+               "the 8-frame values scatter about 0.3 dB rms seed to seed (frozen "
+               "LTF error, one realization per frame).  The chain is the one shipped "
+               "in pn_cpe_study 0.7.14: LTF-pair coarse CFO, pilot-slope fine CFO, "
+               "LTF channel estimate, then genie or pilot CPE.")
+        p.footer(foot.format(2))
+        p.close()
+
+        p = Page(pdf, "Figure: the ladder at Δf = 0 and 2 kHz; the two steps vs N_p")
+        p.image(png)
+        p.para("Left: configs 2/3/4 with and without a 2 kHz residual CFO — only config "
+               "2 moves.  Right: the pilot step against the number of pilots (theory "
+               "10·log₁₀(1 + 1/(2N_p)) with the 40 MHz measurement) and the LTF step "
+               "(theory for two averaged repeats with the measurement).", size=9.5)
+        p.footer(foot.format(3))
+        p.close()
+    return pdf_path
+
+
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--out", type=Path, default=Path("docs"))
@@ -538,6 +738,7 @@ def main(argv=None) -> None:
     a.out.mkdir(parents=True, exist_ok=True)
     print("written:", build(a.out))
     print("written:", build_loop_note(a.out))
+    print("written:", build_ladder_note(a.out))
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@
 - **抓出的真机制**:LTF 对在相噪下读出伪 CFO(3.2 µs LTF 约 180 Hz rms),只按它去旋转整帧会把误差灌回符号内 ICI,11ac 差 0.6 dB、两制式差值 1.5 → 0.3。导频斜率细估(整帧基线)修掉。这正是 modem 必须用导频环细跟 CFO 的原因。
 - **口径**:各页"CPE 收益"只是 0.443/T 以下那份相噪;跟踪对 CFO 的价值单独在第五页,两者不相加。
 - 指针:`CHANGELOG.md` 0.7.14、`docs/backlog_zh.md` B15 末尾。
+- **归档(0.7.15)**:第三篇短文 `docs/pn_cpe_note_estimation_ladder.pdf`(② → ③ → ④ 三级台阶:+1.76/+1.73 dB 冻结 LTF 误差、+0.35/+0.33 dB 导频噪声,性质对照与消法),同一脚本现算生成;只动 docs/tools。
 - **run #58 裁决(c2de735)**:三 job 全绿。解释版与编译版端上均 **5 run / 0 failed / 0 skipped**,`metricsMatchDesktopGolden` 按 24 指标 / 5 页的新金标通过(含 CFO 捕获级的 `np.unwrap` 回归在端上 numpy 1.19.5 复现);编译版 wheel `wifitrx-0.7.14-cp38-cp38-android_21_{arm64_v8a,x86_64}`,`cythonised 52 modules`。0.7.14 两种出货形态均已裁决。
 
 ## 2026-09-06 · R22:自由 VCO 地板 π²k₂T/3——解释 PLL 页两制式的形状差(0.7.13)
