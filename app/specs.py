@@ -828,26 +828,39 @@ def _pn_config(p: dict):
                       oversampling=4)
 
 
-def _pn_four_configs(frame, cols, pilots, phi) -> np.ndarray:
+def _pn_four_configs(frame, cols, pilots, phi, cfo_hz: float = 0.0) -> np.ndarray:
     """EVM [dB] of the four measurement configurations for one
     phase-noise realization ``phi`` applied to ``frame``.
 
-    1  no CPE correction, true channel (H = 1): CPE + ICI total
+    1  no tracking at all, true channel (H = 1): CPE + ICI total
     2  genie CPE (all tones vs ideal reference), true channel: ICI floor
-    3  genie CPE, channel estimate from the received LTF pair
-    4  pilot-only CPE (N_p tones), LTF channel estimate: the modem form
+    3  LTF CFO acquisition + LTF channel estimate + genie CPE
+    4  LTF CFO acquisition + LTF channel estimate + pilot-only CPE: the
+       modem form
 
     Phase noise is the only impairment and the channel is flat, so the
     true channel is exactly unity and configs 1/2 need no equalizer at
     all — no self-fitted gain, hence no degrees-of-freedom correction.
     Data tones are scored in every config; pilot tones are excluded.
+
+    ``cfo_hz`` adds a residual carrier offset on top of the phase noise.
+    Configs 1 and 2 never see it estimated: 1 rotates symbol by symbol
+    and smears, 2 removes each symbol's rotation and keeps the in-symbol
+    ramp as ICI, exactly 1 - sinc^2(cfo T) — a CFO is a phase-noise line
+    at offset cfo.  Configs 3 and 4 acquire it from the LTF pair before
+    the channel estimate, as any modem does; the pilot CPE then absorbs
+    what the acquisition left.  That difference is the tracking's real
+    value, which the phase-noise-only reading structurally omits.
     """
     from wifitrx.metrics.cpe import correct_cpe, correct_cpe_pilots
     from wifitrx.waveform.ofdm import demodulate_ofdm
-    from wifitrx.waveform.preamble import channel_estimate
+    from wifitrx.waveform.preamble import apply_cfo, channel_estimate, estimate_cfo
 
     cfg = frame.config
+    fs = cfg.sample_rate_hz
     y = frame.x * np.exp(1j * phi)
+    if cfo_hz:
+        y = apply_cfo(y, cfo_hz, fs)
     tx = frame.data.tx_symbols
     rx = demodulate_ofdm(y[frame.preamble_len:], frame.data)
     data = np.ones(cfg.n_active, dtype=bool)
@@ -859,14 +872,68 @@ def _pn_four_configs(frame, cols, pilots, phi) -> np.ndarray:
         return 10.0 * np.log10(float((np.abs(sym[:, data] - ref) ** 2).mean())
                                / p_ref)
 
-    h = channel_estimate(y, frame)
-    req = rx / h
+    # the modem's acquisition: coarse CFO from the LTF pair, then a fine
+    # refinement from the slope of the pilots' common phase across the
+    # frame (the tracking loop's CFO branch, cal/tracking.py), then the
+    # channel estimate.  The coarse step alone is not enough: under phase
+    # noise the LTF pair reads a spurious offset (~25 Hz rms for the
+    # 12.8 us LTF, ~180 Hz for the 3.2 us one) and de-rotating the frame
+    # by it puts that error back as in-symbol ramp ICI — 0.6 dB on the
+    # legacy numerology.  The pilot baseline is the whole frame, two
+    # orders of magnitude longer, and takes it out.
+    y_acq = apply_cfo(y, -estimate_cfo(y, frame, fs), fs)
+    y_acq = apply_cfo(y_acq, -_pilot_cfo_hz(y_acq, frame, cols, pilots), fs)
+    h = channel_estimate(y_acq, frame)
+    req = demodulate_ofdm(y_acq[frame.preamble_len:], frame.data) / h
     return np.array([score(rx), score(correct_cpe(rx, tx)),
                      score(correct_cpe(req, tx)),
                      score(correct_cpe_pilots(req, cols, pilots))])
 
 
-def _pn_sweep_point(profile, frame, cols, pilots, n_lo, n_frames, rng):
+def _pilot_cfo_hz(y, frame, cols, pilots) -> float:
+    """Residual CFO [Hz] from the pilots' common phase vs symbol time —
+    the same regression the tracking loop runs (cal/tracking.py), on
+    one frame."""
+    from wifitrx.waveform.ofdm import demodulate_ofdm
+
+    cfg = frame.config
+    fs = cfg.sample_rate_hz
+    syms = demodulate_ofdm(y[frame.preamble_len:], frame.data)
+    common = np.unwrap(np.angle((syms[:, cols] * np.conj(pilots)).sum(axis=1)))
+    sym_len_s = (cfg.fft_size + cfg.cp_len) * cfg.oversampling / fs
+    t_sym = (np.arange(cfg.n_symbols) + 0.5) * sym_len_s
+    tc = t_sym - t_sym.mean()
+    denom = float(np.dot(tc, tc))
+    if denom == 0.0:
+        return 0.0
+    return float(np.dot(tc, common - common.mean()) / denom / (2 * np.pi))
+
+
+def _cfo_closed_forms(frame, cfo_hz: float) -> tuple:
+    """Error power a residual CFO adds, for the two untracked configs.
+
+    Config 2 removes each symbol's rotation; the in-symbol ramp stays as
+    ICI, 1 - sinc^2(cfo T).  Config 1 removes nothing: symbol k is
+    rotated by the accumulated phase 2 pi cfo t_k plus the ramp's own
+    half-symbol lag, so its error is |sinc(cfo T) e^{j theta_k} - 1|^2
+    averaged over the frame's symbols — which walks off towards 2 (the
+    "smeared" constellation) as the rotation covers the circle.
+    """
+    cfg = frame.config
+    t_fft = 1.0 / cfg.subcarrier_spacing_hz
+    fs = cfg.sample_rate_hz
+    sym_len = (cfg.fft_size + cfg.cp_len) * cfg.oversampling
+    cp = cfg.cp_len * cfg.oversampling
+    starts = frame.preamble_len + cp + sym_len * np.arange(cfg.n_symbols)
+    theta = 2 * np.pi * cfo_hz * (starts / fs + t_fft / 2)
+    j0 = np.sinc(cfo_hz * t_fft)
+    e1 = float(np.mean(np.abs(j0 * np.exp(1j * theta) - 1.0) ** 2))
+    e2 = float(1.0 - j0 ** 2)
+    return e1, e2
+
+
+def _pn_sweep_point(profile, frame, cols, pilots, n_lo, n_frames, rng,
+                    cfo_hz: float = 0.0):
     """Power-average the four readings over ``n_frames`` independent
     phase-noise realizations (``n_lo`` independent LOs summed)."""
     from wifitrx.impairments.phase_noise import LOModel
@@ -879,11 +946,13 @@ def _pn_sweep_point(profile, frame, cols, pilots, n_lo, n_frames, rng):
         phi = np.zeros(n)
         for _k in range(n_lo):
             phi = phi + lo.phase(n, fs, rng)
-        acc += 10.0 ** (_pn_four_configs(frame, cols, pilots, phi) / 10.0)
+        acc += 10.0 ** (_pn_four_configs(frame, cols, pilots, phi, cfo_hz)
+                        / 10.0)
     return 10.0 * np.log10(acc / n_frames)
 
 
-def _pn_nominal(cfg, n_lo: int, n_frames: int, seed: int) -> np.ndarray:
+def _pn_nominal(cfg, n_lo: int, n_frames: int, seed: int,
+                cfo_hz: float = 0.0) -> np.ndarray:
     """The four readings at the shipped LO profile for one numerology:
     frame with pilots + LTF pair, ``n_frames`` realizations averaged."""
     from wifitrx.impairments.phase_noise import DEFAULT_WIFI7_LO_PROFILE
@@ -894,7 +963,7 @@ def _pn_nominal(cfg, n_lo: int, n_frames: int, seed: int) -> np.ndarray:
     frame = build_frame(cfg, data=wf)
     pilots = pilot_sequence(cfg.n_symbols, cols.size)
     return _pn_sweep_point(DEFAULT_WIFI7_LO_PROFILE, frame, cols, pilots, n_lo,
-                           n_frames, np.random.default_rng(seed))
+                           n_frames, np.random.default_rng(seed), cfo_hz)
 
 
 def run_pn_cpe_study(p: dict) -> AnalysisResult:
@@ -917,7 +986,10 @@ def run_pn_cpe_study(p: dict) -> AnalysisResult:
     estimate's frozen error, the pilot estimator's noise, with the
     no-CPE reading as a level — the 12.8 us symbol leaves CPE removal
     almost nothing to take out, so 11ax/be reads ~1.4 dB worse than
-    11ac/n for the same LO (40 MHz, measured).
+    11ac/n for the same LO (40 MHz, measured).  (e) A residual-CFO
+    sweep at the shipped LO: the untracked configs against the modem
+    form with LTF CFO acquisition — the tracking's real value, which a
+    phase-noise-only reading (nothing below fs/n, no offset) omits.
     """
     from wifitrx.impairments.phase_noise import (
         DEFAULT_WIFI7_LO_PROFILE, TabulatedPhase, TypeIIPllPhase,
@@ -931,6 +1003,7 @@ def run_pn_cpe_study(p: dict) -> AnalysisResult:
     n_frames = max(1, int(p.get("n_frames", 8)))
     seed = int(p.get("seed", 0))
     f_1f3 = float(p.get("vco_1f3_khz", 0.0)) * 1e3
+    cfo_hz = float(p.get("cfo_hz", 0.0))
     t_fft = 1.0 / cfg.subcarrier_spacing_hz
 
     wf, cols = generate_ofdm_with_pilots(cfg)
@@ -947,17 +1020,19 @@ def run_pn_cpe_study(p: dict) -> AnalysisResult:
                               l_dbc_pts=tuple(v + off_db
                                               for v in base.l_dbc_pts))
 
+    cfo_e1, cfo_e2 = _cfo_closed_forms(frame, cfo_hz)
+
     def closed(profile):
         part = cpe_partition(lambda f: n_lo * profile.psd(f), t_fft,
                              f_lo, f_hi)
-        return (10.0 * np.log10(part["total_rad2"]),
-                10.0 * np.log10(part["ici_rad2"]), part)
+        return (10.0 * np.log10(part["total_rad2"] + cfo_e1),
+                10.0 * np.log10(part["ici_rad2"] + cfo_e2), part)
 
     # ---------------------------------------------- (c) level sweep
     offsets = np.arange(-10.0, 21.0, 5.0)
     rng = np.random.default_rng(seed)
     readings = np.array([_pn_sweep_point(scaled(o), frame, cols, pilots,
-                                         n_lo, n_frames, rng)
+                                         n_lo, n_frames, rng, cfo_hz)
                          for o in offsets])
     cf = [closed(scaled(o)) for o in offsets]
     cf_total = np.array([c[0] for c in cf])
@@ -981,7 +1056,7 @@ def run_pn_cpe_study(p: dict) -> AnalysisResult:
         pwr = integrate_pn(f_int, n_lo * prof.psd(f_int), f_lo, f_hi)
         lb_jit.append(1e15 * np.sqrt(pwr) / (2 * np.pi * f_carrier))
         lb_td.append(_pn_sweep_point(prof, frame, cols, pilots, n_lo,
-                                     n_frames, rng_lb)[:2])
+                                     n_frames, rng_lb, cfo_hz)[:2])
     lb_total, lb_ici = np.array(lb_total), np.array(lb_ici)
     lb_jit, lb_td = np.array(lb_jit), np.array(lb_td)
     i_jit = int(np.argmin(lb_jit))
@@ -1075,11 +1150,12 @@ def run_pn_cpe_study(p: dict) -> AnalysisResult:
     # ---------------------------------------------- page (c): four configs
     fig_c = new_figure(figsize=(8.6, 5.6))
     ax = fig_c.add_subplot(111)
-    styles = (("1  no CPE correction, true channel", "s-", "gray"),
+    styles = (("1  no tracking at all, true channel", "s-", "gray"),
               ("2  genie CPE, true channel (ICI floor)", "o-", "tab:red"),
-              ("3  genie CPE, LTF channel estimate", "^-", "tab:orange"),
-              ("4  pilot CPE (N_p tones), LTF estimate — modem form",
-               "v-", "tab:purple"))
+              ("3  CFO acquisition + LTF channel estimate + genie CPE", "^-",
+               "tab:orange"),
+              ("4  CFO acquisition + LTF estimate + pilot CPE (N_p tones) "
+               "— modem form", "v-", "tab:purple"))
     for k, (lab, st, col) in enumerate(styles):
         ax.plot(offsets, readings[:, k], st, ms=4.5, color=col, label=lab)
     ax.plot(offsets, cf_total, "--", color="gray", lw=1.0,
@@ -1098,10 +1174,13 @@ def run_pn_cpe_study(p: dict) -> AnalysisResult:
     ax.set_title(
         f"Four measurement configurations — {p['bw_mhz']} MHz "
         f"{p.get('std', '11ax/be')}, {lo_txt}, N_p = {cols.size}, "
-        f"{n_frames} frame(s)\nat 0 dB: CPE buys {c1 - c2:.2f} dB, "
-        f"LTF estimate costs {c3 - c2:.2f} dB, pilot CPE costs "
-        f"{c4 - c3:.2f} dB (direct readings, not power-additive)",
-        fontsize=9.5)
+        f"{n_frames} frame(s)"
+        + (f", residual CFO {cfo_hz:.0f} Hz injected" if cfo_hz else "")
+        + f"\nat 0 dB: CPE buys {c1 - c2:.2f} dB, "
+        + (f"acquisition + LTF estimate {c3 - c2:+.2f} dB" if cfo_hz
+           else f"LTF estimate costs {c3 - c2:.2f} dB")
+        + f", pilot CPE costs {c4 - c3:.2f} dB (direct readings, not "
+        "power-additive)", fontsize=9.5)
     fig_c.tight_layout()
 
     # ---------------------------------------------- page (d): standards
@@ -1114,7 +1193,8 @@ def run_pn_cpe_study(p: dict) -> AnalysisResult:
     else:
         other_note = ""
         per_std[other_std] = _pn_nominal(
-            _pn_config({**p, "std": other_std}), n_lo, n_frames, seed + 2)
+            _pn_config({**p, "std": other_std}), n_lo, n_frames, seed + 2,
+            cfo_hz)
     order = [s for s in ("11ac/n", "11ax/be") if s in per_std]
 
     def lin(db):
@@ -1185,6 +1265,51 @@ def run_pn_cpe_study(p: dict) -> AnalysisResult:
     else:
         std_gap = None
 
+    # ---------------------------------------------- page (e): residual CFO
+    cfos = np.array([0.0, 100.0, 200.0, 500.0, 1e3, 2e3, 5e3, 1e4])
+    rng_cfo = np.random.default_rng(seed + 3)
+    cfo_rd = np.array([_pn_sweep_point(base, frame, cols, pilots, n_lo,
+                                       n_frames,
+                                       np.random.default_rng(rng_cfo.integers(1 << 30)),
+                                       float(c))
+                       for c in cfos])
+    pn0 = cpe_partition(lambda f: n_lo * base.psd(f), t_fft, f_lo, f_hi)
+    cfo_cf = np.array([_cfo_closed_forms(frame, float(c)) for c in cfos])
+    cfo_cf1 = 10.0 * np.log10(pn0["total_rad2"] + cfo_cf[:, 0])
+    cfo_cf2 = 10.0 * np.log10(pn0["ici_rad2"] + cfo_cf[:, 1])
+    i_2k = int(np.argmin(np.abs(cfos - 2e3)))
+    fig_e = new_figure(figsize=(8.6, 5.6))
+    ax = fig_e.add_subplot(111)
+    xk = np.arange(cfos.size)          # categorical: 0 must sit on the axis
+    ax.plot(xk, cfo_rd[:, 0], "s-", ms=4.5, color="gray",
+            label="1  no tracking at all")
+    ax.plot(xk, cfo_rd[:, 1], "o-", ms=4.5, color="tab:red",
+            label="2  genie CPE only (rotation removed, in-symbol ramp stays)")
+    ax.plot(xk, cfo_rd[:, 2], "^-", ms=4.5, color="tab:orange",
+            label="3  CFO acquisition (LTF pair + pilot slope) + LTF estimate + genie CPE")
+    ax.plot(xk, cfo_rd[:, 3], "v-", ms=4.5, color="tab:purple",
+            label="4  CFO acquisition + LTF estimate + pilot CPE — modem form")
+    ax.plot(xk, cfo_cf1, "--", color="gray", lw=1.0,
+            label="closed form 1: PN total + |sinc(ΔfT)·e^{jθ_k} − 1|² averaged")
+    ax.plot(xk, cfo_cf2, "--", color="tab:red", lw=1.0,
+            label="closed form 2: PN ICI + [1 − sinc²(Δf·T)]")
+    ax.axhline(-38.0, color="k", ls="-.", lw=0.8)
+    ax.set_xticks(xk)
+    ax.set_xticklabels([f"{c / 1e3:g}" for c in cfos])
+    ax.set_xlabel("residual carrier offset Δf [kHz]")
+    ax.set_ylabel("EVM, phase noise + residual CFO [dB]")
+    ax.set_ylim(min(-50.0, float(cfo_rd.min()) - 2), 2.0)
+    ax.grid(True, which="both", alpha=0.3)
+    ax.legend(fontsize=7, loc="upper left")
+    ax.set_title(
+        f"Residual CFO at the shipped LO level — {p['bw_mhz']} MHz "
+        f"{p.get('std', '11ax/be')}, {lo_txt}, T_FFT = {t_fft * 1e6:.1f} µs, "
+        f"{n_frames} frame(s)\nat Δf = 2 kHz: no tracking {cfo_rd[i_2k, 0]:.1f} "
+        f"dB, genie CPE {cfo_rd[i_2k, 1]:.1f} dB, modem form "
+        f"{cfo_rd[i_2k, 3]:.1f} dB (vs {cfo_rd[0, 3]:.1f} dB at Δf = 0)",
+        fontsize=9.5)
+    fig_e.tight_layout()
+
     metrics = {
         "evm_no_cpe_db": round(float(c1), 2),
         "evm_genie_cpe_db": round(float(c2), 2),
@@ -1202,6 +1327,11 @@ def run_pn_cpe_study(p: dict) -> AnalysisResult:
         "loopbw_opt_evm_khz": round(float(loop_bws[i_evm]) / 1e3, 1),
         "loopbw_evm_gain_db": round(float(gain), 2),
         "vco_floor_post_cpe_db": round(float(vco_floor_db), 2),
+        "cfo_hz": round(cfo_hz, 1),
+        "cfo2k_no_tracking_db": round(float(cfo_rd[i_2k, 0]), 2),
+        "cfo2k_genie_cpe_db": round(float(cfo_rd[i_2k, 1]), 2),
+        "cfo2k_modem_db": round(float(cfo_rd[i_2k, 3]), 2),
+        "cfo2k_tracking_value_db": round(float(cfo_rd[i_2k, 0] - cfo_rd[i_2k, 3]), 2),
         "evm_pilot_cpe_11ac_db": (round(float(per_std["11ac/n"][3]), 2)
                                   if "11ac/n" in per_std else None),
         "evm_pilot_cpe_11ax_db": (round(float(per_std["11ax/be"][3]), 2)
@@ -1237,6 +1367,19 @@ def run_pn_cpe_study(p: dict) -> AnalysisResult:
         "under 1 dB (the curve is flat left of the optimum), with the 12.8 "
         "us symbol it is ~5 dB (a sharp valley) — the loop must hold the "
         "VCO near the plateau/VCO crossing.")
+    text += (
+        f"\nResidual CFO (page e): a carrier offset is a phase-noise line at "
+        f"Δf, so genie CPE leaves 1 − sinc²(Δf·T) of it as ICI while no "
+        f"tracking at all lets the constellation rotate symbol by symbol.  At "
+        f"Δf = 2 kHz: no tracking {cfo_rd[i_2k, 0]:.1f} dB, genie CPE "
+        f"{cfo_rd[i_2k, 1]:.1f} dB, modem form (LTF CFO acquisition + pilot "
+        f"CPE) {cfo_rd[i_2k, 3]:.1f} dB against {cfo_rd[0, 3]:.1f} dB with no "
+        "offset.  The gap between config 1 and the modem form is the "
+        "tracking's real value; the phase-noise-only pages, which contain "
+        "nothing below fs/n and no offset, cannot show it — their 'CPE gain' "
+        "is only the share of the LO spectrum below 0.443/T."
+        + (f"  This run injects Δf = {cfo_hz:.0f} Hz on every page; the "
+           "closed forms on page (c) include it." if cfo_hz else ""))
     if std_gap is not None:
         text += (f"\nStandards side by side (modem form): 11ax/be "
                  f"{per_std['11ax/be'][3]:.2f} dB vs 11ac/n "
@@ -1252,7 +1395,8 @@ def run_pn_cpe_study(p: dict) -> AnalysisResult:
                           figures=(("PSD partition", fig_a),
                                    ("PLL loop bandwidth", fig_b),
                                    ("Four configurations", fig_c),
-                                   ("Standards side by side", fig_d)),
+                                   ("Standards side by side", fig_d),
+                                   ("Residual CFO", fig_e)),
                           text=text)
 
 
@@ -1494,6 +1638,15 @@ ALL_ANALYSES: tuple[AnalysisSpec, ...] = (
                               "type-II family's VCO flicker corner. 0 "
                               "matches the shipped table's pure 1/f² "
                               "roll-off"),
+            ParamSpec("cfo_hz", "Residual CFO [Hz]", "float", 0.0,
+                      minimum=-20000.0, maximum=20000.0,
+                      tooltip="Carrier offset left after coarse acquisition, "
+                              "injected on every page on top of the phase "
+                              "noise. 0 keeps the isolation study pure; a "
+                              "few kHz shows what tracking is really for: "
+                              "config 1 smears, config 2 keeps the in-symbol "
+                              "ramp as ICI, configs 3/4 acquire it from the "
+                              "LTF pair. Page (e) sweeps it regardless"),
             ParamSpec("seed", "Noise seed", "int", 0, minimum=0),
         ),
         run=run_pn_cpe_study),

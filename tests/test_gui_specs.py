@@ -27,7 +27,8 @@ FAST_PARAMS = {
     "blocker_desense": {"bw_mhz": 160, "offset_mhz": 200.0,
                         "p_sig_dbm": -60.0},
     "pn_cpe_study": {"bw_mhz": 80, "std": "11ax/be", "lo_count": "single",
-                     "n_frames": 2, "vco_1f3_khz": 0.0, "seed": 0},
+                     "n_frames": 2, "vco_1f3_khz": 0.0, "cfo_hz": 0.0,
+                     "seed": 0},
     "spur_planner": {"bw_mhz": 320, "band": "6g"},
 }
 
@@ -244,11 +245,44 @@ def test_pn_study_reads_the_closed_form_and_orders_the_mechanisms():
     # page (d): the two standards at this bandwidth, same LO — the 12.8 us
     # symbol denies CPE removal most of the profile, so 11ax/be reads
     # worse in the modem form (measured +1.4 dB at 40 MHz, +1.5 at 80)
-    assert [t for t, _ in result.figures][-1] == "Standards side by side"
+    titles = [t for t, _ in result.figures]
+    assert titles[-2:] == ["Standards side by side", "Residual CFO"]
     assert m["evm_pilot_cpe_11ax_db"] == m["evm_pilot_cpe_db"]
     assert 0.8 < m["std_gap_db"] < 2.5
     assert m["std_gap_db"] == pytest.approx(
         m["evm_pilot_cpe_11ax_db"] - m["evm_pilot_cpe_11ac_db"], abs=0.011)
+
+
+def test_residual_cfo_is_what_tracking_is_for():
+    """A residual carrier offset is a phase-noise line at Δf.  With no
+    tracking the constellation rotates symbol by symbol and the EVM
+    collapses (measured +4.1 dB at 2 kHz, 40 MHz / 11ax); genie CPE
+    removes each symbol's rotation but keeps the in-symbol ramp, exactly
+    1 - sinc^2(Δf T) (measured -26.7 dB against -26.7 closed form); the
+    modem form acquires the offset from the LTF pair and reads the same
+    as with no offset (-42.1 dB both).  Configs 1/2 must NOT acquire —
+    that gap is the tracking's value the phase-noise-only pages omit."""
+    import numpy as np
+    from specs import _cfo_closed_forms, _pn_config, _pn_nominal
+    from wifitrx.impairments.phase_noise import DEFAULT_WIFI7_LO_PROFILE, cpe_partition
+    from wifitrx.waveform.pilots import generate_ofdm_with_pilots
+    from wifitrx.waveform.preamble import build_frame
+
+    cfg = _pn_config({"bw_mhz": 40, "std": "11ax/be"})
+    clean = _pn_nominal(cfg, 1, 4, 0, 0.0)
+    off = _pn_nominal(cfg, 1, 4, 0, 2e3)
+    assert off[0] > -10.0                         # smeared: measured +4.1 dB
+    assert off[3] == pytest.approx(clean[3], abs=0.3)   # acquired and removed
+    assert off[2] == pytest.approx(clean[2], abs=0.3)
+    wf, cols = generate_ofdm_with_pilots(cfg)
+    frame = build_frame(cfg, data=wf)
+    e1, e2 = _cfo_closed_forms(frame, 2e3)
+    t_fft = 1.0 / cfg.subcarrier_spacing_hz
+    assert e2 == pytest.approx((np.pi * 2e3 * t_fft) ** 2 / 3, rel=0.01)
+    pn = cpe_partition(DEFAULT_WIFI7_LO_PROFILE.psd, t_fft,
+                       cfg.sample_rate_hz / frame.x.size, cfg.sample_rate_hz / 2)
+    assert off[1] == pytest.approx(10 * np.log10(pn["ici_rad2"] + e2), abs=0.5)
+    assert e1 > 1.0                               # rotation covers the circle
 
 
 def test_pilot_cpe_reduces_to_the_genie_when_every_tone_is_a_pilot():

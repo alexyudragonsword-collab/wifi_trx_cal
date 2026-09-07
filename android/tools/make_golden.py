@@ -32,7 +32,8 @@ CASES = [
     # synthesis, np.sinc closed forms — the numpy-1.19 surface the
     # desktop guard cannot exercise physically
     ("pn_cpe_study", {"bw_mhz": 80, "std": "11ax/be", "lo_count": "single",
-                      "n_frames": 2, "vco_1f3_khz": 0.0, "seed": 0}),
+                      "n_frames": 2, "vco_1f3_khz": 0.0, "cfo_hz": 0.0,
+                      "seed": 0}),
 ]
 
 

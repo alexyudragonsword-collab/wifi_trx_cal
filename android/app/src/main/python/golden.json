@@ -63,6 +63,7 @@
    "lo_count": "single",
    "n_frames": 2,
    "vco_1f3_khz": 0.0,
+   "cfo_hz": 0.0,
    "seed": 0
   },
   "metrics": {
@@ -82,10 +83,15 @@
    "loopbw_opt_evm_khz": 300.0,
    "loopbw_evm_gain_db": 0.0,
    "vco_floor_post_cpe_db": -36.85,
+   "cfo_hz": 0.0,
+   "cfo2k_no_tracking_db": 4.04,
+   "cfo2k_genie_cpe_db": -26.63,
+   "cfo2k_modem_db": -42.28,
+   "cfo2k_tracking_value_db": 46.32,
    "evm_pilot_cpe_11ac_db": -43.66,
    "evm_pilot_cpe_11ax_db": -41.95,
    "std_gap_db": 1.71
   },
-  "n_pages": 4
+  "n_pages": 5
  }
 ]
