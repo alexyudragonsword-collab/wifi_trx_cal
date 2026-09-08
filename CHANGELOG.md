@@ -4,6 +4,23 @@
 或 `wifitrx.*` 公开签名的条目都在下面显式标注,交付方按此判断是否需要
 重新取包。日期为落地日期。
 
+## 0.7.16 — 2026-09-08
+
+### 修复:桌面 CI 自 8 月 31 日起持续红(自检断言按硬件抖动)
+
+- **现象**:`ci.yml` 的 push 快线与夜间全量 run #128–#150 除 #144 外全部失败,
+  本地同一提交 304 全绿。失败点是 `tests/test_android_bridge.py` 的
+  `test_self_check_is_the_one_golden_comparison` 要求金标差值**精确等于 0**,
+  CI 机器上 `full_cal.loopback_evm_db` 读出 7.1e-15 dB。本地与 CI 的
+  numpy/scipy 同为 2.4.6/1.17.1——是 CPU/BLAS 求和顺序差异,不是版本差异
+  (同一金标在 #144 绿、#145 纯文档改动红,按硬件抖动)。
+- **后果**:夜间 job 的覆盖率门槛、文档陈旧检查、schematic 校验排在失败步骤
+  之后,八天没有真正执行过;提交信息里的"CI 绿"指的都是 `android.yml`。
+- **修法**:该断言改为 `<= 1e-9`(测的是比较逻辑,不是位级复现;物理容差
+  仍是 0.05 dB);`ci.yml` 加 `workflow_dispatch`,`fast`/`full` 两条线都
+  接受手动触发,红了当天就能重裁;README 顶部加 `ci` 与 `android` 状态
+  徽章,让红色可见。不改随 APK 出货的代码,不重跑金标。
+
 ## 0.7.15 — 2026-09-07
 
 ### 文档:第三篇英文短文《The estimation ladder: configs 2, 3 and 4》

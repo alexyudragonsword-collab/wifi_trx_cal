@@ -9,10 +9,14 @@ on:
   push:
   schedule:
     - cron: "0 18 * * *"   # daily full run (02:00 UTC+8)
+  # on demand: the full lane (coverage floor, docs staleness, schematic
+  # check) used to be reachable only by waiting for the nightly, so a red
+  # nightly could not be re-adjudicated the same day
+  workflow_dispatch:
 
 jobs:
   fast:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,7 +32,7 @@ jobs:
         run: QT_QPA_PLATFORM=offscreen python -m pytest tests/ -m "not slow" -q
 
   full:
-    if: github.event_name == 'schedule'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -183,8 +183,14 @@ def test_self_check_is_the_one_golden_comparison():
     """The in-app self-check and the emulator GoldenTest call this same
     function, so a phone and CI can never adjudicate by different rules.
     On the desktop it compares the golden values against the machine that
-    produced them — every delta must be exactly zero, which is what makes
-    this a test of the comparison logic rather than of the physics."""
+    produced them, so every delta must be at rounding level — which is
+    what makes this a test of the comparison logic rather than of the
+    physics.  Rounding level, not exactly zero: the golden is made on one
+    machine and CI runs on another with the same numpy but a different
+    CPU/BLAS summation order, and that read 7.1e-15 dB on
+    full_cal.loopback_evm_db (ci runs #128-#150 red for eight days on a
+    `== 0.0` here, one green run in between — hardware, not a version).
+    The physics tolerance stays 0.05 dB; this bound is 1e-9."""
     out = json.loads(bridge.self_check())
     assert out["ok"], out.get("error")
     assert out["passed"], out["cases"]
@@ -196,7 +202,7 @@ def test_self_check_is_the_one_golden_comparison():
         for row in case["rows"]:
             assert row["verdict"] == "ok", (case["key"], row)
             if row["delta"] != "—":
-                assert float(row["delta"]) == 0.0, (case["key"], row)
+                assert float(row["delta"]) <= 1e-9, (case["key"], row)
     # the platform block is the point of the feature: it must name what ran
     assert out["platform"]["numpy"] and out["platform"]["android_abi"]
 

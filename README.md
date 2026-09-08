@@ -1,5 +1,8 @@
 # wifitrx — WiFi 7 直接变频收发器行为模型与校准算法套件
 
+[![ci](https://github.com/alexyudragonsword-collab/wifi_trx_cal/actions/workflows/ci.yml/badge.svg)](https://github.com/alexyudragonsword-collab/wifi_trx_cal/actions/workflows/ci.yml)
+[![android](https://github.com/alexyudragonsword-collab/wifi_trx_cal/actions/workflows/android.yml/badge.svg)](https://github.com/alexyudragonsword-collab/wifi_trx_cal/actions/workflows/android.yml)
+
 面向 CMOS WiFi 7(802.11be)收发器设计的**复基带等效行为模型 + 校准算法验证平台**,
 最大带宽 320 MHz,TX/RX 均为直接变频 IQ 结构,PA Psat = 28 dBm(PAE@Psat = 35%)。
 自包含仓库:核心波形/PA/DPD/相噪代码从内部同级仓库拷贝(见 `PROVENANCE.md`),
