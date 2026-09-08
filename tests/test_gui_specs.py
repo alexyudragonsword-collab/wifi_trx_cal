@@ -223,8 +223,10 @@ def test_pn_study_reads_the_closed_form_and_orders_the_mechanisms():
     The mechanisms then stack in one direction: CPE removal can only
     help (config 2 <= 1); the LTF channel estimate freezes its own ICI
     into every symbol (config 3 sits 1.7 dB above 2, no averaging
-    across the packet); the 8-pilot CPE adds its estimator noise
-    common-mode (config 4 above 3, +0.33 dB measured)."""
+    across the packet); the 16-pilot CPE (the 996-tone RU set) adds its
+    estimator noise common-mode (config 4 above 3, 10 log(1 + 1/32) =
+    0.13 dB theory).  Until 0.7.17 this ran on the legacy 8-pilot set
+    and read +0.33 dB here."""
     from specs import run_pn_cpe_study
 
     result = run_pn_cpe_study(dict(FAST_PARAMS["pn_cpe_study"], n_frames=8))
@@ -234,7 +236,8 @@ def test_pn_study_reads_the_closed_form_and_orders_the_mechanisms():
     assert m["evm_genie_cpe_db"] <= m["evm_no_cpe_db"]
     assert 1.0 < m["ltf_penalty_db"] < 3.0        # 3 dB = single LTF bound
     assert m["pilot_penalty_db"] > 0.05
-    assert m["n_pilots"] == 8
+    assert m["n_pilots"] == 16
+    assert 0.05 < m["pilot_penalty_db"] < 0.3   # 0.13 dB theory at N_p = 16
     assert m["f_cpe_3db_khz"] == pytest.approx(34.6, abs=0.1)
     assert 4.0 < m["cpe_tracked_pct"] < 10.0
     # the loop-bandwidth page's free-VCO floor: above the post-CPE optimum
@@ -244,11 +247,27 @@ def test_pn_study_reads_the_closed_form_and_orders_the_mechanisms():
     assert m["vco_floor_post_cpe_db"] == pytest.approx(-36.85, abs=0.3)
     # page (d): the two standards at this bandwidth, same LO — the 12.8 us
     # symbol denies CPE removal most of the profile, so 11ax/be reads
-    # worse in the modem form (measured +1.4 dB at 40 MHz, +1.5 at 80)
+    # worse in the modem form.  The gap has a closed form to within the
+    # seed spread: the ICI-floor ratio of the two symbol lengths plus the
+    # difference of the two pilot terms 10 log(1 + 1/(2 N_p)) (the LTF
+    # term is the same 1 + rho/2 on both).  Until 0.7.17 both standards
+    # ran on the legacy pilot set and the gap read +1.4 dB at 40 MHz /
+    # +1.5 at 80; with the 11ax/be RU set (16 pilots) it shrinks by the
+    # pilot difference, measured +1.0 dB at 80 MHz / 8 frames.
+    import numpy as np
+    from wifitrx.impairments.phase_noise import DEFAULT_WIFI7_LO_PROFILE, cpe_partition
     titles = [t for t, _ in result.figures]
     assert titles[-2:] == ["Standards side by side", "Residual CFO"]
     assert m["evm_pilot_cpe_11ax_db"] == m["evm_pilot_cpe_db"]
-    assert 0.8 < m["std_gap_db"] < 2.5
+    fs = FAST_PARAMS["pn_cpe_study"]["bw_mhz"] * 1e6 * 4
+    ici = {t: cpe_partition(DEFAULT_WIFI7_LO_PROFILE.psd, t, 3e3, fs / 2)["ici_rad2"]
+           for t in (12.8e-6, 3.2e-6)}
+    n_p_ac = {20: 4, 40: 6, 80: 8, 160: 16}[FAST_PARAMS["pn_cpe_study"]["bw_mhz"]]
+    expected = (10 * np.log10(ici[12.8e-6] / ici[3.2e-6])
+                + 10 * np.log10(1 + 1 / (2 * m["n_pilots"]))
+                - 10 * np.log10(1 + 1 / (2 * n_p_ac)))
+    assert m["std_gap_db"] > 0.0
+    assert m["std_gap_db"] == pytest.approx(expected, abs=0.6), expected
     assert m["std_gap_db"] == pytest.approx(
         m["evm_pilot_cpe_11ax_db"] - m["evm_pilot_cpe_11ac_db"], abs=0.011)
 

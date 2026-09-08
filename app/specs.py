@@ -995,7 +995,8 @@ def run_pn_cpe_study(p: dict) -> AnalysisResult:
         DEFAULT_WIFI7_LO_PROFILE, TabulatedPhase, TypeIIPllPhase,
         cpe_partition, free_vco_ici_floor, ici_weight, integrate_pn,
         ldbc_from_sphi)
-    from wifitrx.waveform.pilots import generate_ofdm_with_pilots, pilot_sequence
+    from wifitrx.waveform.pilots import (generate_ofdm_with_pilots, pilot_positions,
+                                         pilot_sequence)
     from wifitrx.waveform.preamble import build_frame
 
     cfg = _pn_config(p)
@@ -1196,6 +1197,9 @@ def run_pn_cpe_study(p: dict) -> AnalysisResult:
             _pn_config({**p, "std": other_std}), n_lo, n_frames, seed + 2,
             cfo_hz)
     order = [s for s in ("11ac/n", "11ax/be") if s in per_std]
+    n_p_txt = ", ".join(
+        f"{std} N_p = {pilot_positions(_pn_config({**p, 'std': std})).size}"
+        for std in order)
 
     def lin(db):
         return 10.0 ** (db / 10.0) * 1e5    # error power / signal, in 1e-5
@@ -1207,7 +1211,7 @@ def run_pn_cpe_study(p: dict) -> AnalysisResult:
     seg_style = (("ICI floor (config 2: genie CPE, true channel)", "tab:red"),
                  ("+ LTF channel-estimate frozen error (config 3 − 2)",
                   "tab:orange"),
-                 (f"+ pilot-CPE estimator noise, N_p = {cols.size} "
+                 ("+ pilot-CPE estimator noise, each standard's own N_p "
                   "(config 4 − 3)", "tab:purple"))
     top = 0.0
     top_guess = max(lin(v[0]) for v in per_std.values()) * 1.3
@@ -1220,7 +1224,7 @@ def run_pn_cpe_study(p: dict) -> AnalysisResult:
                    edgecolor="white", label=lab if i == 0 else None)
             bottom += seg
         # boundary labels, nudged apart when a thin segment would stack
-        # two of them on top of each other (32-pilot 320 MHz: 0.03 dB)
+        # two of them on top of each other (64-pilot 320 MHz: 0.03 dB)
         ys = [lin(d2), lin(d3), lin(d4)]
         for k in range(1, 3):
             ys[k] = max(ys[k], ys[k - 1] + 0.035 * top_guess)
@@ -1255,8 +1259,8 @@ def run_pn_cpe_study(p: dict) -> AnalysisResult:
         ax.legend(fontsize=8, loc="upper left")
     ax.grid(True, axis="y", alpha=0.3)
     ax.set_title(
-        f"Standards side by side — modem form (N_p = {cols.size} pilot CPE + "
-        f"LTF estimate), {p['bw_mhz']} MHz, {lo_txt}, {n_frames} frame(s)\n"
+        f"Standards side by side — modem form (pilot CPE + LTF estimate; "
+        f"{n_p_txt}), {p['bw_mhz']} MHz, {lo_txt}, {n_frames} frame(s)\n"
         "stacked in error POWER so the segments add: every boundary is the "
         f"direct reading of one configuration{other_note}", fontsize=9.5)
     fig_d.tight_layout()
@@ -1613,8 +1617,9 @@ ALL_ANALYSES: tuple[AnalysisSpec, ...] = (
         params=(
             ParamSpec("bw_mhz", "Bandwidth [MHz]", "choice", 80,
                       choices=(20, 40, 80, 160, 320),
-                      tooltip="Sets the pilot count N_p (4/6/8/16/32) "
-                              "and the tone plan"),
+                      tooltip="Sets the tone plan and the pilot count "
+                              "N_p — 11ax/be 8/16/16/32/64, legacy "
+                              "4/6/8/16"),
             ParamSpec("std", "Standard", "choice", "11ax/be",
                       choices=("11ax/be", "11ac/n"),
                       tooltip="11ax/be: 12.8 us symbol, CPE removes "

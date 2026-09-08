@@ -53,6 +53,23 @@ LM, RM, TOP = 0.9, 0.9, 0.75
 BODY = 10.5
 
 
+def std_gap_db(n_frames: int = 32, seeds: tuple = (0, 1, 2, 3)) -> tuple[float, float]:
+    """Modem-form standards gap at 40 MHz (11ax/be minus 11ac/n, config
+    4, each standard on its own pilot set) as (mean, 1-sigma) over seeds,
+    read from the study's own helpers so the note cannot quote a number
+    the library no longer produces.  Measured 1.10 ± 0.27 dB (0.7.17,
+    16 vs 6 pilots); it read 1.4 ± 0.2 while both standards ran on the
+    legacy 6-pilot set."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
+    from specs import _pn_config, _pn_nominal  # noqa: E402
+
+    ax_cfg = _pn_config({"bw_mhz": 40, "std": "11ax/be"})
+    ac_cfg = _pn_config({"bw_mhz": 40, "std": "11ac/n"})
+    gaps = [_pn_nominal(ax_cfg, 1, n_frames, s)[3]
+            - _pn_nominal(ac_cfg, 1, n_frames, s + 2)[3] for s in seeds]
+    return float(np.mean(gaps)), float(np.std(gaps, ddof=1))
+
+
 def numbers() -> dict:
     lo = DEFAULT_WIFI7_LO_PROFILE
     pa = cpe_partition(lo.psd, T_AX, F1, F2)
@@ -228,6 +245,7 @@ class Page:
 
 def build(out_dir: Path) -> Path:
     nb = numbers()
+    gap_mean, gap_sd = std_gap_db()
     pa, pc = nb["ax"], nb["ac"]
     png = out_dir / "pn_cpe_note_11ac_vs_11ax.png"
     figure(nb, png)
@@ -314,9 +332,11 @@ def build(out_dir: Path) -> Path:
         p.para("Model: wifitrx pn_cpe_study (isolation method, phase noise the only "
                "impairment, true channel unity).  Closed forms: cpe_partition() over the "
                "LO profile with the 12.8 µs / 3.2 µs FFT lengths, computed by this "
-               "script.  Time-domain readings: 40 MHz, 6-pilot CPE + LTF channel "
-               "estimate, 32 frames; the standards gap in the modem form is 1.4 ± 0.2 dB "
-               "(1σ over seeds), the ICI floor alone scatters 0.05 dB.")
+               "script.  Time-domain readings: 40 MHz, each standard's own pilot set "
+               "(16 pilots 11ax/be, 6 pilots 11ac/n) for the CPE + LTF channel "
+               "estimate, 32 frames, 4 seeds; the standards gap in the modem form is "
+               f"{gap_mean:.1f} ± {gap_sd:.1f} dB (1σ over seeds), the ICI floor alone "
+               "scatters 0.05 dB.")
         p.footer(foot.format(2))
         p.close()
 
@@ -593,7 +613,7 @@ def ladder_figure(lr: dict, path: Path) -> None:
                  f"single LO, 8 frames, N_p = {lr['n_p']}\nconfig 2 is the only step "
                  "that moves with a residual CFO (no acquisition stage)", fontsize=9.5)
 
-    n_p = np.array([4, 6, 8, 16, 32])
+    n_p = np.array([4, 6, 8, 16, 32, 64])
     ax2.plot(n_p, 10 * np.log10(1 + 1 / (2 * n_p)), "o-", color="tab:purple",
              label="pilot step, theory 10·log₁₀(1 + 1/(2N_p))")
     ax2.plot([lr["n_p"]], [v0[3] - v0[2]], "s", ms=8, mfc="none", color="tab:purple",
@@ -602,8 +622,9 @@ def ladder_figure(lr: dict, path: Path) -> None:
                 label="LTF step, theory 10·log₁₀(1 + ρ/2), ρ = 1, two repeats")
     ax2.plot([lr["n_p"]], [v0[2] - v0[1]], "^", ms=8, mfc="none", color="tab:orange",
              label=f"measured: {v0[2] - v0[1]:.2f} dB")
-    for n, bw in zip(n_p, (20, 40, 80, 160, 320)):
-        ax2.annotate(f"{bw} MHz", (n, 10 * np.log10(1 + 1 / (2 * n))), fontsize=7,
+    for n, bw in zip((4, 6, 8, 16, 32), ("20 legacy", "40 legacy", "20 ax/be",
+                                          "40/80 ax/be", "160 ax/be")):
+        ax2.annotate(f"{bw}", (n, 10 * np.log10(1 + 1 / (2 * n))), fontsize=7,
                      ha="left", va="bottom", xytext=(3, 3), textcoords="offset points")
     ax2.set_xscale("log", base=2)
     ax2.set_xticks(n_p)
@@ -704,9 +725,12 @@ def build_ladder_note(out_dir: Path) -> Path:
                  "but each step of the staircase can be attributed on its own.")
         p.heading("Expected pilot step by bandwidth")
         p.table(("bandwidth", "20 MHz", "40 MHz", "80 MHz", "160 MHz", "320 MHz"),
-                (("N_p", "4", "6", "8", "16", "32"),
+                (("N_p, 11ax/be", "8", "16", "16", "32", "64"),
+                 ("10·log₁₀(1 + 1/(2N_p))", "0.26 dB", "0.13 dB", "0.13 dB", "0.07 dB",
+                  "0.03 dB"),
+                 ("N_p, 11ac/n", "4", "6", "8", "16", "—"),
                  ("10·log₁₀(1 + 1/(2N_p))", "0.51 dB", "0.35 dB", "0.26 dB", "0.13 dB",
-                  "0.07 dB")),
+                  "—")),
                 (0.0, 1.7, 2.6, 3.5, 4.4, 5.4), size=9.5)
         p.para("On an OFDMA 26-tone RU with two pilots the same term is 0.97 dB — the "
                "only place where it becomes the dominant one.")

@@ -67,18 +67,18 @@
    "seed": 0
   },
   "metrics": {
-   "evm_no_cpe_db": -43.69,
-   "evm_genie_cpe_db": -43.99,
-   "evm_ltf_ce_db": -42.22,
-   "evm_pilot_cpe_db": -41.95,
+   "evm_no_cpe_db": -43.7,
+   "evm_genie_cpe_db": -44.0,
+   "evm_ltf_ce_db": -42.23,
+   "evm_pilot_cpe_db": -42.13,
    "closed_form_total_db": -43.81,
    "closed_form_ici_db": -44.1,
    "cpe_gain_db": 0.3,
-   "ltf_penalty_db": 1.76,
-   "pilot_penalty_db": 0.27,
+   "ltf_penalty_db": 1.77,
+   "pilot_penalty_db": 0.09,
    "cpe_tracked_pct": 6.62,
    "f_cpe_3db_khz": 34.6,
-   "n_pilots": 8,
+   "n_pilots": 16,
    "loopbw_opt_jitter_khz": 300.0,
    "loopbw_opt_evm_khz": 300.0,
    "loopbw_evm_gain_db": 0.0,
@@ -86,11 +86,11 @@
    "cfo_hz": 0.0,
    "cfo2k_no_tracking_db": 4.04,
    "cfo2k_genie_cpe_db": -26.63,
-   "cfo2k_modem_db": -42.28,
-   "cfo2k_tracking_value_db": 46.32,
-   "evm_pilot_cpe_11ac_db": -43.66,
-   "evm_pilot_cpe_11ax_db": -41.95,
-   "std_gap_db": 1.71
+   "cfo2k_modem_db": -42.36,
+   "cfo2k_tracking_value_db": 46.4,
+   "evm_pilot_cpe_11ac_db": -43.91,
+   "evm_pilot_cpe_11ax_db": -42.13,
+   "std_gap_db": 1.78
   },
   "n_pages": 5
  }
