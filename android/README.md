@@ -102,7 +102,7 @@ gradle wrapper --gradle-version 8.9   # 首次;之后用 ./gradlew
 
 | 功能 | Qt | Android | 说明 |
 |---|---|---|---|
-| 八个分析 + 参数表单 | ✅ | ✅ | 同一份 `list_specs()` 注册表 |
+| 九个分析 + 参数表单 | ✅ | ✅ | 同一份 `list_specs()` 注册表 |
 | 结果 metrics / 文本 / 多页图 | ✅ | ✅ | |
 | **图形工具栏** | NavigationToolbar2QT | **Home / ◀ / ▶ / Pan / Zoom(框选)** | 0.7.3 补齐;桌面由 matplotlib 提供,端上自实现 |
 | **数据坐标读数** | 工具栏右下角 | **图上方一行,触摸即读** | 0.7.3;SVG 不含数据范围,由 `bridge.run()` 的 `axes` 元数据支撑 |

@@ -4,6 +4,32 @@
 或 `wifitrx.*` 公开签名的条目都在下面显式标注,交付方按此判断是否需要
 重新取包。日期为落地日期。
 
+## 0.7.25 — 2026-09-09
+
+### AGC 建立动态(体检 P2-8,用户选定;**公开签名:`RxParams.agc_dynamics`、`build_frame(stf_periods=)`、`Frame.stf_len`**)
+
+- **模型** `impairments.agc_dynamics.AgcDynamics`(默认关):接收机空闲在
+  `start_state`(默认档 0,VGA 40 dB),`attack_s` 后切到 AGC 选定的目标档,VGA
+  增益(dB 域)与 DC 偏置各按 `vga_tau_s` / `dc_tau_s` 指数建立。在记忆无关处逐段
+  精确(攻击窗内用空闲档的 NF、IIP3、增益、DC),增益/DC 轨迹在信道 LPF 之前、
+  ADC 之前施加,滤波器与 ADC 削顶按硬件方式响应。关闭时链逐比特不变。
+- **帧**:`build_frame(..., stf_periods=10)` 在 GI2 前加 8 µs L-STF(每 1.25 MHz
+  一个音、0.8 µs 周期、数据功率);估计器从 LTF 起算,对 STF 透明。
+- **研究** `link.agc_dynamics_study`(隔离法:档位阶梯、逐档 DC、LPF、噪声、ADC,
+  IQ/IM2/相噪关)+ GUI 第九个分析 `agc_dynamics`(三页):
+  - 攻击延迟:STF 被丢弃,LTF 之前任何时刻切档都零代价;切在 LTF 里是悬崖
+    (40 MHz / 256-QAM / −30 dBm:预算 9.6 µs = STF + GI2,LTF 内 −11 dB)。
+  - 在 STF 末尾决策后,VGA 必须在 GI2(1.6 µs)内建立:τ ≤ 0.4 µs 零代价,0.8 µs
+    多付 7.7 dB,1.6 µs 读 −21.6;DC 环 τ 预算约 8 µs(DC 台阶只落在 DC 附近几个
+    音上,便宜)。
+  - 逐符号看:LTF 下仍在动的增益被冻进信道估计,每个数据符号付同样的代价,不随
+    包长衰减。
+- **不进交付面**:这是 AGC 与 DC 环的时序规格,不是校准能去的残差;cal-state 与
+  `RESIDUAL_SPEC` 不变。
+- 守卫 `tests/test_agc_dynamics.py`:轨迹闭式(e⁻¹/e⁻³)、关闭逐比特一致、STF 透明
+  与功率、悬崖位置、VGA τ 预算落在 GI2/8–GI2/2、预算函数。金标加第五个案例,
+  Android 金标 job 重新 dispatch;README/教程分析数 8 → 9。
+
 ## 0.7.24 — 2026-09-09
 
 ### 文档:模型边界声明(体检 P2-8)

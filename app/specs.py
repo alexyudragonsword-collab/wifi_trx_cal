@@ -1292,6 +1292,147 @@ def run_spur_planner(p: dict) -> AnalysisResult:
                           figure=fig, text=text)
 
 
+def run_agc_dynamics(p: dict) -> AnalysisResult:
+    """AGC settling at the front of a packet (isolation study: the state
+    ladder, its DC offsets, the channel LPF, noise and the ADC — nothing
+    the calibration removes).  Three pages: (a) EVM vs the attack delay,
+    with the 8 us L-STF and the LTF start marked — a cliff, not a slope,
+    because the STF is discarded and the LTF is the first thing the
+    receiver keeps; (b) at a decision taken at the STF's end, EVM vs the
+    VGA and DC-loop time constants — the GI2 (1.6 us) is all the settling
+    time the standard leaves; (c) the modem form symbol by symbol for
+    three VGA time constants — flat, because what the LTF sees is frozen
+    into the channel estimate for the packet."""
+    from wifitrx.impairments.agc_dynamics import AgcDynamics
+    from wifitrx.link import agc_dynamics_study as st
+    from wifitrx.waveform import OFDMConfig
+
+    bw = float(p["bw_mhz"]) * 1e6
+    cfg = OFDMConfig(bandwidth_hz=bw, qam_order=int(p["qam"]), n_symbols=8,
+                     oversampling=4)
+    rxp = st.study_receiver(bw, seed=int(p["seed"]))
+    p_in = float(p["p_in_dbm"])
+    base = AgcDynamics(enabled=True, start_state=int(p["start_state"]))
+    gi2_s = 2 * cfg.cp_len * cfg.oversampling / cfg.sample_rate_hz
+    ltf_start_s = st.STF_S + gi2_s
+
+    # (a) attack delay
+    attacks = np.array([0.4, 0.8, 1.6, 3.2, 4.8, 6.4, 8.0, 8.8, 9.6, 10.4,
+                        11.2, 12.8]) * 1e-6
+    sa = st.sweep(rxp, cfg, p_in, base, "attack_s", attacks, seed=int(p["seed"]))
+    settled = sa["settled"]
+    fig_a = new_figure(figsize=(8.4, 5.2))
+    ax = fig_a.add_subplot(111)
+    ax.plot(attacks * 1e6, sa["evm_modem_db"], "o-", color="tab:purple",
+            label="modem form (LTF CFO + smoothed LTF estimate + pilot CPE)")
+    ax.plot(attacks * 1e6, sa["evm_db"], "s--", color="tab:red", ms=4,
+            label="isolation view (per-tone EQ + genie CPE)")
+    ax.axhline(settled["evm_modem_db"], color="tab:purple", lw=0.8, ls=":",
+               label=f"settled (dynamics off): {settled['evm_modem_db']:.1f} dB")
+    ax.axvline(st.STF_S * 1e6, color="k", ls="-.", lw=0.9)
+    ax.axvline(ltf_start_s * 1e6, color="tab:orange", ls="-.", lw=0.9)
+    ax.annotate("L-STF ends (8 us)", (st.STF_S * 1e6, ax.get_ylim()[1]), fontsize=8,
+                ha="right", va="top", xytext=(-3, -3), textcoords="offset points")
+    ax.annotate(f"LTF starts ({ltf_start_s * 1e6:.1f} us)", (ltf_start_s * 1e6, ax.get_ylim()[1]),
+                fontsize=8, ha="left", va="top", xytext=(3, -3), textcoords="offset points",
+                color="tab:orange")
+    ax.set_xlabel("AGC attack delay from the packet's first sample [us]")
+    ax.set_ylabel("EVM [dB]")
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=8, loc="lower left")
+    r0 = sa["rows"][0]
+    ax.set_title(f"AGC attack delay — {p['bw_mhz']} MHz, {p['qam']}-QAM, {p_in:.0f} dBm: "
+                 f"state {base.start_state} -> {r0['target_state']} "
+                 f"({r0['states_crossed']} steps), VGA {base.start_vga_db:.0f} -> "
+                 f"{r0['vga_db']:.0f} dB\nthe STF is discarded, so the cost is a cliff at "
+                 "the LTF, not a slope", fontsize=9.5)
+    fig_a.tight_layout()
+
+    # (b) settling time constants after a decision at the STF's end
+    late = AgcDynamics(enabled=True, attack_s=st.STF_S, start_state=base.start_state)
+    vga_taus = np.array([0.05, 0.1, 0.2, 0.3, 0.4, 0.6, 0.8, 1.2, 1.6, 3.2]) * 1e-6
+    dc_taus = np.array([0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0]) * 1e-6
+    sv = st.sweep(rxp, cfg, p_in, late, "vga_tau_s", vga_taus, seed=int(p["seed"]))
+    sd = st.sweep(rxp, cfg, p_in, late, "dc_tau_s", dc_taus, seed=int(p["seed"]))
+    vga_budget = st.budget(vga_taus, sv["evm_modem_db"], settled["evm_modem_db"])
+    dc_budget = st.budget(dc_taus, sd["evm_modem_db"], settled["evm_modem_db"])
+    fig_b = new_figure(figsize=(8.4, 5.2))
+    ax = fig_b.add_subplot(111)
+    ax.semilogx(vga_taus * 1e6, sv["evm_modem_db"], "o-", color="tab:purple",
+                label="VGA gain settling time constant")
+    ax.semilogx(dc_taus * 1e6, sd["evm_modem_db"], "^-", color="tab:green",
+                label="DC-correction loop time constant")
+    ax.axhline(settled["evm_modem_db"] + 0.5, color="gray", lw=0.8, ls=":",
+               label="settled + 0.5 dB (budget line)")
+    ax.axvline(gi2_s * 1e6, color="tab:orange", ls="-.", lw=0.9)
+    ax.annotate(f"GI2 = {gi2_s * 1e6:.1f} us before the LTF", (gi2_s * 1e6, ax.get_ylim()[1]),
+                fontsize=8, ha="left", va="top", xytext=(3, -3), textcoords="offset points",
+                color="tab:orange")
+    ax.set_xlabel("time constant [us]")
+    ax.set_ylabel("modem-form EVM [dB]")
+    ax.grid(True, alpha=0.3, which="both")
+    ax.legend(fontsize=8, loc="upper left")
+    ax.set_title(f"Decision at the STF's end (attack {st.STF_S * 1e6:.0f} us): what must have "
+                 f"settled before the LTF\nVGA tau budget {vga_budget * 1e6:.2f} us, "
+                 f"DC-loop tau budget {dc_budget * 1e6:.1f} us (within 0.5 dB of settled)",
+                 fontsize=9.5)
+    fig_b.tight_layout()
+
+    # (c) per-symbol view for three VGA time constants
+    fig_c = new_figure(figsize=(8.4, 5.2))
+    ax = fig_c.add_subplot(111)
+    picks = [np.argmin(np.abs(vga_taus - t)) for t in (0.2e-6, 0.8e-6, 1.6e-6)]
+    for i in picks:
+        ps = sv["per_symbol_db"][i]
+        ax.plot(np.arange(1, ps.size + 1), ps, "o-",
+                label=f"VGA tau {vga_taus[i] * 1e6:.1f} us: {sv['evm_modem_db'][i]:.1f} dB")
+    ax.plot(np.arange(1, settled["per_symbol_db"].size + 1), settled["per_symbol_db"],
+            "k:", label=f"dynamics off: {settled['evm_modem_db']:.1f} dB")
+    ax.set_xlabel("data symbol")
+    ax.set_ylabel("modem-form EVM per symbol [dB]")
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=8)
+    ax.set_title("Symbol by symbol: a gain still moving under the LTF is frozen into the "
+                 "channel estimate,\nso every data symbol pays the same — the penalty "
+                 "does not fade along the packet", fontsize=9.5)
+    fig_c.tight_layout()
+
+    i_vga08 = int(np.argmin(np.abs(vga_taus - 0.8e-6)))
+    metrics = {
+        "evm_modem_settled_db": round(settled["evm_modem_db"], 2),
+        "evm_iso_settled_db": round(settled["evm_db"], 2),
+        "attack_budget_us": round(st.budget(attacks, sa["evm_modem_db"],
+                                            settled["evm_modem_db"]) * 1e6, 2),
+        "ltf_start_us": round(ltf_start_s * 1e6, 2),
+        "stf_us": round(st.STF_S * 1e6, 2),
+        "gi2_us": round(gi2_s * 1e6, 2),
+        "vga_tau_budget_us": round(vga_budget * 1e6, 3),
+        "dc_tau_budget_us": round(dc_budget * 1e6, 2),
+        "evm_modem_vga_tau_0p8us_db": round(float(sv["evm_modem_db"][i_vga08]), 2),
+        "evm_modem_attack_in_ltf_db": round(float(sa["evm_modem_db"][-1]), 2),
+        "target_state": r0["target_state"],
+        "states_crossed": r0["states_crossed"],
+    }
+    text = (
+        f"AGC settling, {p['bw_mhz']} MHz {p['qam']}-QAM at {p_in:.0f} dBm: the receiver "
+        f"idles in state {base.start_state} (VGA {base.start_vga_db:.0f} dB) and lands in "
+        f"state {r0['target_state']} (VGA {r0['vga_db']:.0f} dB).\n"
+        f"Attack delay: no cost up to {metrics['attack_budget_us']:.1f} us — the STF "
+        f"({st.STF_S * 1e6:.0f} us) plus GI2 ({gi2_s * 1e6:.1f} us); a switch under the LTF "
+        f"reads {metrics['evm_modem_attack_in_ltf_db']:.1f} dB.\n"
+        f"Decision at the STF's end: the VGA must settle with tau <= "
+        f"{metrics['vga_tau_budget_us']:.2f} us (0.8 us costs "
+        f"{metrics['evm_modem_vga_tau_0p8us_db'] - settled['evm_modem_db']:.1f} dB), the "
+        f"DC loop with tau <= {metrics['dc_tau_budget_us']:.0f} us — the DC step lands on "
+        "tones near DC only, so it is the cheap one.\n"
+        "Nothing here is an impairment the calibration can remove: it is a timing spec for "
+        "the AGC and the DC loop.")
+    return AnalysisResult(metrics=metrics, figure=fig_a, text=text,
+                          figures=(("Attack delay", fig_a),
+                                   ("Settling after the decision", fig_b),
+                                   ("Symbol by symbol", fig_c)))
+
+
 ALL_ANALYSES: tuple[AnalysisSpec, ...] = (
     AnalysisSpec(
         key="full_cal", title="Full calibration sequence",
@@ -1528,4 +1669,27 @@ ALL_ANALYSES: tuple[AnalysisSpec, ...] = (
                       choices=("2g4", "5g", "6g")),
         ),
         run=run_spur_planner),
+    AnalysisSpec(
+        key="agc_dynamics", title="AGC settling at the packet front",
+        description="Isolation study of the AGC's attack delay and the "
+                    "VGA / DC-loop settling time constants against the "
+                    "802.11 L-STF budget: EVM vs attack delay (the LTF "
+                    "cliff), EVM vs time constants for a decision at the "
+                    "STF's end, and the modem form symbol by symbol",
+        params=(
+            ParamSpec("bw_mhz", "Bandwidth [MHz]", "choice", 80,
+                      choices=(20, 40, 80, 160, 320)),
+            ParamSpec("qam", "Constellation", "choice", 1024,
+                      choices=(256, 1024, 4096)),
+            ParamSpec("p_in_dbm", "RF input power [dBm]", "float", -30.0,
+                      minimum=-80.0, maximum=-10.0,
+                      tooltip="Sets the target gain state; the receiver "
+                              "idles in the start state until the attack "
+                              "delay"),
+            ParamSpec("start_state", "Idle LNA state", "int", 0, minimum=0,
+                      maximum=7, tooltip="Ladder index the receiver waits "
+                                         "in (0 = highest gain)"),
+            ParamSpec("seed", "Process / noise seed", "int", 0, minimum=0),
+        ),
+        run=run_agc_dynamics),
 )

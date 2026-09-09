@@ -11,6 +11,7 @@ from dataclasses import dataclass, field, replace
 
 import numpy as np
 
+from ..impairments.agc_dynamics import AgcDynamics
 from ..impairments.analog_filter import TunableLPF
 from ..impairments.clock import ClockError
 from ..impairments.baseband import BasebandStage
@@ -118,6 +119,10 @@ class RxParams:
     # RX crystal error vs the transmitter's reference (OTA scenario);
     # disabled by default — in self-loopback both sides share the crystal
     clock: ClockError = field(default_factory=lambda: ClockError(enabled=False))
+    # AGC settling: idle state, attack delay, VGA and DC-loop time
+    # constants — off by default, in which case the static AGC applies
+    # to the whole capture (see impairments/agc_dynamics.py)
+    agc_dynamics: AgcDynamics = field(default_factory=AgcDynamics)
     seed: int = 0
 
     def nonlin_for_state(self, idx: int) -> MemorylessNonlin:
@@ -168,4 +173,5 @@ class RxParams:
             "lo": self.lo.injected(),
             "im2": self.im2.injected(),
             "clock": self.clock.injected(),
+            "agc_dynamics": self.agc_dynamics.injected(),
         }

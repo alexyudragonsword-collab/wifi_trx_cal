@@ -34,6 +34,10 @@ CASES = [
     ("pn_cpe_study", {"bw_mhz": 80, "std": "11ax/be", "lo_count": "single",
                       "n_frames": 2, "vco_1f3_khz": 0.0, "cfo_hz": 0.0,
                       "seed": 0}),
+    # AGC settling: the piecewise front end, the STF builder and the
+    # per-symbol scoring on the phone's numpy
+    ("agc_dynamics", {"bw_mhz": 40, "qam": 256, "p_in_dbm": -30.0,
+                      "start_state": 0, "seed": 0}),
 ]
 
 

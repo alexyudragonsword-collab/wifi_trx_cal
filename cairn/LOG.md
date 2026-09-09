@@ -2,6 +2,10 @@
 
 本文件按倒序记录实质性进展——最新条目在顶部、紧跟本行之下。每条尽量短——只写摘要与指针;结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-09-09 · R33:P2-8 AGC 建立动态落地(0.7.25)
+
+- `AgcDynamics`(默认关)进 `RxParams`/`RxChain`,帧可带 8 µs L-STF,`link.agc_dynamics_study` + 第九个 GUI 分析。结论:STF 在则攻击延迟零代价直到 LTF(悬崖);VGA 须在 GI2 内建立(τ ≤ 0.4 µs);DC 环预算约 8 µs。不进交付面。指针:`CHANGELOG.md` 0.7.25、`docs/backlog_zh.md` B25。
+
 ## 2026-09-09 · R32:P2-8 模型边界声明 + 一条体检判断被推翻(0.7.24)
 
 - README 加"模型边界"段。体检说的 `tx_iq` 三重循环热点其实是不在序列里的包络检波器备用路径(测试 0.3 s),不做多音合并。三项物理扩展(信道 / OFDMA·打孔·空音 / AGC 动态)待用户选。指针:`CHANGELOG.md` 0.7.24、`docs/backlog_zh.md` B24。

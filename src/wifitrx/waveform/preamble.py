@@ -37,22 +37,52 @@ class Frame:
     config: OFDMConfig
     gi2_len: int                   # samples
     ltf_len: int                   # samples per LTF repeat (FFT window only)
+    stf_len: int = 0               # samples of short training ahead of GI2 (0 = none)
 
     @property
     def preamble_len(self) -> int:
-        return self.gi2_len + 2 * self.ltf_len
+        return self.stf_len + self.gi2_len + 2 * self.ltf_len
 
     def ltf_starts(self) -> tuple[int, int]:
-        return self.gi2_len, self.gi2_len + self.ltf_len
+        return self.stf_len + self.gi2_len, self.stf_len + self.gi2_len + self.ltf_len
+
+
+#: L-STF period: 0.8 us, i.e. tones every 1.25 MHz
+STF_PERIOD_S = 0.8e-6
+
+
+def stf_waveform(config: OFDMConfig, n_periods: int, data_scale: float,
+                 seed: int = 11) -> np.ndarray:
+    """A short training field: ``n_periods`` repeats of a 0.8 us periodic
+    symbol built on every tone that is a multiple of 1.25 MHz inside the
+    active block (the 802.11 L-STF structure, at this bandwidth's tone
+    count), BPSK-valued, at the data part's average power.  It is what
+    the AGC settles on; the estimators never look at it."""
+    step = int(round(1.25e6 / config.subcarrier_spacing_hz))
+    tones = config.active_tone_indices()
+    stf_tones = tones[(tones % step == 0)]
+    rng = np.random.default_rng(seed)
+    vals = (2.0 * rng.integers(0, 2, size=stf_tones.size) - 1.0).astype(complex)
+    os_nfft = config.fft_size * config.oversampling
+    freq = np.zeros(os_nfft, dtype=complex)
+    freq[stf_tones % os_nfft] = vals
+    sym = np.fft.ifft(freq) * os_nfft / np.sqrt(stf_tones.size) / data_scale
+    period = int(round(STF_PERIOD_S * config.sample_rate_hz))
+    one = sym[:period]
+    return np.tile(one, n_periods)
 
 
 def build_frame(config: OFDMConfig, ltf_seed: int = 7,
-                data: OFDMWaveform | None = None) -> Frame:
-    """Assemble [GI2 | LTF | LTF | data].
+                data: OFDMWaveform | None = None,
+                stf_periods: int = 0) -> Frame:
+    """Assemble [STF | GI2 | LTF | LTF | data].
 
     ``data`` optionally supplies the payload waveform (e.g. one carrying
     pilot tones from ``pilots.generate_ofdm_with_pilots``); it must have
     been generated from ``config``.  Default: plain random QAM payload.
+    ``stf_periods`` prepends that many 0.8 us short-training periods
+    (10 = the 8 us L-STF the AGC is given); 0 keeps the historical
+    [GI2 | LTF | LTF | data] frame.
     """
     if data is None:
         data = generate_ofdm(config)
@@ -67,9 +97,15 @@ def build_frame(config: OFDMConfig, ltf_seed: int = 7,
     sym = np.fft.ifft(freq) * os_nfft / np.sqrt(config.n_active)
     sym = sym / data.scale                    # same amplitude scale as data part
     gi2 = 2 * config.cp_len * config.oversampling
-    x = np.concatenate([sym[-gi2:], sym, sym, data.x])
+    parts = [sym[-gi2:], sym, sym, data.x]
+    stf_len = 0
+    if stf_periods:
+        stf = stf_waveform(config, int(stf_periods), data.scale)
+        stf_len = stf.size
+        parts.insert(0, stf)
+    x = np.concatenate(parts)
     return Frame(x=x, data=data, ltf=ltf, config=config,
-                 gi2_len=gi2, ltf_len=os_nfft)
+                 gi2_len=gi2, ltf_len=os_nfft, stf_len=stf_len)
 
 
 def estimate_cfo(rx: np.ndarray, frame: Frame, fs: float) -> float:

@@ -30,6 +30,8 @@ FAST_PARAMS = {
                      "n_frames": 2, "vco_1f3_khz": 0.0, "cfo_hz": 0.0,
                      "seed": 0},
     "spur_planner": {"bw_mhz": 320, "band": "6g"},
+    "agc_dynamics": {"bw_mhz": 40, "qam": 256, "p_in_dbm": -30.0,
+                     "start_state": 0, "seed": 0},
 }
 
 

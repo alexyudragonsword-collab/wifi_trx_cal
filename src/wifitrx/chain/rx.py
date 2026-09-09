@@ -117,10 +117,29 @@ class RxChain:
         if rng is None:
             rng = np.random.default_rng(p.seed + 2)
 
-        if self.noise_enabled:
-            y = y + thermal_noise(y.size, self.fs, st.nf_db, rng)
-        y = p.nonlin_for_state(self.lna_idx).apply(y)
-        y = y * db_to_amp(st.gain_db)
+        dyn = p.agc_dynamics
+        if dyn.enabled:
+            # the packet's first samples see the idle state: its NF and
+            # IIP3 (memoryless, so exact per segment), its gain, and the
+            # VGA / DC trajectories built below
+            st0 = p.lna_states[dyn.start_state]
+            n_att, gain_env, vga_env, dc_env = dyn.envelopes(
+                y.size, self.fs, db_to_amp(st0.gain_db), db_to_amp(st.gain_db),
+                dyn.start_vga_db, self.vga_db,
+                p.dc_for_state(dyn.start_state), p.dc_for_state(self.lna_idx))
+            if self.noise_enabled:
+                noise = thermal_noise(y.size, self.fs, st.nf_db, rng)
+                noise[:n_att] = thermal_noise(n_att, self.fs, st0.nf_db, rng)
+                y = y + noise
+            y_head = p.nonlin_for_state(dyn.start_state).apply(y[:n_att])
+            y = p.nonlin_for_state(self.lna_idx).apply(y)
+            y[:n_att] = y_head
+            y = y * gain_env
+        else:
+            if self.noise_enabled:
+                y = y + thermal_noise(y.size, self.fs, st.nf_db, rng)
+            y = p.nonlin_for_state(self.lna_idx).apply(y)
+            y = y * db_to_amp(st.gain_db)
         if p.im2.enabled:
             y = p.im2.apply(y, self.im2_trim_code)  # mixer IM2 at this node
         if nodes is not None:
@@ -140,7 +159,7 @@ class RxChain:
             y = iq_eff.apply(y, self.fs)
         else:
             y = p.iq.apply(y, self.fs)
-        y = y + p.dc_for_state(self.lna_idx)
+        y = y + (dc_env if dyn.enabled else p.dc_for_state(self.lna_idx))
         if self.dc_ana:
             y = y - _snap_trim(self.dc_ana.get(self.lna_idx, 0.0 + 0.0j))
         # the baseband stage's own noise enters ahead of the channel
@@ -148,7 +167,7 @@ class RxChain:
         if self.noise_enabled and p.baseband.enabled:
             y = y + p.baseband.noise(y.size, self.fs, rng)
         y = p.lpf.apply(y, self.fs)
-        y = y * db_to_amp(self.vga_db)
+        y = y * (db_to_amp(vga_env) if dyn.enabled else db_to_amp(self.vga_db))
         # …and its compression after the VGA, because the ceiling is an
         # output level: raising the VGA drives the signal into it.  It
         # follows the same global nonlinearity switch as the per-state

@@ -96,5 +96,30 @@
    "std_gap_db": 1.78
   },
   "n_pages": 5
+ },
+ {
+  "key": "agc_dynamics",
+  "params": {
+   "bw_mhz": 40,
+   "qam": 256,
+   "p_in_dbm": -30.0,
+   "start_state": 0,
+   "seed": 0
+  },
+  "metrics": {
+   "evm_modem_settled_db": -47.8,
+   "evm_iso_settled_db": -48.2,
+   "attack_budget_us": 9.6,
+   "ltf_start_us": 9.6,
+   "stf_us": 8.0,
+   "gi2_us": 1.6,
+   "vga_tau_budget_us": 0.4,
+   "dc_tau_budget_us": 8.0,
+   "evm_modem_vga_tau_0p8us_db": -40.14,
+   "evm_modem_attack_in_ltf_db": -11.05,
+   "target_state": 3,
+   "states_crossed": 3
+  },
+  "n_pages": 3
  }
 ]
