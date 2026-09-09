@@ -282,20 +282,21 @@ def test_residual_cfo_is_what_tracking_is_for():
     as with no offset (-42.1 dB both).  Configs 1/2 must NOT acquire —
     that gap is the tracking's value the phase-noise-only pages omit."""
     import numpy as np
-    from specs import _cfo_closed_forms, _pn_config, _pn_nominal
     from wifitrx.impairments.phase_noise import DEFAULT_WIFI7_LO_PROFILE, cpe_partition
+    from wifitrx.link.pn_cpe_study import (cfo_closed_forms, nominal_readings,
+                                           study_config)
     from wifitrx.waveform.pilots import generate_ofdm_with_pilots
     from wifitrx.waveform.preamble import build_frame
 
-    cfg = _pn_config({"bw_mhz": 40, "std": "11ax/be"})
-    clean = _pn_nominal(cfg, 1, 4, 0, 0.0)
-    off = _pn_nominal(cfg, 1, 4, 0, 2e3)
+    cfg = study_config(40e6, "11ax/be")
+    clean = nominal_readings(cfg, 1, 4, 0, 0.0)
+    off = nominal_readings(cfg, 1, 4, 0, 2e3)
     assert off[0] > -10.0                         # smeared: measured +4.1 dB
     assert off[3] == pytest.approx(clean[3], abs=0.3)   # acquired and removed
     assert off[2] == pytest.approx(clean[2], abs=0.3)
     wf, cols = generate_ofdm_with_pilots(cfg)
     frame = build_frame(cfg, data=wf)
-    e1, e2 = _cfo_closed_forms(frame, 2e3)
+    e1, e2 = cfo_closed_forms(frame, 2e3)
     t_fft = 1.0 / cfg.subcarrier_spacing_hz
     assert e2 == pytest.approx((np.pi * 2e3 * t_fft) ** 2 / 3, rel=0.01)
     pn = cpe_partition(DEFAULT_WIFI7_LO_PROFILE.psd, t_fft,

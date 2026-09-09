@@ -60,11 +60,11 @@ def std_gap_db(n_frames: int = 32, seeds: tuple = (0, 1, 2, 3)) -> tuple[float, 
     the library no longer produces.  Measured 1.10 ± 0.27 dB (0.7.17,
     16 vs 6 pilots); it read 1.4 ± 0.2 while both standards ran on the
     legacy 6-pilot set."""
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
-    from specs import _pn_config, _pn_nominal  # noqa: E402
+    from wifitrx.link.pn_cpe_study import nominal_readings as _pn_nominal
+    from wifitrx.link.pn_cpe_study import study_config
 
-    ax_cfg = _pn_config({"bw_mhz": 40, "std": "11ax/be"})
-    ac_cfg = _pn_config({"bw_mhz": 40, "std": "11ac/n"})
+    ax_cfg = study_config(40e6, "11ax/be")
+    ac_cfg = study_config(40e6, "11ac/n")
     gaps = [_pn_nominal(ax_cfg, 1, n_frames, s)[3]
             - _pn_nominal(ac_cfg, 1, n_frames, s + 2)[3] for s in seeds]
     return float(np.mean(gaps)), float(np.std(gaps, ddof=1))
@@ -360,8 +360,8 @@ BW_HZ = 40e6
 def loop_curves() -> dict:
     """Closed-form config-1/2 curves vs loop bandwidth for both
     numerologies, the model's config-2 points, and the free-VCO floors."""
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
-    from specs import _pn_config, _pn_sweep_point  # noqa: E402
+    from wifitrx.link.pn_cpe_study import study_config
+    from wifitrx.link.pn_cpe_study import sweep_point as _pn_sweep_point
     from wifitrx.waveform.pilots import generate_ofdm_with_pilots, pilot_sequence
     from wifitrx.waveform.preamble import build_frame
 
@@ -370,7 +370,7 @@ def loop_curves() -> dict:
     s0 = float(sphi_from_ldbc(PLATEAU_DBC))
     out = {"lbws": lbws, "k2": k2, "fx": float(np.sqrt(k2 / s0))}
     for std, T in (("11ac/n", T_AC), ("11ax/be", T_AX)):
-        cfg = _pn_config({"bw_mhz": BW_HZ / 1e6, "std": std})
+        cfg = study_config(BW_HZ, std)
         wf, cols = generate_ofdm_with_pilots(cfg)
         frame = build_frame(cfg, data=wf)
         pil = pilot_sequence(cfg.n_symbols, cols.size)
@@ -562,11 +562,11 @@ def ladder_readings() -> dict:
     """Configs 2/3/4 at 40 MHz 11ax, shipped LO, single LO, 8 frames, at
     no offset and at 2 kHz residual CFO — the modem chain read step by
     step, straight from the study's helpers."""
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
-    from specs import _pn_config, _pn_nominal  # noqa: E402
+    from wifitrx.link.pn_cpe_study import nominal_readings as _pn_nominal
+    from wifitrx.link.pn_cpe_study import study_config
     from wifitrx.waveform.pilots import pilot_positions
 
-    cfg = _pn_config({"bw_mhz": BW_HZ / 1e6, "std": "11ax/be"})
+    cfg = study_config(BW_HZ, "11ax/be")
     n_p = int(pilot_positions(cfg).size)
     out = {"n_p": n_p, "n_active": cfg.n_active,
            "pilot_theory_db": 10 * np.log10(1 + 1 / (2 * n_p)),

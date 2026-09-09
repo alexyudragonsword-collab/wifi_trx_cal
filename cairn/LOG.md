@@ -2,6 +2,10 @@
 
 本文件按倒序记录实质性进展——最新条目在顶部、紧跟本行之下。每条尽量短——只写摘要与指针;结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-09-09 · R28:P1-5 研究物理块下沉到 `wifitrx.link.pn_cpe_study`(0.7.20)
+
+- `_pn_config/_pn_four_configs/_cfo_closed_forms/_pn_sweep_point/_pn_nominal` 从 GUI 层搬进库,`specs.py` 留薄包装;笔记工具与测试改从库导入;新增 `tools/` 不得导入 `app/specs` 私有名的守卫。指针:`CHANGELOG.md` 0.7.20、`docs/backlog_zh.md` B20。
+
 ## 2026-09-09 · R27:P1-4 发布与 CI 流程收敛(0.7.19)
 
 - 版本三处 + CHANGELOG 头条由 `tests/test_version_sync.py` 钉住;APK `versionCode` 由 `appVersion` 派生(0.7.19 → 70019)。

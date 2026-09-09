@@ -4,6 +4,21 @@
 或 `wifitrx.*` 公开签名的条目都在下面显式标注,交付方按此判断是否需要
 重新取包。日期为落地日期。
 
+## 0.7.20 — 2026-09-09
+
+### 相噪/CPE 研究的物理块下沉到库(体检 P1-5)
+
+- 新模块 `wifitrx.link.pn_cpe_study`:`study_config(bw_hz, std)`、
+  `four_configs`、`cfo_closed_forms`、`sweep_point`、`nominal_readings`——
+  原 `app/specs.py` 里的 `_pn_config/_pn_four_configs/_cfo_closed_forms/
+  _pn_sweep_point/_pn_nominal`(约 160 行库级物理)。`specs.py` 只留薄包装
+  与作图页;`tools/build_pn_cpe_note.py` 与测试改从库导入,不再从 GUI 层
+  拿私有函数。行为与数字不变(三篇笔记在临时目录重建比对)。
+- 守卫:`tests/test_import_layering.py` 新增"`tools/` 不得从 `app/specs`
+  导入私有名"的检查。
+- 出货代码变动(`src/wifitrx/link/` 新增模块、`app/specs.py`),金标重生成并
+  重新 dispatch Android 金标 job;编译集含 `link`,编译模块数 52 → 53。
+
 ## 0.7.19 — 2026-09-09
 
 ### 发布与 CI 流程(体检 P1-4)

@@ -176,3 +176,23 @@ def test_every_module_is_reachable_from_an_entry_point():
         f"no test, example or tool reaches {sorted(unreached)}: give each a "
         f"caller, a test, or delete it — or excuse it in UNREACHED_OK with a "
         f"reason")
+
+
+def test_tools_do_not_reach_into_the_gui_registry_for_physics():
+    """tools/ (docs and note generators) may run analyses through the
+    public registry, but must not import private ``_`` names from
+    app/specs.py: that is how library-grade physics ended up living in
+    the GUI layer until 0.7.20 (the phase-noise study's four-configuration
+    scorer, imported by the PDF-note generator as ``_pn_nominal``).  Such
+    code belongs under src/wifitrx and is imported from there."""
+    import re
+    root = Path(__file__).resolve().parent.parent
+    offenders = []
+    for path in (root / "tools").rglob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        for m in re.finditer(r"^\s*from specs import ([^\n]+)", text, re.M):
+            names = [n.strip().split(" as ")[0] for n in m.group(1).split(",")]
+            if any(n.startswith("_") for n in names):
+                offenders.append(f"{path.relative_to(root)}: {m.group(0).strip()}")
+    assert not offenders, offenders
+
