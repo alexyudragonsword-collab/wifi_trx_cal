@@ -7,7 +7,8 @@
 - `waveform/pilots.py` 改为两张表按子载波间隔选择(11ax/be 8/16/16/32/64,传统 4/6/8/16),160/320 MHz 按标准复制规则生成,标准导频按序号映射到模型的连续有效音块;未定义带宽 `ValueError`。
 - **更正**:40 MHz 制式差距 1.4 ± 0.2 → 1.10 ± 0.27 dB(32 帧 × 4 种子);导频台阶 0.33 → 0.09 dB(理论 0.13);结论方向不变。体检报告里我把方向写反了(说会变大),已在 backlog B17 追加更正。
 - 守卫:导频数/对称/杠杆臂/不猜(变异验证红);制式差距断言改闭式锚定;跟踪器断言改收敛速率。三篇笔记重建,笔记 1 的差距改脚本现算;金标重生成(n_pilots 8 → 16)。
-- 指针:`CHANGELOG.md` 0.7.17、`docs/backlog_zh.md` B17;Android 金标 job 待 dispatch 裁决。
+- 指针:`CHANGELOG.md` 0.7.17、`docs/backlog_zh.md` B17。
+- **run #62 裁决(7aad722)**:`android.yml` 三 job 全绿——`golden` 与 `compiled` 的 `on-device tests actually ran` 断言步骤、`the wheels must carry this tree's version`(0.7.17)、`every compiled module must export its init symbol` 全部 success;`ci.yml` run #153 绿(0.7.16 的 #152 是桌面快线自 8/31 以来首次绿)。0.7.17 两种出货形态均已裁决。
 
 ## 2026-09-08 · R24:工程体检 → 桌面 CI 八天全红的根因与修复(0.7.16)
 
