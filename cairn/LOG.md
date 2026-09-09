@@ -7,7 +7,8 @@
 - 用户拍板"双报告,门槛按 pilot-tracked 判"。三个视图统一打分帧(LTF 对 + 标准导频),同一捕获报 `*_evm_db`(隔离,重放闭环目标)与 `*_evm_modem_db`(LTF CFO 捕获 + 9 音平滑 LTF 信道估计 + 导频 CPE,spec 判定)。
 - **中途决策**:原始 LTF 估计下旗舰 −37.2 dB 不过线,差距是 LTF 冻结的确定性残差图案;给用户三选一,选"LTF + 跨音平滑"。9 音后 −41.9(隔离 −42.4)。
 - **顺带抓出**:DPD 多项式外推——打分帧不再等于训练波形后,20 MHz 11ac 一个符号超包络 1.2 dB 读 −3.8 dB。`BoundedDPD` 在训练峰值处饱和。教训:用训练数据打分是隐性乐观。
-- 守卫:`tests/test_evm_views.py` 四条(闭式锚定);e2e 断言 spec 指标名。指针:`CHANGELOG.md` 0.7.18、`docs/backlog_zh.md` B18。Android 金标待 dispatch。
+- 守卫:`tests/test_evm_views.py` 四条(闭式锚定);e2e 断言 spec 指标名。指针:`CHANGELOG.md` 0.7.18、`docs/backlog_zh.md` B18。
+- **run #64 裁决(3e8b4bb)**:`android.yml` 三 job 全绿——`golden` 与 `compiled` 的 `on-device tests actually ran` 断言步骤、`the wheels must carry this tree's version`(0.7.18)、`every compiled module must export its init symbol` 全部 success;`ci.yml` run #155 绿。0.7.18 两种出货形态均已裁决。
 
 ## 2026-09-08 · R25:P0-2 导频表分表——更正 B15 系列的导频数与制式差距(0.7.17)
 
