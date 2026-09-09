@@ -7,6 +7,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 
+from ..plotting import decimate_points  # noqa: E402
+
 
 def fig_convergence(trace, title: str, ylabel: str):
     fig, ax = plt.subplots(figsize=(6, 3.5))
@@ -62,10 +64,7 @@ def fig_power_table(table, title: str):
 
 
 def _plot_constellation(ax, syms, evm_db, title, max_pts=6000):
-    pts = np.ravel(syms)
-    if pts.size > max_pts:
-        idx = np.random.default_rng(0).choice(pts.size, max_pts, replace=False)
-        pts = pts[idx]
+    pts = decimate_points(syms, max_pts=max_pts)
     ax.plot(pts.real, pts.imag, ".", ms=1.2, alpha=0.5)
     ax.set_title(f"{title}  (EVM {evm_db:.1f} dB)", fontsize=9)
     ax.set_aspect("equal")
@@ -109,8 +108,12 @@ def fig_psd_compare(snap_before: dict, snap_after: dict):
         mask = default_wifi_mask(bw)
         _, _, mask_db = check_mask(f, p, mask)
         ax.plot(f / 1e6, mask_db, "k--", lw=1.0, label="spectral mask")
-    except Exception:
-        pass
+    except ValueError as exc:
+        # a PSD that cannot be compared (NaN samples, mismatched grid)
+        # still deserves the plot; say why the mask is missing instead
+        # of hiding it
+        ax.text(0.02, 0.05, f"mask not drawn: {exc}", transform=ax.transAxes,
+                fontsize=7, color="gray")
     ax.set_xlabel("Frequency [MHz]")
     ax.set_ylabel("PSD [dB]")
     ax.set_title("PA output spectrum")

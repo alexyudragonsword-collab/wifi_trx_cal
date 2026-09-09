@@ -114,7 +114,8 @@ def test_evm_budget_tracks_out_what_the_symbol_length_allows():
         10 * np.log10(ipn * (1 - frac)))
     pinned = EvmBudget(ipn_rad2=ipn, cpe_tracked_fraction=0.5)
     assert pinned.components_db()["phase_noise"] - \
-        ax.components_db()["phase_noise"] == pytest.approx(-2.7, abs=0.1)
+        ax.components_db()["phase_noise"] == pytest.approx(
+            10 * np.log10((1 - 0.5) / (1 - frac)))     # -2.7 dB at frac 0.055
     assert ax.report()["cpe_tracked_fraction"] == frac
 
 

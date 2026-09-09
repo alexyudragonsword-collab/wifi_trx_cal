@@ -4,10 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wifitrx"
-version = "0.7.22"
+version = "0.7.23"
 description = "WiFi 7 direct-conversion IQ transceiver behavioral model and calibration suite (320 MHz)"
 readme = "README.md"
 requires-python = ">=3.10"
+# Desktop floors.  The Android APK runs the same package on Chaquopy's
+# CPython 3.8 with numpy 1.19.5 / scipy 1.4.1 / matplotlib 3.6.0 — below
+# these — and is kept working by the call-surface allow-lists in
+# tests/test_android_bridge.py plus the on-device golden job, not by
+# this metadata.  See cairn/Android出货线.md.
 dependencies = [
     "numpy>=1.23",
     "scipy>=1.9",

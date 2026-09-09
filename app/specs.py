@@ -15,6 +15,7 @@ from typing import Callable
 import numpy as np
 from matplotlib.figure import Figure
 
+from wifitrx.plotting import decimate_points
 from wifitrx.link.pn_cpe_study import (cfo_closed_forms, four_configs, nominal_readings,
                                         study_config, sweep_point)
 from wifitrx.cal.residuals import run_conditions
@@ -102,11 +103,7 @@ def _five_panel(results, sb, sa, st, sr=None, rx_sweep=None,
         if snap is None:      # cal-states saved by older runs
             ax.set_axis_off()
             continue
-        pts = np.ravel(snap["syms_eq"])
-        if pts.size > 6000:
-            idx = np.random.default_rng(0).choice(pts.size, 6000,
-                                                  replace=False)
-            pts = pts[idx]
+        pts = decimate_points(snap["syms_eq"])
         ax.plot(pts.real, pts.imag, ".", ms=1.0, alpha=0.5)
         modem = (f" | modem {snap['evm_modem_db']:.1f}"
                  if "evm_modem_db" in snap else "")

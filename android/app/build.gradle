@@ -9,7 +9,7 @@ plugins {
 // derived from it: MAJOR*1000000 + MINOR*10000 + PATCH.  versionCode sat
 // at 1 for fifteen releases, so a phone never saw a newer APK as an
 // upgrade.
-def appVersion = "0.7.22"
+def appVersion = "0.7.23"
 
 static int semverCode(String v) {
     def p = v.tokenize('.').collect { it.toInteger() }

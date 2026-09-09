@@ -40,15 +40,28 @@ def plot_psd_comparison(signals: dict[str, np.ndarray], fs: float,
     return fig
 
 
+def decimate_points(pts: np.ndarray, max_pts: int = 6000, seed: int = 0) -> np.ndarray:
+    """A random subset of at most ``max_pts`` constellation points for
+    scatter plots (deterministic: seeded), the full set when it already
+    fits.  One helper for the GUI panels, the report figures and the
+    ad-hoc plots — three copies of this loop had drifted to three
+    different caps (6000 / 6000 / 20 000, one of them a stride instead
+    of a draw)."""
+    pts = np.ravel(np.asarray(pts))
+    if pts.size <= max_pts:
+        return pts
+    idx = np.random.default_rng(seed).choice(pts.size, max_pts, replace=False)
+    return pts[idx]
+
+
 def plot_constellation(points_by_label: dict[str, np.ndarray],
                        path: str | None = None):
     """Scatter one or more received constellations side by side."""
     n = len(points_by_label)
     fig, axes = plt.subplots(1, n, figsize=(5 * n, 5), squeeze=False)
     for ax, (label, pts) in zip(axes[0], points_by_label.items()):
-        pts = np.asarray(pts).ravel()
-        step = max(1, len(pts) // 20_000)  # cap point count
-        ax.plot(pts.real[::step], pts.imag[::step], ".", ms=1, alpha=0.5)
+        pts = decimate_points(pts, max_pts=20_000)
+        ax.plot(pts.real, pts.imag, ".", ms=1, alpha=0.5)
         ax.set_title(label)
         ax.set_xlabel("I")
         ax.set_ylabel("Q")

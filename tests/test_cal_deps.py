@@ -28,6 +28,10 @@ def test_every_canonical_plan_validates(profile, with_iip2, with_dpd):
     plan = planned_steps(PROFILES[profile], with_iip2=with_iip2,
                          with_dpd=with_dpd)
     validate_order(plan)  # must not raise
+    # and the validator is not a no-op: the same steps reversed put every
+    # requirement after its dependant
+    with pytest.raises(ValueError, match="calibration order invalid"):
+        validate_order(list(reversed(plan)))
 
 
 def test_rx_iq_before_tx_iq_is_rejected_with_the_reason():

@@ -2,6 +2,10 @@
 
 本文件按倒序记录实质性进展——最新条目在顶部、紧跟本行之下。每条尽量短——只写摘要与指针;结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-09-09 · R31:P2-9 代码卫生批(0.7.23)
+
+- 重复合一(`papr_db`、星座抽样)、静默 except 改可见、四处实测常数改闭式锚定、`validate_order` 补反向断言、分层守卫加 `android/` 入口与"库不 import 前端"。指针:`CHANGELOG.md` 0.7.23、`docs/backlog_zh.md` B23。
+
 ## 2026-09-09 · R30:P1-7 两篇专题文档 + ROADMAP/指针清理(0.7.22)
 
 - `cairn/相噪与CPE去除.md`、`cairn/Android出货线.md` 落地——AGENTS.md 的"专题文档 > LOG"裁决层从此有内容。ROADMAP 去版本号、加索引与 P2 条目;`residuals.py` 的守卫指针改正。体检 P1 全部收口;P2 择期。指针:`CHANGELOG.md` 0.7.22、`docs/backlog_zh.md` B22。

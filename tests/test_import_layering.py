@@ -40,7 +40,8 @@ ALLOWED = {
                 "waveform"},
     "deploy": {"chain"},       # fixed-point export of programmed state
     # report reads link.spur_planning.lock_time_s for the power-on budget
-    "report": {"cal", "link", "metrics", "provenance"},
+    # report shares the constellation decimation with the GUI panels
+    "report": {"cal", "link", "metrics", "plotting", "provenance"},
     "plotting": {"metrics"},
     "__init__": set(),         # top-level package init re-exports nothing
 }
@@ -120,7 +121,9 @@ UNREACHED_OK = {
     "wifitrx.handoff.__main__",  # CLI entry: exercised as a subprocess
 }
 
-ENTRY_DIRS = ("tests", "examples", "tools", "app")
+# android/ holds the bridge the APK calls into: a module only the phone
+# reaches must count as reached, not dead
+ENTRY_DIRS = ("tests", "examples", "tools", "app", "android")
 
 
 def _module_name(p: Path) -> str:
@@ -195,4 +198,20 @@ def test_tools_do_not_reach_into_the_gui_registry_for_physics():
             if any(n.startswith("_") for n in names):
                 offenders.append(f"{path.relative_to(root)}: {m.group(0).strip()}")
     assert not offenders, offenders
+
+
+def test_the_library_never_imports_a_front_end():
+    """src/wifitrx is consumed by app/ (Qt) and android/ (bridge); the
+    arrow must not point back.  The ALLOWED table only sees wifitrx-
+    internal edges, so a `from specs import ...` or `import bridge`
+    inside the library would pass it — this scans for exactly those."""
+    import re
+    bad = []
+    for path in SRC.rglob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        for m in re.finditer(r"^\s*(?:from|import)\s+(specs|bridge|main|inspector_page|"
+                             r"reference_page|inspector_data|reference|app|android)\b",
+                             text, re.M):
+            bad.append(f"{path.relative_to(ROOT)}: {m.group(0).strip()}")
+    assert not bad, bad
 

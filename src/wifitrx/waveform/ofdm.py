@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .qam import qam_modulate
+from ..units import papr_db  # noqa: F401 — re-export
 
 SUBCARRIER_SPACING_HZ = 78.125e3
 
@@ -188,7 +189,5 @@ def demodulate_ofdm(y: np.ndarray, ref: OFDMWaveform) -> np.ndarray:
     return rx
 
 
-def papr_db(x: np.ndarray) -> float:
-    """Peak-to-average power ratio in dB."""
-    p = np.abs(x) ** 2
-    return 10 * np.log10(p.max() / p.mean())
+# papr_db lives in wifitrx.units (one definition; this module re-exports it
+# so ``from wifitrx.waveform import papr_db`` keeps working)

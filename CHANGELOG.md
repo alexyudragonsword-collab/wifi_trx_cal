@@ -4,6 +4,27 @@
 或 `wifitrx.*` 公开签名的条目都在下面显式标注,交付方按此判断是否需要
 重新取包。日期为落地日期。
 
+## 0.7.23 — 2026-09-09
+
+### 代码卫生批(体检 P2-9)
+
+- `papr_db` 只留 `wifitrx.units` 一份(`waveform` 重导出,签名不变,返回 `float`)。
+- 星座图抽样三份合一:`wifitrx.plotting.decimate_points`(GUI 面板、报告图、临时
+  绘图共用;此前三处上限 6000/6000/20000 且一处是步进抽样)。
+- `report/figures.py` 谱模板叠画的 `except Exception: pass` 改为只捕 `ValueError`
+  并在图上写明原因,不再静默。
+- 测试里四处用实测常数做的紧容差断言改为闭式锚定:AGC 锚点位移
+  10·log10(320/20)/3、CPE 交接 0.443/T、自由 VCO 地板 π²k₂T/3、EVM 预算
+  0.5 常数的偏差 10·log((1−0.5)/(1−frac));`test_cal_deps` 的"不得抛错"补上
+  反向计划必须抛错(此前 `validate_order` 变空操作也过)。
+- 分层守卫补两处盲区:`ENTRY_DIRS` 加 `android/`(只被桥到达的模块不再算死码);
+  新增"库绝不 import 前端"守卫(`from specs`/`import bridge` 等出现在 `src/` 即红,
+  变异验证)。`report` 允许 import `plotting`。
+- `pyproject.toml` 注明桌面下限与 Android 端上栈(py3.8 / numpy 1.19.5 /
+  scipy 1.4.1)的关系:靠调用面守卫与端上金标挡,不靠元数据。
+- 出货代码变动(`app/specs.py`、`plotting.py`、`waveform/ofdm.py`、`report/`),
+  金标重生成并重新 dispatch。
+
 ## 0.7.22 — 2026-09-09
 
 ### 知识层:两篇 cairn 专题文档 + 悬空指针清理(体检 P1-7)

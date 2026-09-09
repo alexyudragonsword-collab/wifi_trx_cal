@@ -117,9 +117,9 @@ def test_agc_rebw_moves_the_thresholds_to_the_run_bandwidth():
     # on 4.0 or 4.1.
     from wifitrx.chain.agc import rebalance_thresholds
     at320 = rebalance_thresholds(DEFAULT_LNA_STATES, bandwidth_hz=320e6)
+    shift = 10 * log10(320e6 / 20e6) / 3
     for a, b in zip(at320[:-1], st[:-1]):
-        assert a.max_input_dbm - b.max_input_dbm == pytest.approx(4.014,
-                                                                  abs=0.09)
+        assert a.max_input_dbm - b.max_input_dbm == pytest.approx(shift, abs=0.09)
 
 
 def test_agc_anchor_is_explicit_for_every_ladder_transform():
@@ -227,6 +227,7 @@ def test_pn_study_reads_the_closed_form_and_orders_the_mechanisms():
     estimator noise common-mode (config 4 above 3, 10 log(1 + 1/32) =
     0.13 dB theory).  Until 0.7.17 this ran on the legacy 8-pilot set
     and read +0.33 dB here."""
+    import numpy as np
     from specs import run_pn_cpe_study
 
     result = run_pn_cpe_study(dict(FAST_PARAMS["pn_cpe_study"], n_frames=8))
@@ -238,13 +239,18 @@ def test_pn_study_reads_the_closed_form_and_orders_the_mechanisms():
     assert m["pilot_penalty_db"] > 0.05
     assert m["n_pilots"] == 16
     assert 0.05 < m["pilot_penalty_db"] < 0.3   # 0.13 dB theory at N_p = 16
-    assert m["f_cpe_3db_khz"] == pytest.approx(34.6, abs=0.1)
+    assert m["f_cpe_3db_khz"] == pytest.approx(0.443 / 12.8e-6 / 1e3, abs=0.1)
     assert 4.0 < m["cpe_tracked_pct"] < 10.0
     # the loop-bandwidth page's free-VCO floor: above the post-CPE optimum
     # (it is what a narrow loop saturates at) and, under the 12.8 us
     # symbol, by several dB — measured 5.0 dB at 40 MHz, 5.1 at 80
     assert 3.0 < m["vco_floor_post_cpe_db"] - m["closed_form_ici_db"] < 12.0
-    assert m["vco_floor_post_cpe_db"] == pytest.approx(-36.85, abs=0.3)
+    # pi^2/3 k2 T with k2 from the study's -116.1 dBc/Hz at 1 MHz: -37.0 dB
+    # closed form, -36.85 numerical (band-limited integral)
+    from wifitrx.impairments.phase_noise import free_vco_ici_floor, sphi_from_ldbc
+    k2 = float(sphi_from_ldbc(-116.1)) * 1e12
+    assert m["vco_floor_post_cpe_db"] == pytest.approx(
+        10 * np.log10(free_vco_ici_floor(k2, 12.8e-6)), abs=0.3)
     # page (d): the two standards at this bandwidth, same LO — the 12.8 us
     # symbol denies CPE removal most of the profile, so 11ax/be reads
     # worse in the modem form.  The gap has a closed form to within the
