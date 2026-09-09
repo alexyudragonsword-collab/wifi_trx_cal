@@ -2,6 +2,10 @@
 
 本文件按倒序记录实质性进展——最新条目在顶部、紧跟本行之下。每条尽量短——只写摘要与指针;结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-09-09 · R30:P1-7 两篇专题文档 + ROADMAP/指针清理(0.7.22)
+
+- `cairn/相噪与CPE去除.md`、`cairn/Android出货线.md` 落地——AGENTS.md 的"专题文档 > LOG"裁决层从此有内容。ROADMAP 去版本号、加索引与 P2 条目;`residuals.py` 的守卫指针改正。体检 P1 全部收口;P2 择期。指针:`CHANGELOG.md` 0.7.22、`docs/backlog_zh.md` B22。
+
 ## 2026-09-09 · R29:P1-6 冻结夹具、schema_version、闭环守卫参数化(0.7.21)
 
 - cal-state 加 `schema_version`(1.1;缺 = 1.0),loader/检查器按大版本拒、小版本容;`tests/data/cal_state_v1.json` 冻结,守卫用今天的库读它;闭环守卫扩到 4 个配置(slow)。MIMO 步明示不在交付面。指针:`CHANGELOG.md` 0.7.21、`docs/backlog_zh.md` B21。

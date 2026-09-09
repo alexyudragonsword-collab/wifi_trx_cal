@@ -4,6 +4,20 @@
 或 `wifitrx.*` 公开签名的条目都在下面显式标注,交付方按此判断是否需要
 重新取包。日期为落地日期。
 
+## 0.7.22 — 2026-09-09
+
+### 知识层:两篇 cairn 专题文档 + 悬空指针清理(体检 P1-7)
+
+- `cairn/相噪与CPE去除.md`:sinc² 分割、四配置、估计台阶闭式、残余 CFO、自由 VCO
+  地板、两制式差距、两种 EVM 口径的当前结论,以及导频表/32 帧/PLL 最优/modem 差
+  /DPD 外推五处被推翻的判断。`cairn/Android出货线.md`:裁决协议、端上栈约束与
+  七类"构建绿但端上错"的根因。此前 `cairn/` 只有 LOG 与 ROADMAP,AGENTS.md 定
+  为最高裁决层的专题文档一篇都没有。
+- `cairn/ROADMAP.md` 不再抄版本号(曾停在 v0.7.9 而 backlog 已到 v0.7.15),加
+  专题文档索引与 P2 条目;`cal/residuals.py` 文档串指向的 `tests/test_residual_spec.py`
+  改为实际守卫 `tests/test_residual_replay.py`。
+- 只动文档与一处 docstring;不重跑金标。
+
 ## 0.7.21 — 2026-09-09
 
 ### 防漂移守卫的覆盖面 + cal-state schema 小版本(**schema:新增 `schema_version` 字段**)(体检 P1-6)

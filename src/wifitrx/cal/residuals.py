@@ -36,7 +36,7 @@ Every entry carries:
 **The spec is the lift list.**  ``extract_residuals`` ships exactly the
 keys named here; everything else stays inside its step summary.  The
 guard against this table drifting from what the sequence measures is a
-test (``tests/test_residual_spec.py``), not a runtime warning on every
+test (``tests/test_residual_replay.py``), not a runtime warning on every
 file.
 
 ``DUPLICATES`` declares pairs that describe one physical quantity
