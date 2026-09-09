@@ -77,7 +77,11 @@ python -m wifitrx.handoff replay  cal_state.json   # 残差表 vs 文件自己�
 ```
 
 replay 把 `residuals` 里的每个数按其内嵌 `apply` 配方字面注入干净波形,与
-文件自己的实测 TX EVM 闭合,输出三个数:**解释 / 实测 / 未解释**。gap 超过
+文件自己的实测 TX EVM **隔离口径**(`tx_evm_db`:逐音均衡到理想参考 + genie
+CPE,只剩损伤本身)闭合,输出三个数:**解释 / 实测 / 未解释**。文件同时携带
+**modem 口径**(`tx_evm_modem_db`:LTF CFO 捕获 + 跨音平滑的 LTF 信道估计 +
+导频 CPE,标准接收机实际读到的数),MCS13 的 −38 dB 判定按它;两者之差是接收
+机自己的估计损失,不是残差,都不回注(README 自带 "Two EVM views" 一节)。gap 超过
 1 dB 时退出码为 1——意味着残差表解释不了这块芯片的实测,照单搭建的链路仿真
 会给出不存在的余量,先来找我们对表,不要往下游传。
 

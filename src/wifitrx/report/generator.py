@@ -42,8 +42,10 @@ _PRINCIPLES = {
            "(RX LPF 旁路)。必须最后执行,否则残余损伤会被学进系数。",
     "agc_sweep": "全部校正生效后扫描输入功率,验证 LNA 档位切换、ADC 落点与 SNR。",
     "final_loopback_evm": "全链路验证:evm_db 为 TX+RX 复合环回 EVM;tx_evm_db 为"
-                          " PA 输出处的 TX EVM(802.11be 规范测量点,MCS13 要求"
-                          " <= -38 dB)。两者均为 per-tone 均衡 + CPE 去除。",
+                          " PA 输出处的 TX EVM(802.11be 规范测量点)。*_evm_db 为"
+                          "隔离口径(逐音均衡 + genie CPE,重放闭环的目标);"
+                          "*_evm_modem_db 为 modem 口径(LTF CFO 捕获 + 跨音平滑的"
+                          " LTF 信道估计 + 导频 CPE),MCS13 的 <= -38 dB 按后者判。",
 }
 
 

@@ -23,7 +23,7 @@ import numpy as np
 
 from ..cal.base import CalResult
 from ..cal.deps import recal_steps
-from ..cal.sequence import agc_for_loopback, tx_evm
+from ..cal.sequence import agc_for_loopback, tx_snapshot
 from ..cal.tx_iq import measure_tx_rho
 from ..chain.loopback import LoopbackPath
 from ..chain.rx import RxChain
@@ -69,7 +69,7 @@ def temperature_hold_study(tx: TxChain, rx: RxChain, path: LoopbackPath,
     try:
         tx.set_temperature(CAL_TEMP_C)
         rx.set_temperature(CAL_TEMP_C)
-        ref_txevm = tx_evm(tx, cfg, drive_scale=drive_scale)
+        ref_txevm = tx_snapshot(tx, cfg, drive_scale=drive_scale)["evm_modem_db"]
         # no embedded EVM spec (e.g. no-DPD flow): hold = within 2 dB of
         # the calibrated-temperature value
         evm_lim = lim_txevm if lim_txevm is not None else ref_txevm + 2.0
@@ -92,7 +92,8 @@ def temperature_hold_study(tx: TxChain, rx: RxChain, path: LoopbackPath,
             irr_min = float(np.min(-20.0 * np.log10(
                 np.maximum(np.abs(rho), 1e-12))))
 
-            te = tx_evm(tx, cfg, drive_scale=drive_scale)
+            snap = tx_snapshot(tx, cfg, drive_scale=drive_scale)
+            te, te_modem = snap["evm_db"], snap["evm_modem_db"]
             fc_tx = _fc_err_pct(tx.params.lpf)
             fc_rx = _fc_err_pct(rx.params.lpf)
 
@@ -101,11 +102,15 @@ def temperature_hold_study(tx: TxChain, rx: RxChain, path: LoopbackPath,
                 "irr_min_db": irr_min >= lim_irr,
                 "tx_fc_err_pct": abs(fc_tx) <= lim_fc_tx,
                 "rx_fc_err_pct": abs(fc_rx) <= lim_fc_rx,
-                "tx_evm_db": te <= evm_lim,
+                # the EVM hold is judged in the modem form, like the
+                # spec verdict (0.7.18); the isolation view travels
+                # alongside in the row
+                "tx_evm_modem_db": te_modem <= evm_lim,
             }
             rows.append({
                 "temp_c": float(t), "lo_leak_dbc": leak,
                 "irr_min_db": irr_min, "tx_evm_db": te,
+                "tx_evm_modem_db": te_modem,
                 "tx_fc_err_pct": fc_tx, "rx_fc_err_pct": fc_rx,
                 "holds": holds, "all_hold": all(holds.values()),
             })
@@ -134,7 +139,7 @@ def temperature_hold_study(tx: TxChain, rx: RxChain, path: LoopbackPath,
         "criteria": {"lo_leak_dbc_max": lim_leak, "irr_min_db_min": lim_irr,
                      "tx_fc_err_pct_abs_max": lim_fc_tx,
                      "rx_fc_err_pct_abs_max": lim_fc_rx,
-                     "tx_evm_db_max": evm_lim},
+                     "tx_evm_modem_db_max": evm_lim},
         "note": "corrections frozen at the calibration values; outside the "
                 "hold range a recalibration (or tracking loop) is required",
     }

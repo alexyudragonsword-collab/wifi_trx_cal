@@ -13,11 +13,14 @@
    "bb_noise_nv": 5
   },
   "metrics": {
-   "loopback_evm_db": -33.60767219613386,
-   "tx_evm_db": -34.01012781927378,
+   "loopback_evm_db": -33.614062746627475,
+   "tx_evm_db": -33.95306813884955,
    "steps_passed": 13,
    "steps_total": 13,
-   "rx_evm_db": -41.47175415698364
+   "rx_evm_db": -42.02746482553371,
+   "loopback_evm_modem_db": -33.23007000546514,
+   "tx_evm_modem_db": -33.50311980098654,
+   "rx_evm_modem_db": -41.57920028168354
   },
   "n_pages": 1
  },

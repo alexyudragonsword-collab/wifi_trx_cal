@@ -47,6 +47,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..waveform.preamble import DEFAULT_CE_SMOOTH_TONES
+
 #: Pairs (a, b) that are two observations of the same physical quantity;
 #: apply at most one — ``b`` is the one to keep (finer instrument).
 DUPLICATES: tuple[tuple[str, str], ...] = (
@@ -287,6 +289,46 @@ RESIDUAL_SPEC: dict[str, dict[str, str]] = {
         "role": "total",
         "apply": "never inject — measured whole of the receive view.",
     },
+    "final_loopback_evm.evm_modem_db": {
+        "plane": "loopback",
+        "unit": "dB",
+        "meaning": "the loopback view read the way a standard receiver "
+                   "reads it: LTF CFO acquisition, LTF channel estimate "
+                   "smoothed over conditions.ce_smooth_tones tones and "
+                   "frozen for the packet, N_p-pilot CPE, data tones "
+                   "scored — evm_db plus the receiver's own estimation "
+                   "losses",
+        "better": "more negative",
+        "role": "total",
+        "apply": "never inject a total.",
+    },
+    "final_loopback_evm.tx_evm_modem_db": {
+        "plane": "tx",
+        "unit": "dB",
+        "meaning": "PA-output EVM in the modem form (LTF acquisition + "
+                   "smoothed LTF channel estimate + pilot CPE) — the "
+                   "figure the MCS13 -38 dB spec verdict is taken on, "
+                   "since 0.7.18; tx_evm_db is the same capture in the "
+                   "isolation view and stays the replay's closure target "
+                   "because a receiver's estimation loss is not a "
+                   "residual of the chain",
+        "better": "more negative",
+        "role": "total",
+        "apply": "never inject — a total; the difference to tx_evm_db "
+                 "is the receiver's estimator terms, 10 log(1 + rho/2) + "
+                 "10 log(1 + 1/(2 N_p)) plus whatever the LTF estimate "
+                 "freezes of the residual image and distortion.",
+    },
+    "final_loopback_evm.rx_evm_modem_db": {
+        "plane": "rx",
+        "unit": "dB",
+        "meaning": "rx_evm_db in the modem form (same receiver chain as "
+                   "tx_evm_modem_db), independent LO",
+        "better": "more negative",
+        "role": "total",
+        "apply": "never inject — measured whole of the receive view in "
+                 "the receiver's own reading.",
+    },
     "final_loopback_evm.rx_input_dbm": {
         "plane": "rx",
         "unit": "dBm",
@@ -365,7 +407,8 @@ RESIDUAL_SPEC: dict[str, dict[str, str]] = {
 
 
 def run_conditions(cfg, tx=None, rx=None, *, with_dpd: bool | None = None,
-                   profile: str | None = None) -> dict:
+                   profile: str | None = None,
+                   ce_smooth_tones: int | None = None) -> dict:
     """The measurement context a consumer needs, from the run's objects.
 
     One implementation shared by every writer, because the failure mode
@@ -386,6 +429,11 @@ def run_conditions(cfg, tx=None, rx=None, *, with_dpd: bool | None = None,
         # the loopback shares one LO between TX and RX, so the composite
         # evm_db is blind to phase noise; the rx_evm_db view is not
         "shared_lo_loopback": True,
+        # the modem-form EVM views (*_evm_modem_db) smooth the LTF
+        # channel estimate over this many adjacent tones; the isolation
+        # views (*_evm_db) do not use a channel estimate at all
+        "ce_smooth_tones": int(DEFAULT_CE_SMOOTH_TONES if ce_smooth_tones is None
+                               else ce_smooth_tones),
     }
     if tx is not None:
         cond["tx_lpf_order"] = int(tx.params.lpf.order)

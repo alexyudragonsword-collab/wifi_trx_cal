@@ -179,5 +179,11 @@ def test_wifi5_20mhz_full_cal():
     final = {r.name: r for r in res}["final_loopback_evm"]
     for r in res:
         assert r.passed in (True, None), (r.name, r.metrics_after)
-    # 11ac MCS9 (256-QAM 5/6) needs -32 dB; we land ~-42.6/-44.7
+    # 11ac MCS9 (256-QAM 5/6) needs -32 dB; we land ~-42.6/-44.7.  This
+    # is the run that caught the DPD extrapolating past its training
+    # peak (0.7.18): scored on a pilot frame instead of the training
+    # data, one symbol 1.2 dB above the fitted envelope read -3.8 dB on
+    # its own and this figure fell to -36.2 until the programmed DPD was
+    # envelope-bounded (dpd/bounded.py).
     assert final.metrics_after["tx_evm_db"] <= -40.0, final.metrics_after
+    assert final.metrics_after["tx_evm_modem_db"] <= -38.0, final.metrics_after

@@ -4,6 +4,47 @@
 或 `wifitrx.*` 公开签名的条目都在下面显式标注,交付方按此判断是否需要
 重新取包。日期为落地日期。
 
+## 0.7.18 — 2026-09-09
+
+### 交付 EVM 双口径,门槛按 modem 口径判(**schema:新增残差键与条件字段**)
+
+- **决定(用户拍板,工程体检 P0-3)**:此前交付的 `tx_evm_db`/`rx_evm_db`/`evm_db`
+  是"精灵 CPE + 理想参考逐音均衡"的隔离口径(配置 ②),−38 dB 判定据此得出,
+  比接收机实际读数乐观。现同一捕获同时报告两种口径:
+  - `*_evm_db`(隔离口径,不变):逐音 LS 均衡到理想参考 + genie CPE,只剩损伤
+    本身,**仍是重放闭环的目标**(接收机的估计损失不是链路残差);
+  - `*_evm_modem_db`(modem 口径,新):LTF 对粗 CFO + 导频斜率细 CFO 捕获、
+    LTF 对信道估计**跨音平滑 9 音**后整包冻结、N_p 导频 CPE、只打分数据音——
+    标准接收机读到的数;`final_loopback_evm` 的嵌入 spec 改为
+    `tx_evm_modem_db <= −38`。
+- **打分帧改变**:三个视图统一用 `[GI2 | LTF | LTF | 数据(标准导频集)]` 帧
+  (`cal.sequence.scoring_frame`),多一个填充符号;隔离口径改只打分数据音。
+- **modem 口径的验证**:纯噪声链、不平滑时 modem − 隔离 = 1.90 dB(理论
+  10·log(1+ρ/2) + 10·log(1+1/(2N_p)) = 1.89,80 MHz)、1.78/1.79(320 MHz)。
+- **平滑为什么是 9 音**:校准后的 320 MHz / 4096-QAM 链上,原始 LTF 估计把
+  残余 IQ 镜像 / PA 失真的"LTF 自身图案"冻结进 H(逐音随机变号、不平滑),
+  modem 口径读 −37.2 dB,**不过 −38**;跨音平滑 3/5/9/17 音后 −40.0/−40.8/
+  −41.4/−41.8(隔离口径 −42.4)。真实 modem 与 VSA 都有此选项,平滑是接收机
+  算法不是作弊;宽度记入 cal-state `conditions.ce_smooth_tones`,README 自生成
+  "Two EVM views"一节。
+- **顺带抓出的 DPD 缺陷**:打分帧不再是 DPD 训练波形本身后,802.11ac 20 MHz
+  的一个符号峰值高出训练包络 1.2 dB,多项式 DPD 外推使该符号读 −3.8 dB,TX EVM
+  从 −42.6 塌到 −36.2。此前打分波形与训练波形同一随机种子,外推从未暴露。
+  `dpd/bounded.py` 的 `BoundedDPD` 让校正增益在训练峰值处饱和(LUT 行为),
+  `calibrate_dpd` 装的是它;旗舰 modem 口径因此再收 0.5 dB。
+- **旗舰数字(320 MHz / 4096-QAM / DPD,seed 9)**:隔离 −42.4,modem **−41.9 dB**
+  (原始 LTF −39.6);真实电路数据路径:−42.0 / −41.5。80 MHz 无 DPD:−39.6 /
+  约 −38。温度保持研究(`link.temp_study`)的 EVM 保持判据同步改按 modem 口径
+  (`tx_evm_modem_db_max`),隔离读数并列在行内。
+- **公开签名**:`tx_snapshot/rx_snapshot/loopback_snapshot(..., ce_smooth_tones=9)`,
+  新增 `cal.sequence.scoring_frame/score_views`、`cal.tracking.pilot_cfo_hz`
+  (研究页与跟踪环共用同一回归)、`waveform.preamble.smooth_channel_estimate`、
+  `dpd.BoundedDPD`;`RESIDUAL_SPEC` 新增三个 `role="total"` 键;`dpd` 步
+  `estimated.x_max`。GUI `full_cal` 指标新增三个 modem 键,星座图标题并列两口径。
+- **守卫**:`tests/test_evm_views.py`(闭式锚定的两口径差、平滑的方差律、
+  CFO 回归、包络饱和);e2e 旗舰改断言 spec 指标名与 modem 读数;窄带 11ac 测试
+  加 modem 断言。金标重生成,Android 金标 job 需重新 dispatch。
+
 ## 0.7.17 — 2026-09-08
 
 ### 修正:导频表按数字学分表——11ax/be 此前一直用的是 802.11a/ac 的导频集

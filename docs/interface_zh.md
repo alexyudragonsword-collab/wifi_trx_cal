@@ -185,7 +185,19 @@ RX DC 校正为两级:`dc_ana`(逐档模拟微调 DAC,基带节点减除,±0.064
   `metrics.cpe.correct_cpe`(逐符号公共相位去除,规范 EVM 测法)
 - `metrics.aclr(x, fs, bw)`(需 fs ≥ 3bw)、`metrics.psd` + `default_wifi_mask`
 - `metrics.irr.tone_image_irr_db / comb_irr_db / lo_leak_dbc`
-- 三个方向的 EVM 口径(逐音 EQ + CPE、内部符号打分,口径一致):
+- 三个方向的 EVM 各报两种口径(0.7.18 起;同一打分帧 `cal.sequence.scoring_frame`:
+  LTF 对 + 带标准导频集的数据符号,内部符号打分,只打分数据音):
+  - `*_evm_db` **隔离口径**——逐音 LS 均衡到理想参考 + genie CPE,只剩损伤
+    本身,是重放闭环的目标;
+  - `*_evm_modem_db` **modem 口径**——LTF 对粗 CFO + 导频斜率细 CFO 捕获、
+    LTF 信道估计跨音平滑 `ce_smooth_tones`(默认 9,记入 cal-state
+    `conditions`)后整包冻结、N_p 导频 CPE——标准接收机实际读到的数,
+    `final_loopback_evm` 的嵌入 spec(MCS13 `tx_evm_modem_db <= −38`)按它判。
+    纯噪声链上两口径差 10·log(1+ρ/2)+10·log(1+1/(2N_p)) ≈ 1.9 dB;校准后的
+    链上原始 LTF 估计会冻结残余镜像/失真的 LTF 图案,平滑把它去掉。
+  - `link.sensitivity.measured_rx_evm_db`(灵敏度扫描)与 RX 扫描页仍是隔离
+    口径的相对曲线,不做门槛。
+- 三个方向的定义:
   - `cal.sequence.tx_evm` / `tx_snapshot`(PA 输出、802.11be TX 规范
     测量点;独立测试接收机,相噪全额计入)
   - `cal.sequence.loopback_evm` / `loopback_snapshot`(TX+RX 复合;
@@ -194,8 +206,9 @@ RX DC 校正为两级:`dc_ana`(逐档模拟微调 DAC,基带节点减除,±0.064
     (理想波形灌入 RX,独立 LO;`sensitivity_study` 的
     `floor_limited` 标记表示该 MCS 门限距强信号底板 <5 dB,实测
     灵敏度偏离 Friis 解析值属"底板+噪声"联合受限,并非模型误差)
-- `run_full_cal` 的 `final_loopback_evm` 结果同时携带三个口径:
-  `evm_db`(环回)/`tx_evm_db`/`rx_evm_db`,以及
+- `run_full_cal` 的 `final_loopback_evm` 结果同时携带三个方向 × 两种口径:
+  `evm_db`(环回)/`tx_evm_db`/`rx_evm_db` 与 `evm_modem_db`/`tx_evm_modem_db`/
+  `rx_evm_modem_db`,以及
   `snapshot_before/after/tx/rx` 星座 artifacts
 
 ## 6. 已知建模简化

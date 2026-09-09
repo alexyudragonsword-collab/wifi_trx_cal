@@ -106,7 +106,9 @@ def _five_panel(results, sb, sa, st, sr=None, rx_sweep=None,
                                                   replace=False)
             pts = pts[idx]
         ax.plot(pts.real, pts.imag, ".", ms=1.0, alpha=0.5)
-        ax.set_title(f"{title}\n(EVM {snap['evm_db']:.1f} dB)", fontsize=9)
+        modem = (f" | modem {snap['evm_modem_db']:.1f}"
+                 if "evm_modem_db" in snap else "")
+        ax.set_title(f"{title}\n(EVM {snap['evm_db']:.1f} dB{modem})", fontsize=9)
         ax.set_aspect("equal")
         ax.set_xlim(-1.55, 1.55)
         ax.set_ylim(-1.55, 1.55)
@@ -318,6 +320,13 @@ def _cal_metrics(results, final):
          "steps_total": len(results)}
     if "rx_evm_db" in final.metrics_after:
         m["rx_evm_db"] = final.metrics_after["rx_evm_db"]
+    # the modem-form views (0.7.18): what a standard receiver reads, and
+    # the figure the MCS13 spec verdict is taken on
+    for src, dst in (("evm_modem_db", "loopback_evm_modem_db"),
+                     ("tx_evm_modem_db", "tx_evm_modem_db"),
+                     ("rx_evm_modem_db", "rx_evm_modem_db")):
+        if src in final.metrics_after:
+            m[dst] = final.metrics_after[src]
     return m
 
 
@@ -891,22 +900,14 @@ def _pn_four_configs(frame, cols, pilots, phi, cfo_hz: float = 0.0) -> np.ndarra
 
 
 def _pilot_cfo_hz(y, frame, cols, pilots) -> float:
-    """Residual CFO [Hz] from the pilots' common phase vs symbol time —
-    the same regression the tracking loop runs (cal/tracking.py), on
-    one frame."""
+    """Residual CFO [Hz] of one frame from the pilots' common phase vs
+    symbol time — the tracking loop's own regression (cal/tracking.py)."""
+    from wifitrx.cal.tracking import pilot_cfo_hz
     from wifitrx.waveform.ofdm import demodulate_ofdm
 
     cfg = frame.config
-    fs = cfg.sample_rate_hz
     syms = demodulate_ofdm(y[frame.preamble_len:], frame.data)
-    common = np.unwrap(np.angle((syms[:, cols] * np.conj(pilots)).sum(axis=1)))
-    sym_len_s = (cfg.fft_size + cfg.cp_len) * cfg.oversampling / fs
-    t_sym = (np.arange(cfg.n_symbols) + 0.5) * sym_len_s
-    tc = t_sym - t_sym.mean()
-    denom = float(np.dot(tc, tc))
-    if denom == 0.0:
-        return 0.0
-    return float(np.dot(tc, common - common.mean()) / denom / (2 * np.pi))
+    return pilot_cfo_hz(syms, cols, pilots, cfg, cfg.sample_rate_hz)
 
 
 def _cfo_closed_forms(frame, cfo_hz: float) -> tuple:

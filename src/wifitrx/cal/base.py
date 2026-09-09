@@ -219,6 +219,35 @@ def cal_state_readme(doc: dict) -> str:
                 f"{_verdict(r.get('saturated'))} | {spec_txt} |")
         lines.append("")
 
+    views = {k: values[k] for k in ("final_loopback_evm.tx_evm_db",
+                                    "final_loopback_evm.tx_evm_modem_db",
+                                    "final_loopback_evm.rx_evm_db",
+                                    "final_loopback_evm.rx_evm_modem_db")
+             if k in values}
+    if "final_loopback_evm.tx_evm_modem_db" in views:
+        spec_steps = [r for r in results if (r.get("spec") or {}).get("metric")]
+        gate = ", ".join(f"`{r['spec']['metric']} {r['spec'].get('sense', '')} "
+                         f"{r['spec']['limit']}`" for r in spec_steps) or "none embedded"
+        lines += [
+            "## Two EVM views",
+            "",
+            "Every EVM figure in this file is reported twice from the same "
+            "capture. `*_evm_db` is the **isolation view**: per-tone LS "
+            "equalisation against the ideal reference plus genie "
+            "common-phase removal — only the chain's impairments, which is "
+            "why the residual replay closes on it. `*_evm_modem_db` is the "
+            "**modem form**: LTF CFO acquisition, the LTF channel estimate "
+            "smoothed over `ce_smooth_tones` adjacent tones and frozen for "
+            "the packet, then pilot-only common-phase removal — what a "
+            "standard receiver reads, and the figure the spec verdict is "
+            f"taken on ({gate}). The gap between the two is the receiver's "
+            "own estimation loss, not a residual of the chain; do not "
+            "inject either.",
+            "",
+        ]
+        lines += [f"* `{k.split('.', 1)[1]}` = {_fmt(v)} dB" for k, v in views.items()]
+        lines.append("")
+
     if values:
         lines += [
             "## Residuals",

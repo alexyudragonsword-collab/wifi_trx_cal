@@ -32,6 +32,10 @@ def test_full_sequence_80mhz():
     by_name = {r.name: r for r in results}
     final = by_name["final_loopback_evm"]
     assert final.metrics_after["tx_evm_db"] < -38.0, final.metrics_after
+    # the modem form reads above the isolation view by the receiver's
+    # own estimation loss — bounded, never below it
+    gap = final.metrics_after["tx_evm_modem_db"] - final.metrics_after["tx_evm_db"]
+    assert 0.0 < gap < 3.0, final.metrics_after
     assert final.metrics_after["evm_db"] < -35.0, final.metrics_after
     assert final.metrics_after["evm_db"] < final.metrics_before["evm_db"] - 5.0
     # every individual step healthy
@@ -56,8 +60,16 @@ def test_full_sequence_320mhz_4096qam():
     results = run_full_cal(tx, rx, cfg, path, with_dpd=True,
                            final_drive_scale=0.12)
     final = {r.name: r for r in results}["final_loopback_evm"]
-    # MCS13 TX EVM requirement at the PA output (802.11be spec point)
+    # MCS13 TX EVM requirement at the PA output (802.11be spec point),
+    # judged in the modem form since 0.7.18 — LTF CFO acquisition, the
+    # LTF channel estimate smoothed over 9 tones, pilot CPE: measured
+    # -41.9 dB (raw estimate -39.6, isolation view -42.4).  The embedded
+    # spec must name that metric, or the inspector gates the wrong view.
+    assert final.spec == {"metric": "tx_evm_modem_db", "limit": -38.0,
+                          "sense": "max"}
+    assert final.metrics_after["tx_evm_modem_db"] <= -38.0, final.metrics_after
     assert final.metrics_after["tx_evm_db"] <= -38.0, final.metrics_after
+    assert final.metrics_after["tx_evm_modem_db"] > final.metrics_after["tx_evm_db"]
     # composite TX+RX loopback EVM stays within the model's own budget
     assert final.metrics_after["evm_db"] <= -34.0, final.metrics_after
 

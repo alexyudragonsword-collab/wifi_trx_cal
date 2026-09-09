@@ -92,6 +92,7 @@ class RunContext:
                 "evm_before": final.metrics_before["evm_db"],
                 "evm_after": final.metrics_after["evm_db"],
                 "tx_evm_db": final.metrics_after["tx_evm_db"],
+                "tx_evm_modem_db": final.metrics_after["tx_evm_modem_db"],
                 "capture_ms_factory": final.metrics_after["capture_time_ms"],
                 "captures_factory": final.metrics_after["total_captures"],
                 "capture_ms_poweron": final2.metrics_after["capture_time_ms"],

@@ -1,5 +1,6 @@
 from .adaptive import AdaptiveDPD
-from .ila import ILAPredistorter
+from .bounded import BoundedDPD
 from .cfr import cfr_clip_filter
+from .ila import ILAPredistorter
 
-__all__ = ["AdaptiveDPD", "ILAPredistorter", "cfr_clip_filter"]
+__all__ = ["AdaptiveDPD", "BoundedDPD", "ILAPredistorter", "cfr_clip_filter"]

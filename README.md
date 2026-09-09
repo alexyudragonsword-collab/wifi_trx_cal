@@ -79,7 +79,8 @@ python app/main.py
 9. AGC 验证扫描
 
 端到端结果(随机工艺损伤 + 全部校准,见 `tests/test_e2e.py`):
-320 MHz / 4096-QAM 下 **TX EVM ≤ −38 dB**(802.11be MCS13 要求),
+320 MHz / 4096-QAM 下 **TX EVM ≤ −38 dB**(802.11be MCS13 要求,按 modem 口径判:
+LTF CFO 捕获 + 跨音平滑的 LTF 信道估计 + 导频 CPE,实测 −41.9 dB;隔离口径 −42.4),
 校正状态可导出/导入 JSON(`cal_state.json`)交付通信算法团队。
 
 ## 文档

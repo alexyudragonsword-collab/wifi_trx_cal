@@ -56,7 +56,8 @@ def main() -> None:
     print(f"cal state: {args.out / 'cal_state.json'}")
     final = {r.name: r for r in results}["final_loopback_evm"]
     print(f"final loopback EVM: {final.metrics_after['evm_db']:.2f} dB, "
-          f"TX EVM: {final.metrics_after['tx_evm_db']:.2f} dB")
+          f"TX EVM: {final.metrics_after['tx_evm_db']:.2f} dB (isolation view) / "
+          f"{final.metrics_after['tx_evm_modem_db']:.2f} dB (modem form, spec verdict)")
 
 
 if __name__ == "__main__":

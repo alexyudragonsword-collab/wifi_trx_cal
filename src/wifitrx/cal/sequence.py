@@ -34,8 +34,11 @@ from ..chain.rx import RxChain
 from ..chain.tx import TxChain
 from ..metrics import evm
 from ..units import power_dbm
-from ..metrics.cpe import correct_cpe
+from ..metrics.cpe import correct_cpe, correct_cpe_pilots
 from ..waveform.ofdm import OFDMConfig, demodulate_ofdm, generate_ofdm
+from ..waveform.pilots import generate_ofdm_with_pilots, pilot_sequence
+from ..waveform.preamble import (DEFAULT_CE_SMOOTH_TONES, apply_cfo, build_frame,
+                                 channel_estimate, estimate_cfo, smooth_channel_estimate)
 from .agc_cal import calibrate_agc
 from .base import CalResult
 from .deps import planned_steps, validate_order
@@ -46,6 +49,7 @@ from .rx_dc import calibrate_rx_dc
 from .rx_iip2 import calibrate_rx_iip2
 from .rx_iq import calibrate_rx_iq
 from .sync import align_delay, compensate_delay
+from .tracking import pilot_cfo_hz
 from .tx_iq import calibrate_tx_iq
 from .tx_lo_leak import (calibrate_tx_lo_leak_envdet,
                          calibrate_tx_lo_leak_loopback)
@@ -74,11 +78,79 @@ def capture_aligned(tx: TxChain, rx: RxChain, path: LoopbackPath,
     return compensate_delay(cap, info["lag_total"], n_warmup, len(x))
 
 
+def scoring_frame(cfg: OFDMConfig):
+    """The EVM scoring stimulus: [GI2 | LTF | LTF | data] with the
+    standard's pilot set on the data symbols and one extra padding
+    symbol (see ``tx_snapshot``).  Returns (frame, pilot_cols, pilots).
+    One deterministic frame per config, so the three views (loopback /
+    TX / RX) and every caller score the same waveform."""
+    cfg_pad = replace(cfg, n_symbols=cfg.n_symbols + 1)
+    wf, cols = generate_ofdm_with_pilots(cfg_pad)
+    frame = build_frame(cfg_pad, data=wf)
+    return frame, cols, pilot_sequence(cfg_pad.n_symbols, cols.size)
+
+
+def score_views(y: np.ndarray, frame, cols: np.ndarray, pilots: np.ndarray,
+                n_symbols: int, ce_smooth_tones: int = DEFAULT_CE_SMOOTH_TONES) -> dict:
+    """Both EVM views of one captured, delay-aligned, gain-normalised
+    frame ``y`` (same sample scale as ``frame.x``), data tones only:
+
+    ``evm_db`` — the isolation view: per-tone LS equaliser fitted
+    against the ideal reference over all scored symbols and genie CPE
+    (every tone vs the reference).  What the impairments alone leave;
+    the closure target of the residual replay, since a receiver's own
+    estimation losses are not a residual of the chain.
+
+    ``evm_modem_db`` — the modem form: coarse CFO from the LTF pair,
+    fine CFO from the slope of the pilots' common phase across the
+    frame, the LTF-pair channel estimate smoothed over
+    ``ce_smooth_tones`` adjacent tones and frozen for the packet, then
+    the N_p-pilot CPE per symbol — what a standard receiver actually
+    reads.  On a noise-only chain and no smoothing it sits above the
+    isolation view by exactly the two estimator terms the phase-noise
+    study measures, 10 log(1 + rho/2) for the frozen LTF error and
+    10 log(1 + 1/(2 N_p)) for the pilot noise (1.90 dB measured vs 1.89
+    at 80 MHz).  On the calibrated chain the raw estimate also freezes
+    the LTF pattern's share of the residual IQ image and PA distortion
+    into H — 5.2 dB above the isolation view at 320 MHz / 4096-QAM —
+    which the smoothing removes because that share flips sign tone to
+    tone while the channel does not (1.0 dB at 9 tones).  The MCS13
+    -38 dB verdict binds this view.
+    """
+    cfg = frame.config
+    fs = cfg.sample_rate_hz
+    n = n_symbols
+    data = np.ones(cfg.n_active, dtype=bool)
+    data[cols] = False
+    ref = frame.data.tx_symbols[:n]
+    syms = demodulate_ofdm(y[frame.preamble_len:], frame.data)[:n]
+    genie = correct_cpe(syms, ref)
+    # modem form
+    y_acq = apply_cfo(y, -estimate_cfo(y, frame, fs), fs)
+    syms_acq = demodulate_ofdm(y_acq[frame.preamble_len:], frame.data)
+    y_acq = apply_cfo(y_acq, -pilot_cfo_hz(syms_acq, cols, pilots, cfg, fs), fs)
+    h = smooth_channel_estimate(channel_estimate(y_acq, frame), ce_smooth_tones)
+    req = demodulate_ofdm(y_acq[frame.preamble_len:], frame.data)[:n] / h
+    modem = correct_cpe_pilots(req, cols, pilots[:n])
+    p_ref = float((np.abs(ref[:, data]) ** 2).mean())
+    err = float((np.abs(modem[:, data] - ref[:, data]) ** 2).mean())
+    return {"evm_db": float(evm(genie[:, data], ref[:, data], equalize="per_tone").db),
+            "evm_modem_db": float(10.0 * np.log10(err / p_ref)),
+            "syms_eq": _equalize_per_tone(genie, ref)[:, data],
+            "syms_modem": modem[:, data],
+            "ref_syms": ref[:, data],
+            "n_pilots": int(cols.size),
+            "ce_smooth_tones": int(ce_smooth_tones)}
+
+
 def tx_snapshot(tx: TxChain, cfg: OFDMConfig, drive_scale: float = 0.15,
-                n_warmup: int = 512, n_guard: int = 64) -> dict:
+                n_warmup: int = 512, n_guard: int = 64,
+                ce_smooth_tones: int = DEFAULT_CE_SMOOTH_TONES) -> dict:
     """PA-output EVM plus the equalized constellation, as a
     standard-compliant test receiver sees it (the 802.11be TX spec
-    measurement point): per-tone EQ + CPE removal.  A cyclic warm-up
+    measurement point), in both views of ``score_views``: the isolation
+    view (per-tone EQ + genie CPE) and the modem form (LTF CFO
+    acquisition + LTF channel estimate + pilot CPE).  A cyclic warm-up
     prefix settles the TX baseband filter, a cyclic guard tail keeps
     delay compensation inside the frame, and the capture is
     delay-aligned before demodulation.
@@ -89,21 +161,17 @@ def tx_snapshot(tx: TxChain, cfg: OFDMConfig, drive_scale: float = 0.15,
     its FFT window a few samples past the burst end, where the truncated
     window ramp-down makes the continuation unrepresentative — worth
     >8 dB of bias on deep (<-55 dB) floors at small n_symbols."""
-    cfg_pad = replace(cfg, n_symbols=cfg.n_symbols + 1)
-    wf = generate_ofdm(cfg_pad)
-    x = wf.x * drive_scale
+    frame, cols, pilots = scoring_frame(cfg)
+    x = frame.x * drive_scale
     xp = np.concatenate([x[-n_warmup:], x, x[:n_guard]])
     y = tx(xp)
     _, _, info = align_delay(xp, y, max_lag=n_guard // 2)
     y = compensate_delay(y, info["lag_total"], n_warmup, len(x))
     g = np.vdot(x, y) / np.vdot(x, x)
-    syms = demodulate_ofdm(y / g / drive_scale, wf)[: cfg.n_symbols]
-    ref = wf.tx_symbols[: cfg.n_symbols]
-    syms = correct_cpe(syms, ref)
-    return {"evm_db": evm(syms, ref, equalize="per_tone").db,
-            "syms_eq": _equalize_per_tone(syms, ref),
-            "ref_syms": ref,
-            "bandwidth_hz": cfg.bandwidth_hz}
+    out = score_views(y / g / drive_scale, frame, cols, pilots, cfg.n_symbols,
+                      ce_smooth_tones)
+    out["bandwidth_hz"] = cfg.bandwidth_hz
+    return out
 
 
 def tx_evm(tx: TxChain, cfg: OFDMConfig, drive_scale: float = 0.15,
@@ -116,7 +184,7 @@ def tx_evm(tx: TxChain, cfg: OFDMConfig, drive_scale: float = 0.15,
 
 def rx_snapshot(rx: RxChain, cfg: OFDMConfig, p_in_dbm: float,
                 n_warmup: int = 512, n_guard: int = 64,
-                seed: int = 0) -> dict:
+                seed: int = 0, ce_smooth_tones: int = DEFAULT_CE_SMOOTH_TONES) -> dict:
     """Receive-direction counterpart of ``tx_snapshot``: an ideal
     transmitted waveform at ``p_in_dbm`` RF input into the (impaired,
     possibly calibrated) RX chain, AGC engaged.  The LO here is
@@ -124,24 +192,22 @@ def rx_snapshot(rx: RxChain, cfg: OFDMConfig, p_in_dbm: float,
     unlike the loopback view where the shared synthesizer cancels it.
     Same capture conventions: cyclic warm-up prefix and guard tail,
     integer-slice + fractional delay compensation, one padding symbol
-    transmitted and excluded from the score, per-tone EQ + CPE."""
-    wf = generate_ofdm(replace(cfg, n_symbols=cfg.n_symbols + 1))
-    amp = 10.0 ** ((p_in_dbm - power_dbm(wf.x)) / 20.0)
-    x = wf.x * amp
+    transmitted and excluded from the score, both views of
+    ``score_views``."""
+    frame, cols, pilots = scoring_frame(cfg)
+    amp = 10.0 ** ((p_in_dbm - power_dbm(frame.data.x)) / 20.0)
+    x = frame.x * amp
     rx.agc(p_in_dbm)
     xp = np.concatenate([x[-n_warmup:], x, x[:n_guard]])
     y = rx(xp, rng=np.random.default_rng(seed))
     _, _, info = align_delay(xp, y, max_lag=n_guard // 2)
     y = compensate_delay(y, info["lag_total"], n_warmup, len(x))
     g = np.vdot(x, y) / np.vdot(x, x)
-    syms = demodulate_ofdm(y / g / amp, wf)[: cfg.n_symbols]
-    ref = wf.tx_symbols[: cfg.n_symbols]
-    syms = correct_cpe(syms, ref)
-    return {"evm_db": evm(syms, ref, equalize="per_tone").db,
-            "syms_eq": _equalize_per_tone(syms, ref),
-            "ref_syms": ref,
-            "p_in_dbm": p_in_dbm,
-            "bandwidth_hz": cfg.bandwidth_hz}
+    out = score_views(y / g / amp, frame, cols, pilots, cfg.n_symbols,
+                      ce_smooth_tones)
+    out["p_in_dbm"] = p_in_dbm
+    out["bandwidth_hz"] = cfg.bandwidth_hz
+    return out
 
 
 def _equalize_per_tone(syms: np.ndarray, ref: np.ndarray) -> np.ndarray:
@@ -154,28 +220,24 @@ def _equalize_per_tone(syms: np.ndarray, ref: np.ndarray) -> np.ndarray:
 
 def loopback_snapshot(tx: TxChain, rx: RxChain, path: LoopbackPath,
                       cfg: OFDMConfig, drive_scale: float = 0.25,
-                      seed: int = 0) -> dict:
+                      seed: int = 0,
+                      ce_smooth_tones: int = DEFAULT_CE_SMOOTH_TONES) -> dict:
     """Loopback EVM plus the raw material for before/after figures:
     equalized constellation symbols and the PA-output waveform.
 
     Transmits one extra padding symbol and scores interior symbols only,
     like ``tx_evm`` (the burst's final symbol is edge-contaminated once
     delay compensation advances its FFT window past the burst end)."""
-    wf = generate_ofdm(replace(cfg, n_symbols=cfg.n_symbols + 1))
-    x = wf.x * drive_scale
+    frame, cols, pilots = scoring_frame(cfg)
+    x = frame.x * drive_scale
     agc_for_loopback(tx, rx, path, x)
     y_pa = tx(x)
     cap = capture_aligned(tx, rx, path, x, seed=seed)
     g = np.vdot(x, cap) / np.vdot(x, x)
-    syms = demodulate_ofdm(cap / g / drive_scale, wf)[: cfg.n_symbols]
-    ref = wf.tx_symbols[: cfg.n_symbols]
-    syms = correct_cpe(syms, ref)
-    evm_db = evm(syms, ref, equalize="per_tone").db
-    return {"evm_db": evm_db,
-            "syms_eq": _equalize_per_tone(syms, ref),
-            "ref_syms": ref,
-            "pa_out": y_pa, "fs": tx.fs,
-            "bandwidth_hz": cfg.bandwidth_hz}
+    out = score_views(cap / g / drive_scale, frame, cols, pilots, cfg.n_symbols,
+                      ce_smooth_tones)
+    out.update({"pa_out": y_pa, "fs": tx.fs, "bandwidth_hz": cfg.bandwidth_hz})
+    return out
 
 
 def loopback_evm(tx: TxChain, rx: RxChain, path: LoopbackPath,
@@ -361,6 +423,9 @@ def run_full_cal(tx: TxChain, rx: RxChain, cfg: OFDMConfig,
         metrics_after={"evm_db": evm_after,
                        "tx_evm_db": snap_tx["evm_db"],
                        "rx_evm_db": snap_rx["evm_db"],
+                       "evm_modem_db": snap_after["evm_modem_db"],
+                       "tx_evm_modem_db": snap_tx["evm_modem_db"],
+                       "rx_evm_modem_db": snap_rx["evm_modem_db"],
                        "rx_input_dbm": p_rx_dbm,
                        "rx_gain_state": rx.lna_idx,
                        "rx_nf_db": rx_nf_db,
@@ -370,14 +435,22 @@ def run_full_cal(tx: TxChain, rx: RxChain, cfg: OFDMConfig,
                        "total_captures": total_captures},
         passed=evm_after < evm_before,
         # the MCS13 TX EVM spec only binds the full (DPD) flow; a no-DPD
-        # run targets lower MCS and carries no embedded spec
-        spec={"metric": "tx_evm_db", "limit": -38.0, "sense": "max"}
+        # run targets lower MCS and carries no embedded spec.  It binds
+        # the modem-form reading (what a standard receiver measures),
+        # not the isolation view (0.7.18; before that the genie view was
+        # gated, ~2 dB optimistic)
+        spec={"metric": "tx_evm_modem_db", "limit": -38.0, "sense": "max"}
              if with_dpd else {},
         notes="evm_db: composite TX+RX loopback EVM (shared LO — phase "
               "noise cancels); tx_evm_db: PA-output EVM at the 802.11be "
               "TX spec measurement point; rx_evm_db: ideal waveform into "
-              "the RX at the loopback's coupled level (independent LO); "
-              f"per-tone EQ + CPE removal in all three; profile={profile}",
+              "the RX at the loopback's coupled level (independent LO). "
+              "Each in two views: *_evm_db is the isolation view (per-tone "
+              "EQ vs the ideal reference + genie CPE, the replay's closure "
+              "target); *_evm_modem_db is the modem form (LTF CFO "
+              "acquisition + LTF channel estimate smoothed over "
+              f"{DEFAULT_CE_SMOOTH_TONES} tones + pilot CPE, the spec "
+              f"verdict's input); profile={profile}",
         artifacts={"snapshot_before": snap_before,
                    "snapshot_after": snap_after,
                    "snapshot_tx": snap_tx,

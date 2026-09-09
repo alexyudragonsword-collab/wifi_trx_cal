@@ -164,16 +164,22 @@ CHAPTER = Chapter(
                               "Monte-Carlo)")),
                 T("旗舰配置 320 MHz / 4096-QAM 的验收数字由测试套件断言"
                   "(tests/test_e2e.py::test_full_sequence_320mhz 及相关):"
-                  "TX EVM ≤ −38 dB(802.11be MCS13),实测约 −39.8 dB,"
-                  "真实电路数据导入路径约 −41.4 dB。本教程的构建配置(80 MHz)"
-                  "为求速度,不替代上述验收值。",
+                  "TX EVM ≤ −38 dB(802.11be MCS13),0.7.18 起按 modem 口径判"
+                  "(LTF CFO 捕获 + 9 音平滑的 LTF 信道估计 + 导频 CPE),实测"
+                  "约 −41.9 dB(隔离口径 −42.4;原始不平滑的 LTF 估计 −39.6);"
+                  "真实电路数据导入路径约 −41.5 dB(隔离 −42.0)。本教程的构建"
+                  "配置(80 MHz)为求速度,不替代上述验收值。",
                   "The flagship 320 MHz / 4096-QAM acceptance numbers are "
                   "asserted by the test suite "
                   "(tests/test_e2e.py::test_full_sequence_320mhz and "
-                  "friends): TX EVM ≤ −38 dB (802.11be MCS13), measured "
-                  "≈ −39.8 dB, and ≈ −41.4 dB on the circuit-data import "
-                  "path. This tutorial's build config (80 MHz) trades "
-                  "fidelity for speed and does not replace those "
-                  "acceptance values."),
+                  "friends): TX EVM ≤ −38 dB (802.11be MCS13), judged in "
+                  "the modem form since 0.7.18 (LTF CFO acquisition, a "
+                  "9-tone-smoothed LTF channel estimate, pilot CPE): "
+                  "measured ≈ −41.9 dB (isolation view −42.4; the raw, "
+                  "unsmoothed LTF estimate reads −39.6), and ≈ −41.5 dB "
+                  "on the circuit-data import path (isolation −42.0). "
+                  "This tutorial's build config (80 MHz) trades fidelity "
+                  "for speed and does not replace those acceptance "
+                  "values."),
             )),
     ))

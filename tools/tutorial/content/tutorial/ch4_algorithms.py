@@ -85,7 +85,8 @@ def _final_values(ctx):
     fc = ctx.full_cal
     return {"evm_before": f"{fc['evm_before']:.1f}",
             "evm_after": f"{fc['evm_after']:.1f}",
-            "tx_evm": f"{fc['tx_evm_db']:.1f}"}
+            "tx_evm": f"{fc['tx_evm_db']:.1f}",
+            "tx_evm_modem": f"{fc['tx_evm_modem_db']:.1f}"}
 
 
 CHAPTER = Chapter(
@@ -499,18 +500,30 @@ CHAPTER = Chapter(
         Section(
             id="cal-final", title=T("4.12 最终环回 EVM", "4.12 Final loopback EVM"), level=3,
             values=_final_values,
-            value_keys=("evm_before", "evm_after", "tx_evm"),
+            value_keys=("evm_before", "evm_after", "tx_evm", "tx_evm_modem"),
             body=(
-                T("全链路验收:同一 OFDM 帧,逐音均衡 + 公共相位去除(规范 "
-                  "EVM 测法)。复合环回 EVM {evm_before} → {evm_after} dB;"
-                  "PA 输出处的 TX EVM(802.11be 规范测量点)为 {tx_evm} dB。"
-                  "星座图与频谱前后对比:",
-                  "The end-to-end acceptance: the same OFDM frame, "
-                  "per-tone equalization plus common-phase removal (the "
-                  "standard EVM method). Composite loopback EVM "
-                  "{evm_before} → {evm_after} dB; TX EVM at the PA output "
-                  "(the 802.11be measurement point) {tx_evm} dB. "
-                  "Constellation and spectrum, before vs after:"),
+                T("全链路验收:同一 OFDM 帧(LTF 对 + 带标准导频集的数据符号),"
+                  "两种口径同时报告。隔离口径:逐音均衡到理想参考 + genie 公共"
+                  "相位去除,只剩损伤本身,是重放闭环的目标;modem 口径:LTF "
+                  "CFO 捕获 + 跨音平滑的 LTF 信道估计 + 导频公共相位去除,是"
+                  "标准接收机实际读到的数,MCS13 的 −38 dB 门槛按它判(0.7.18 起)。"
+                  "复合环回 EVM {evm_before} → {evm_after} dB;PA 输出处的 "
+                  "TX EVM(802.11be 规范测量点)隔离口径 {tx_evm} dB、modem 口径 "
+                  "{tx_evm_modem} dB。星座图与频谱前后对比:",
+                  "The end-to-end acceptance: the same OFDM frame (LTF pair "
+                  "plus data symbols carrying the standard's pilot set), "
+                  "reported in two views. The isolation view — per-tone "
+                  "equalization against the ideal reference plus genie "
+                  "common-phase removal — leaves only the impairments and "
+                  "is the replay's closure target; the modem form — LTF CFO "
+                  "acquisition, a tone-smoothed LTF channel estimate and "
+                  "pilot common-phase removal — is what a standard receiver "
+                  "actually reads, and the MCS13 −38 dB verdict is taken on "
+                  "it (since 0.7.18). Composite loopback EVM {evm_before} → "
+                  "{evm_after} dB; TX EVM at the PA output (the 802.11be "
+                  "measurement point) {tx_evm} dB in the isolation view, "
+                  "{tx_evm_modem} dB in the modem form. Constellation and "
+                  "spectrum, before vs after:"),
                 Fig(id="fig-const", build=figures.constellation_compare,
                     caption=T("均衡后星座图:校准前 vs 校准后",
                               "Equalized constellation: before vs after")),

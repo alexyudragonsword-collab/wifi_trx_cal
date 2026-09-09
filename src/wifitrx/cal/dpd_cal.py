@@ -19,6 +19,7 @@ from ..chain.rx import RxChain
 from ..chain.tx import TxChain
 from ..metrics import aclr, evm
 from ..pa.gmp import GMPModel
+from ..dpd.bounded import BoundedDPD
 from ..waveform.ofdm import OFDMWaveform, demodulate_ofdm
 from .base import CalResult
 from .sync import align_delay, compensate_delay
@@ -77,6 +78,7 @@ def calibrate_dpd(tx: TxChain, rx: RxChain, wf: OFDMWaveform,
     # normalization would fold gain error into the coefficients).
     dpd_model = None
     g0 = None
+    x_max = float(np.max(np.abs(x)))
     for it in range(n_iter):
         u = x if dpd_model is None else dpd_model(x)
         cap = _capture(tx, rx, path, x)
@@ -85,15 +87,21 @@ def calibrate_dpd(tx: TxChain, rx: RxChain, wf: OFDMWaveform,
         model = GMPModel(order=order, memory_depth=memory_depth)
         model.fit(cap / g0, u)
         dpd_model = model
-        tx.dpd = dpd_model
+        # programmed envelope-bounded: the polynomial is a model of the
+        # PA only up to the training peak; beyond it the correction gain
+        # holds its edge value (see dpd/bounded.py for the -3.8 dB
+        # symbol that motivated this)
+        tx.dpd = BoundedDPD(dpd_model, x_max)
         trace.append(pa_out_metrics()["aclr_worst_dbc"])
 
     after = pa_out_metrics()
     rx.params.lpf.enabled = lpf_was_enabled
     return CalResult(
         name="dpd",
-        estimated={"order": order, "memory_depth": memory_depth},
-        corrections={"dpd": "GMP ILA predistorter programmed on TxChain"},
+        estimated={"order": order, "memory_depth": memory_depth,
+                   "x_max": x_max},
+        corrections={"dpd": "GMP ILA predistorter programmed on TxChain, "
+                            "envelope-bounded at the training peak"},
         trace=trace,
         metrics_before=before,
         metrics_after=after,

@@ -19,8 +19,29 @@ from dataclasses import dataclass, field
 import numpy as np
 from scipy.interpolate import CubicSpline
 
-from ..waveform.ofdm import OFDMWaveform, demodulate_ofdm
+from ..waveform.ofdm import OFDMConfig, OFDMWaveform, demodulate_ofdm
 from ..waveform.pilots import pilot_sequence
+
+
+def pilot_cfo_hz(syms: np.ndarray, pilot_cols: np.ndarray, pilots: np.ndarray,
+                 cfg: OFDMConfig, fs: float) -> float:
+    """Residual CFO [Hz] from the slope of the pilots' common phase
+    against symbol time — the one regression behind the tracking loop's
+    CFO branch, the study's fine acquisition step and the modem-form EVM
+    view.  Coherent: the per-symbol phase is the angle of the pilot
+    correlation sum (not the mean of per-pilot angles), unwrapped along
+    the frame, then least-squares fitted against the symbol centres.
+    ``syms`` are demodulated (n_symbols, n_active); ``pilots`` the known
+    (n_symbols, n_pilots) values."""
+    rx = np.asarray(syms, dtype=complex)
+    common = np.unwrap(np.angle((rx[:, pilot_cols] * np.conj(pilots)).sum(axis=1)))
+    sym_len_s = (cfg.fft_size + cfg.cp_len) * cfg.oversampling / fs
+    t_sym = (np.arange(rx.shape[0]) + 0.5) * sym_len_s
+    tc = t_sym - t_sym.mean()
+    denom = float(np.dot(tc, tc))
+    if denom == 0.0:
+        return 0.0
+    return float(np.dot(tc, common - common.mean()) / denom / (2 * np.pi))
 
 
 @dataclass
@@ -70,9 +91,7 @@ class ClockTracker:
 
         # residual CFO: slope of the per-symbol common pilot phase vs time
         common = ph.mean(axis=1)
-        denom = float(np.dot(t_sym - t_sym.mean(), t_sym - t_sym.mean()))
-        slope = float(np.dot(t_sym - t_sym.mean(), common - common.mean()))
-        cfo_resid = slope / denom / (2 * np.pi) if denom > 0 else 0.0
+        cfo_resid = pilot_cfo_hz(syms, pilot_cols, pilots, cfg, self.fs)
         self.cfo_hz += self.mu_cfo * cfo_resid
 
         if self.slave_sco:
