@@ -4,6 +4,28 @@
 或 `wifitrx.*` 公开签名的条目都在下面显式标注,交付方按此判断是否需要
 重新取包。日期为落地日期。
 
+## 0.7.21 — 2026-09-09
+
+### 防漂移守卫的覆盖面 + cal-state schema 小版本(**schema:新增 `schema_version` 字段**)(体检 P1-6)
+
+- **`schema_version`**:cal-state 除 `format`(大版本标签 `wifitrx-cal-state-v1`)外
+  新增 `"schema_version": "1.1"`——1.1 = 0.7.18 加的三个 `*_evm_modem_db` 与
+  `conditions.ce_smooth_tones`;此前所有文件视为 1.0。`cal.base.check_schema` /
+  `load_cal_state` 接受任意 1.x(缺字段 = 1.0),拒绝其他大版本;stdlib 检查器同规则,
+  小版本不同给 info、大版本不同给 error。
+- **冻结夹具** `tests/data/cal_state_v1.json`(+ 自生成 README):0.7.21 写出的
+  40 MHz / 256-QAM / DPD 文件,套件永不重生成。守卫用今天的库读它:能 load、
+  检查器无 error、两视图重放闭合、其残差键 ⊆ 当前 `RESIDUAL_SPEC`(键改名会
+  孤儿化已交付文件)。此前每个测试都用当前 writer 现写现读,reader 退化抓不到。
+- **闭环守卫参数化**(slow):{40 MHz/256-QAM, 320 MHz/4096-QAM} × 多种子共 4 个
+  配置,全部步骤(含 DPD、IIP2、AGC、群时延)重跑、检查器无 error、两视图闭合。
+  此前只有 40 MHz / 256 / seed 3 一个配置。
+- **MIMO 对齐/去耦步**(`cal.mimo_align`)的指标按链动态命名,不在 cal-state
+  交付面内(只由 `link.beamforming` 消费)——在 `docs/handoff_zh.md` 明示,
+  不补 spec。
+- 出货代码变动(`cal/base.py`、`handoff/inspector.py`),金标重生成,Android
+  金标 job 重新 dispatch。
+
 ## 0.7.20 — 2026-09-09
 
 ### 相噪/CPE 研究的物理块下沉到库(体检 P1-5)

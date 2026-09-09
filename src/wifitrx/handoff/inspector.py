@@ -21,6 +21,8 @@ import json
 import sys
 
 FORMAT = "wifitrx-cal-state-v1"
+#: mirrors wifitrx.cal.base.SCHEMA_VERSION (stdlib-only file: no import)
+SCHEMA_VERSION = "1.1"
 
 # severity ordering for the exit code: any "error" -> exit 1
 SEVERITIES = ("error", "warning", "info")
@@ -65,6 +67,14 @@ def inspect_cal_state(doc: dict) -> list[dict]:
     if doc.get("format") != FORMAT:
         add("error", "-", f"format tag {doc.get('format')!r} != {FORMAT!r}; "
             "this inspector may not understand the file")
+    schema = str(doc.get("schema_version") or "1.0")
+    if schema.split(".", 1)[0] != SCHEMA_VERSION.split(".", 1)[0]:
+        add("error", "-", f"schema {schema} is not a 1.x file; this "
+            f"inspector reads {SCHEMA_VERSION}")
+    elif schema != SCHEMA_VERSION:
+        add("info", "-", f"schema {schema} file read by a {SCHEMA_VERSION} "
+            "inspector: keys added in between are simply absent (or, for "
+            "a newer file, unknown to the checks below)")
     for key in ("tx", "rx"):
         if not isinstance(doc.get(key), dict):
             add("error", "-", f"missing correction state {key!r}: the file "

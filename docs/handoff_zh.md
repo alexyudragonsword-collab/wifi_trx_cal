@@ -76,6 +76,16 @@ python -m wifitrx.handoff inspect cal_state.json   # 结论级检查(仅标准�
 python -m wifitrx.handoff replay  cal_state.json   # 残差表 vs 文件自己的 EVM
 ```
 
+文件头两个字段说明它是哪一版:`format` 是大版本标签(`wifitrx-cal-state-v1`,
+不兼容才会变),`schema_version` 是其中的增量小版本(0.7.21 起写出,`1.1`;
+没有该字段的旧文件视为 `1.0`)。同一大版本内新增的键/条件字段,老读者忽略、
+新读者不强求;检查器对小版本不同只给 info。`tests/data/cal_state_v1.json` 是
+冻结的 1.1 样例,每个版本的库都必须仍能读它、检查器无 error、重放闭合。
+
+**交付面不含 MIMO**:`cal.mimo_align` 的链间相位/时延对齐与去耦只由
+`link.beamforming` 消费,指标按链动态命名,不进 `residuals`;MIMO 链路仿真的
+残差另议。
+
 replay 把 `residuals` 里的每个数按其内嵌 `apply` 配方字面注入干净波形,与
 文件自己的实测 TX EVM **隔离口径**(`tx_evm_db`:逐音均衡到理想参考 + genie
 CPE,只剩损伤本身)闭合,输出三个数:**解释 / 实测 / 未解释**。文件同时携带

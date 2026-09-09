@@ -13,6 +13,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+#: The cal-state file's major format tag (the inspector carries its own
+#: copy — it must stay stdlib-only and importable next to the JSON).
+FORMAT = "wifitrx-cal-state-v1"
+#: Additive changes inside v1, MAJOR.MINOR.  1.1 (0.7.18): the three
+#: *_evm_modem_db totals and conditions.ce_smooth_tones; 1.0: everything
+#: before, which wrote no schema_version at all.
+SCHEMA_VERSION = "1.1"
+
 
 @dataclass
 class CalResult:
@@ -113,7 +121,8 @@ def save_cal_state(path: str | Path, tx_state: dict, rx_state: dict,
     from .residuals import extract_residuals
     summaries = [r.summary() for r in (results or [])]
     doc = {
-        "format": "wifitrx-cal-state-v1",
+        "format": FORMAT,
+        "schema_version": SCHEMA_VERSION,
         "tx": tx_state,
         "rx": rx_state,
         "results": summaries,
@@ -310,8 +319,25 @@ def _fmt(value) -> str:
     return str(value)
 
 
+def check_schema(doc: dict) -> str:
+    """Return the file's schema version if this reader can consume it,
+    else raise.  The ``format`` tag is the major version (v1); the
+    ``schema_version`` field (absent before 0.7.21 = "1.0") counts the
+    additive changes within it — new residual keys, new conditions —
+    that an old reader may ignore and a new reader must not require.
+    A different major is refused; a newer minor than this library knows
+    is read with whatever it understands."""
+    if doc.get("format") != FORMAT:
+        raise ValueError(f"unknown cal-state format {doc.get('format')!r} "
+                         f"(this reader: {FORMAT!r})")
+    version = str(doc.get("schema_version") or "1.0")
+    major = version.split(".", 1)[0]
+    if major != SCHEMA_VERSION.split(".", 1)[0]:
+        raise ValueError(f"cal-state schema {version} is not a 1.x file")
+    return version
+
+
 def load_cal_state(path: str | Path) -> tuple[dict, dict]:
     doc = json.loads(Path(path).read_text())
-    if doc.get("format") != "wifitrx-cal-state-v1":
-        raise ValueError("unknown cal-state format")
+    check_schema(doc)
     return doc["tx"], doc["rx"]
