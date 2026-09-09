@@ -11,8 +11,10 @@
 ## 快速上手
 
 ```bash
-pip install -e .            # 安装
-pip install pytest && python -m pytest tests/ -v    # 全部测试 (~15 s)
+make setup                  # = pip install -e ".[test,gui,docs,dev]",与 CI 同一套依赖
+make fast                   # 推送门禁 = scripts/ci_fast.sh:ruff + 全套测试(去掉慢用例)+ 覆盖率,~2.5 min
+make nightly                # 全量 + 覆盖率门槛 + 教程/schematic 陈旧检查(= ci.yml 的夜间线)
+# 无 make 时:QT_QPA_PLATFORM=offscreen python -m pytest tests/ -q;ruff check src/ app/ tests/ tools/ examples/ android/
 
 # 逐损伤 EVM/ACLR 研究
 python examples/run_impairment_study.py

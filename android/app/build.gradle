@@ -4,6 +4,18 @@ plugins {
     id "com.chaquo.python"
 }
 
+// One version string, mirrored from pyproject.toml / wifitrx.__version__
+// (tests/test_version_sync.py pins the three together), and a versionCode
+// derived from it: MAJOR*1000000 + MINOR*10000 + PATCH.  versionCode sat
+// at 1 for fifteen releases, so a phone never saw a newer APK as an
+// upgrade.
+def appVersion = "0.7.19"
+
+static int semverCode(String v) {
+    def p = v.tokenize('.').collect { it.toInteger() }
+    return p[0] * 1000000 + p[1] * 10000 + p[2]
+}
+
 android {
     namespace "com.wifitrx.workbench"
     compileSdk 34
@@ -12,8 +24,8 @@ android {
         applicationId "com.wifitrx.workbench"
         minSdk 24
         targetSdk 34
-        versionCode 1
-        versionName "0.7.18"
+        versionCode semverCode(appVersion)
+        versionName appVersion
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             // arm64 for devices, x86_64 for the emulator/CI golden tests.

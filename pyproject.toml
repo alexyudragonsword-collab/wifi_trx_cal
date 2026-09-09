@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wifitrx"
-version = "0.7.18"
+version = "0.7.19"
 description = "WiFi 7 direct-conversion IQ transceiver behavioral model and calibration suite (320 MHz)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -46,8 +46,12 @@ extend-exclude = ["docs"]
 select = ["E", "F", "W"]
 
 [tool.coverage.run]
-source = ["wifitrx"]
-omit = ["*/__main__.py"]   # measured through subprocess, not import
+# the library and the data layer both front-ends ship (the analysis
+# registry, inspector content, reference tables) — app/specs.py goes into
+# the APK and was never measured before 0.7.19
+source = ["wifitrx", "app"]
+omit = ["*/__main__.py",   # measured through subprocess, not import
+        "app/main.py"]     # the Qt window itself: built offscreen by tests, not measured
 
 [tool.coverage.report]
 # baseline at the time the gate went in was 88 %; the floor exists to

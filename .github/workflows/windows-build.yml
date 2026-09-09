@@ -17,6 +17,7 @@ on:
 jobs:
   pyinstaller:
     runs-on: windows-latest
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -61,6 +62,7 @@ jobs:
 
   nuitka:
     runs-on: windows-latest
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

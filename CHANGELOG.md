@@ -4,6 +4,31 @@
 或 `wifitrx.*` 公开签名的条目都在下面显式标注,交付方按此判断是否需要
 重新取包。日期为落地日期。
 
+## 0.7.19 — 2026-09-09
+
+### 发布与 CI 流程(体检 P1-4)
+
+- **版本三处钉在一起**:`tests/test_version_sync.py` 断言 `pyproject.toml`、
+  `wifitrx.__version__` 与 `android/app/build.gradle` 的 `appVersion` 相等,且
+  CHANGELOG 最新条目就是当前版本(漏写条目即红)。0.7.6 曾连发两版错标签。
+- **APK `versionCode` 由版本串派生**:`semverCode(appVersion)` = MAJOR·10⁶ +
+  MINOR·10⁴ + PATCH(0.7.19 → 70019);此前 15 个版本一直是 1,手机不会把
+  新 APK 当升级。守卫读的是 gradle 里真正干活的两行,不是注释。
+- **CI 与本地门禁合一**:`ci.yml` 的 `fast`/`full` 直接调 `scripts/ci_fast.sh`
+  / `scripts/ci_nightly.sh`;两脚本此前与 workflow 互不引用且已漂移(fast 缺
+  ruff,nightly 跑 7 个 example 而 CI 一个不跑)。example 不再在 nightly 里跑
+  (由 `test_no_dead_knobs.py`、`test_gui_inspector.py` 与教程构建覆盖)。
+- **push 快线也量覆盖率**,且 `coverage.source` 加上随 APK 出货的 `app/` 数据层
+  (`app/specs.py` 此前从未被量过;`app/main.py` 的 Qt 窗口本身 omit)。
+- `ci.yml` 加 `concurrency`(同分支新推送取消旧快线)、`timeout-minutes`
+  (25/45)与 pip 缓存;`android.yml` 三 job 20/45/60 分钟、`windows-build.yml`
+  90 分钟——此前全无超时,一个挂死的模拟器会烧满 6 小时。
+- `Makefile`(setup / lint / fast / nightly / test / docs / notes / golden)
+  与 README 上手段落改为与 CI 同一套命令;此前 README 的命令缺 extras、缺
+  `QT_QPA_PLATFORM=offscreen`、缺 ruff,新人照做必红。
+- 出货代码未变(gradle 版本行除外);android 金标 job 仍重新 dispatch 一次,
+  因为 `android/**` 有改动。
+
 ## 0.7.18 — 2026-09-09
 
 ### 交付 EVM 双口径,门槛按 modem 口径判(**schema:新增残差键与条件字段**)

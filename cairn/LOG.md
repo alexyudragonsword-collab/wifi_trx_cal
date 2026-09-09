@@ -2,6 +2,12 @@
 
 本文件按倒序记录实质性进展——最新条目在顶部、紧跟本行之下。每条尽量短——只写摘要与指针;结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-09-09 · R27:P1-4 发布与 CI 流程收敛(0.7.19)
+
+- 版本三处 + CHANGELOG 头条由 `tests/test_version_sync.py` 钉住;APK `versionCode` 由 `appVersion` 派生(0.7.19 → 70019)。
+- `ci.yml` 改调 `scripts/ci_fast.sh` / `ci_nightly.sh`(单一来源),加 concurrency / timeout / pip cache;push 快线带覆盖率,`coverage.source` 加 `app/`。三个 workflow 全部加超时。
+- `Makefile` + README 上手段落与 CI 同命令。指针:`CHANGELOG.md` 0.7.19、`docs/backlog_zh.md` B19。
+
 ## 2026-09-09 · R26:P0-3 交付 EVM 双口径,门槛按 modem 口径(0.7.18)
 
 - 用户拍板"双报告,门槛按 pilot-tracked 判"。三个视图统一打分帧(LTF 对 + 标准导频),同一捕获报 `*_evm_db`(隔离,重放闭环目标)与 `*_evm_modem_db`(LTF CFO 捕获 + 9 音平滑 LTF 信道估计 + 导频 CPE,spec 判定)。
