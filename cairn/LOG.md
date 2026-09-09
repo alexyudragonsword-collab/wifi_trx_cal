@@ -5,6 +5,7 @@
 ## 2026-09-09 · R33:P2-8 AGC 建立动态落地(0.7.25)
 
 - `AgcDynamics`(默认关)进 `RxParams`/`RxChain`,帧可带 8 µs L-STF,`link.agc_dynamics_study` + 第九个 GUI 分析。结论:STF 在则攻击延迟零代价直到 LTF(悬崖);VGA 须在 GI2 内建立(τ ≤ 0.4 µs);DC 环预算约 8 µs。不进交付面。指针:`CHANGELOG.md` 0.7.25、`docs/backlog_zh.md` B25。
+- **裁决(0.7.23–0.7.25)**:`android.yml` 手动 dispatch run #74(572bd55)与 #77(7a1f787,金标五案例)三 job 全绿,两种出货形态的 `on-device tests actually ran`、`the wheels must carry this tree's version`、`every compiled module must export its init symbol` 全部 success;0.7.24(0beb9d4)只改 README/backlog,不含出货代码,由 push run #75 的构建与 #77(含其历史)覆盖,未单独 dispatch。`ci.yml` push run #163、#164 绿;#162(572bd55)被 concurrency 取消——一分钟后的 #163 跑的是同一份代码加文档,视为覆盖,不是失败。P2 三个版本均已两端裁决。
 
 ## 2026-09-09 · R32:P2-8 模型边界声明 + 一条体检判断被推翻(0.7.24)
 
