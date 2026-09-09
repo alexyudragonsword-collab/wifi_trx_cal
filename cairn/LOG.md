@@ -5,6 +5,7 @@
 ## 2026-09-09 · R30:P1-7 两篇专题文档 + ROADMAP/指针清理(0.7.22)
 
 - `cairn/相噪与CPE去除.md`、`cairn/Android出货线.md` 落地——AGENTS.md 的"专题文档 > LOG"裁决层从此有内容。ROADMAP 去版本号、加索引与 P2 条目;`residuals.py` 的守卫指针改正。体检 P1 全部收口;P2 择期。指针:`CHANGELOG.md` 0.7.22、`docs/backlog_zh.md` B22。
+- **裁决(0.7.19–0.7.22)**:`android.yml` 手动 dispatch run #66(cb57bf0)、#68(1dc5c82)、#70(fd321eb)、#72(4c82c8f)三 job 全绿,两种出货形态的 `on-device tests actually ran`、wheel 版本核对、`PyInit_*` 导出检查全部 success;`ci.yml` push run #157–#160 全绿(快线自 0.7.19 起带覆盖率,93.1 %)。P1 四个版本均已两端裁决。
 
 ## 2026-09-09 · R29:P1-6 冻结夹具、schema_version、闭环守卫参数化(0.7.21)
 
