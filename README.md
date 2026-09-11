@@ -1,7 +1,10 @@
 # wifitrx — WiFi 7 直接变频收发器行为模型与校准算法套件
 
-[![ci](https://github.com/alexyudragonsword-collab/wifi_trx_cal/actions/workflows/ci.yml/badge.svg)](https://github.com/alexyudragonsword-collab/wifi_trx_cal/actions/workflows/ci.yml)
-[![android](https://github.com/alexyudragonsword-collab/wifi_trx_cal/actions/workflows/android.yml/badge.svg)](https://github.com/alexyudragonsword-collab/wifi_trx_cal/actions/workflows/android.yml)
+[![ci / push](https://github.com/alexyudragonsword-collab/wifi_trx_cal/actions/workflows/ci.yml/badge.svg?event=push)](https://github.com/alexyudragonsword-collab/wifi_trx_cal/actions/workflows/ci.yml)
+[![ci / nightly](https://github.com/alexyudragonsword-collab/wifi_trx_cal/actions/workflows/ci.yml/badge.svg?event=schedule)](https://github.com/alexyudragonsword-collab/wifi_trx_cal/actions/workflows/ci.yml)
+[![android / golden](https://github.com/alexyudragonsword-collab/wifi_trx_cal/actions/workflows/android.yml/badge.svg?event=workflow_dispatch)](https://github.com/alexyudragonsword-collab/wifi_trx_cal/actions/workflows/android.yml)
+
+> 徽章按**触发方式**分开,因为一个不分触发的徽章只反映最近一次运行:推送频繁且绿,夜间全量每次都红,徽章却一直绿着——0.7.16 加徽章正是为了让红可见,却看了错的那条 lane(0.7.26)。三者分别是推送线(快线加全量)、只在无推送日才独有价值的定时全量、以及 Android 金标的手动派发。都不带 `branch=` 参数:徽章默认跟随仓库默认分支,而定时与派发运行**只在**默认分支上存在——写死 `branch=main` 会做出两个永远空白的徽章(实测:`main` 上的 schedule 与 workflow_dispatch 运行均为 0 条)。
 
 面向 CMOS WiFi 7(802.11be)收发器设计的**复基带等效行为模型 + 校准算法验证平台**,
 最大带宽 320 MHz,TX/RX 均为直接变频 IQ 结构,PA Psat = 28 dBm(PAE@Psat = 35%)。

@@ -1,5 +1,17 @@
-# One interpreter, two lanes: a fast lane on every push and a scheduled
-# full run.  Deliberately NOT a 5-job OS/Python matrix running everything
+# One interpreter, two lanes, and BOTH run on every push.  The fast lane
+# is the quick signal (the suite minus the slow 320 MHz cases); the full
+# lane adds those, the coverage floor and the generated-artefact checks.
+#
+# The full lane used to run only on the nightly cron, and that is how a
+# defect inside one of its own checks stayed red for three weeks without
+# anyone noticing: the only lane anybody watched was the other one
+# (CHANGELOG 0.7.26).  Running it on push removes the asymmetry rather
+# than adding another detector for it — the two jobs are parallel, so the
+# critical path grows by about half a minute.  The cron stays, narrowed to
+# the one thing it alone can catch: environment drift on days with no
+# pushes.
+#
+# Deliberately NOT a 5-job OS/Python matrix running everything
 # everywhere — the sibling-project post-mortem priced that pattern: the
 # guard tests (layering, dead knobs, cal ordering) catch the decay classes
 # that matter, and they run in seconds.
@@ -40,8 +52,8 @@ jobs:
       - name: fast lane (lint + guards + unit + GUI offscreen, with coverage)
         run: scripts/ci_fast.sh
 
+  # no `if:`: the full lane runs on push, on the cron and on demand
   full:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -55,3 +67,38 @@ jobs:
       - run: pip install -e .[test,gui,docs,dev]
       - name: full lane (lint, slow cases, coverage floor, docs and assets staleness)
         run: scripts/ci_nightly.sh
+
+  # A scheduled failure has no reader: the cron fires on the default
+  # branch at 02:00 and nobody is looking at Actions.  GitHub does mail
+  # the person who last touched the cron, but that channel is invisible
+  # from here and cannot be verified, so the state is parked somewhere
+  # durable instead: one open issue, commented on rather than duplicated.
+  # Only the cron needs this — a push failure is already in front of
+  # whoever pushed.
+  notify:
+    needs: full
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const title = 'nightly full lane is failing';
+            const url = `${context.serverUrl}/${context.repo.owner}/` +
+                        `${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = `Scheduled full lane failed at \`${context.sha}\`: ${url}`;
+            const open = await github.paginate(github.rest.issues.listForRepo,
+              { ...context.repo, state: 'open', per_page: 100 });
+            const hit = open.find(i => i.title === title && !i.pull_request);
+            if (hit) {
+              await github.rest.issues.createComment(
+                { ...context.repo, issue_number: hit.number, body });
+              core.info(`commented on #${hit.number}`);
+            } else {
+              const made = await github.rest.issues.create(
+                { ...context.repo, title, body });
+              core.info(`opened #${made.data.number}`);
+            }
