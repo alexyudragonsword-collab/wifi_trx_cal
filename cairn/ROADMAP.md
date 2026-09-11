@@ -7,6 +7,7 @@
 
 - [ ] A2:链路仿真组各 MCS PER 门限到货,替换 `link/mcs.py` 的 `snr_req_db` 估计值(影响交付数字的唯一未完成项)。
 - [ ] A4:电路组逐档基带噪声表到货,`noise_v_sqrthz` 升级为按 VGA 档查表(同批替换两个占位参数)。
+- [x] CI 观测面整改(0.7.26–0.7.29):恒红三周的陈旧检查、full lane 上 push、徽章按 `event` 拆分、cron 失败开 issue、默认分支切 `main`——见 `docs/backlog_zh.md` B26–B28 与 `cairn/守卫有效性.md`。
 
 > 工程待办的唯一权威来源是 `docs/backlog_zh.md`(头部"当前状态"块);本文件只做粗粒度镜像,不一致时以 backlog 为准。
 
@@ -14,7 +15,7 @@
 
 0. ~~`EvmBudget.cpe_tracked_fraction` 默认 0.5 vs 实算~~ 已裁决(0.7.9):默认改为按谱与符号长度现算,见 `docs/backlog_zh.md` B15 末尾。
 1. 远期边界项(真实温度动力学、谐波混频、MIMO 频变互耦、DAC/ADC 镜像等)是否排期,待交付后由使用方反馈决定——清单见规格书 §9 / 教程 ch9。
-2. 体检 P2(择期):传播信道(现为传导模式)、OFDMA/打孔/空音、AGC 建立动态、`tx_iq` 多音合并、`tutorial.html` 改 CI 产物——见体检报告与 `docs/backlog_zh.md` B16–B21。
+2. 体检 P2 **只剩两项待选**(择期):**传播信道**(现为传导模式,AWGN + 单位环回)与 **OFDMA/RU、前导打孔、DC 与边缘空音**(320 MHz 打孔是其中最便宜的一项)。已落地:代码卫生(0.7.23)、模型边界声明(0.7.24)、AGC 建立动态(0.7.25)——见 `docs/backlog_zh.md` B23–B25。已判为不做并记明理由:`tx_iq` 多音合并(体检的热点判断被实测推翻,那是不在序列里的包络检波器备用路径)、`tutorial.html` 改 CI 产物、mypy。
 
 ## 知识专题文档
 
