@@ -3,10 +3,16 @@ type: project_topic
 status: active
 summary: "LO 相噪经 OFDM 每符号公共相位(CPE)去除后剩下什么:四配置隔离法、sinc² 分割、自由 VCO 地板、估计台阶、两种 EVM 口径——0.7.8–0.7.21 的物理结论与被推翻的判断。"
 tags: [phase-noise, cpe, ofdm, pll, evm, metrology]
-contains: [conclusion, pitfall, decision, correction]
+contains: [reference, lesson, decision]
 created: "2026-09-09"
-updated: "2026-09-09"
-related: [docs/pn_cpe_note_11ac_vs_11ax.pdf, docs/pn_cpe_note_loop_bandwidth.pdf, docs/pn_cpe_note_estimation_ladder.pdf, docs/backlog_zh.md#B15, docs/backlog_zh.md#B17, docs/backlog_zh.md#B18]
+updated: "2026-09-11"
+related:
+  - docs/pn_cpe_note_11ac_vs_11ax.pdf
+  - docs/pn_cpe_note_loop_bandwidth.pdf
+  - docs/pn_cpe_note_estimation_ladder.pdf
+  - docs/backlog_zh.md#B15
+  - docs/backlog_zh.md#B17
+  - docs/backlog_zh.md#B18
 authoring_mode: ai_generated
 ---
 # 相噪与 CPE 去除(当前真相)
@@ -51,7 +57,7 @@ CPE 去除后**剩下**的那部分。2026-09-04 起用隔离法(只开相噪、
   平滑 9 音的 LTF 信道估计 + 导频 CPE),MCS13 判定按后者。纯噪声链上两者之差
   = 1.90 dB(理论 1.89)。旗舰 320 MHz / 4096-QAM:−42.4 / −41.9 dB。
 
-## 坑与被推翻的判断(contains: pitfall, correction)
+## 坑与被推翻的判断(contains: lesson)
 
 - **导频表曾是 802.11a/ac 的**,对 11ax/be 也照用(40 MHz 6 个而标准 16 个;320 MHz
   只覆盖 24 % 带宽)。0.7.17 分表并按序号映射进无空音的模型音块。更正:40 MHz

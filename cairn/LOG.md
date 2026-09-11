@@ -7,6 +7,8 @@
 - 把 0.7.26 的教训沉淀成 `cairn/守卫有效性.md`:守卫失效有**四种形态**(空转/错靶/恒红/被遮),各自在 CI 上的样子与抓法不同;**变异验证只覆盖前两种**——恒红的守卫在变异下照样红,与严格的守卫同相,只有"还原后必须变绿"能把它们分开;被遮的那类连红都不给。
 - 台账收了本项目全部五次实例(0.7.5 注释同名词、0.7.6 上传撞配额跳过端上检查、0.7.16 金标精确 0、0.7.23 `validate_order` 空操作、0.7.26 commit id 留在比对里)。
 - `AGENTS.md` 据此补"双向验证 + 关键检查不排在会失败步骤之后"一条规则;ROADMAP 索引加第三篇。未决敞口:夜间 lane 无徽章无通知。指针:`CHANGELOG.md` 0.7.27。
+- **裁决(0.7.27)**:`android.yml` run #82(d7c7a86)三 job 全绿,两种出货形态的 `on-device tests actually ran`、`the wheels must carry this tree's version`(0.7.27)、`every compiled module must export its init symbol` 全部 success;`ci.yml` 手动 dispatch run #173 两条 lane 全绿(全量含覆盖率、文档陈旧、原理图三项)。
+- **frontmatter 词表统一**:三篇专题的 `contains` 原先各写各的,前两篇用的 `conclusion`/`pitfall`/`correction` 不在 Cairn 技能的受控词表内。按语义映射改齐——`conclusion` → `reference`(可查的实测事实)、`pitfall` 与 `correction` → `lesson`(两者都是教训,合并不丢信息)、`decision`/`procedure` 原样;正文小节的 `contains` 标注同步,`related` 统一为块列表,`updated` 推到今天。三篇经脚本校验:`contains` 全部落在词表内,`type`/`status`/`authoring_mode` 合法。cairn 不被任何测试读取,故未加常驻守卫(它是知识层,不是流程消费的工程资产)。
 
 ## 2026-09-11 · R34:夜间全量的陈旧检查恒红三周,修掉(0.7.26)
 

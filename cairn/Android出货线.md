@@ -3,10 +3,15 @@ type: project_topic
 status: active
 summary: "wifitrx 的 Android 出货线(Chaquopy + WebView,解释版与 Cython 编译版两种 APK):裁决协议、端上栈约束、以及每一次'构建绿但端上错'的根因。"
 tags: [android, chaquopy, cython, ci, packaging]
-contains: [pitfall, decision, correction, procedure]
+contains: [procedure, reference, lesson, decision]
 created: "2026-09-09"
-updated: "2026-09-09"
-related: [android/README.md, .github/workflows/android.yml, tests/test_android_bridge.py, docs/backlog_zh.md#R1]
+updated: "2026-09-11"
+related:
+  - android/README.md
+  - .github/workflows/android.yml
+  - tests/test_android_bridge.py
+  - docs/backlog_zh.md#R1
+  - cairn/守卫有效性.md
 authoring_mode: ai_generated
 ---
 # Android 出货线(当前真相)
@@ -39,7 +44,7 @@ authoring_mode: ai_generated
 - **版本**:`appVersion` 一处(0.7.19 起),`versionCode` 由它派生;wheel 文件名
   必须带 pyproject 的版本号(CI 断言)。
 
-## 坑(contains: pitfall)——每一条都是"所有构建期信号全绿"的缺陷
+## 坑(contains: lesson)——每一条都是"所有构建期信号全绿"的缺陷
 
 - **`correlation_lags`**(0.6.2):scipy 1.4.1 没有;标注的风险一天内兑现。
   修法用数学恒等替代;由此建立调用面守卫。
