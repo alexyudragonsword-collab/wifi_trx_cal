@@ -1309,8 +1309,13 @@ def run_channel_study(p: dict) -> AnalysisResult:
     from wifitrx.waveform import OFDMConfig
 
     bw = float(p["bw_mhz"]) * 1e6
+    # "standard" puts the numerology's real tone plan under the study: the
+    # DC gap and the inter-segment nulls become actual holes, so the
+    # channel-estimate smoothing has to stay inside a segment.  "block"
+    # is the historical contiguous set every earlier number was taken on.
+    plan = None if p["tone_plan"] == "block" else "standard"
     cfg = OFDMConfig(bandwidth_hz=bw, qam_order=int(p["qam"]), n_symbols=8,
-                     oversampling=4)
+                     oversampling=4, tone_plan=plan)
     snr = float(p["snr_db"])
     n_real = int(p["n_real"])
     seed = int(p["seed"])
@@ -1391,6 +1396,8 @@ def run_channel_study(p: dict) -> AnalysisResult:
         "coherence_bw_150ns_mhz": round(float(sw["coherence_bw_hz"][3]) / 1e6, 3),
         "gi_ns": round(ds["cp_s"] * 1e9, 1),
         "n_realisations": n_real,
+        "tone_plan_segments": len(cfg.plan().segments()),
+        "n_active": cfg.n_active,
     }
     text = (
         f"Propagation channel, {p['bw_mhz']} MHz {p['qam']}-QAM at {snr:.0f} dB in-band "
@@ -1841,6 +1848,12 @@ ALL_ANALYSES: tuple[AnalysisSpec, ...] = (
                       minimum=4, maximum=128,
                       tooltip="Median over realisations; the power mean of a "
                               "fading EVM does not converge"),
+            ParamSpec("tone_plan", "Tone plan", "choice", "block",
+                      choices=("block", "standard"),
+                      tooltip="block = the historical contiguous active set; "
+                              "standard = the numerology's real plan, with "
+                              "the DC gap and the inter-segment nulls as "
+                              "holes the smoothing must not cross"),
             ParamSpec("seed", "Channel / noise seed", "int", 0, minimum=0),
         ),
         run=run_channel_study),

@@ -184,6 +184,17 @@ def estimate_rx_iq_from_frame(cap: np.ndarray, ref: OFDMWaveform
     y_sym = demodulate_ofdm(cap, ref)         # (n_sym, n_active)
     s_sym = ref.tx_symbols
     pos = {int(t): i for i, t in enumerate(tones)}
+    # The image correction is fitted on mirror pairs, so an asymmetric
+    # tone plan (preamble puncturing, an off-centre RU) would silently
+    # shrink the fit set: fewer frequencies, no warning, a quietly worse
+    # correction.  Refuse instead — the cal deliverable is conducted
+    # mode on a symmetric plan, and a caller who wants otherwise needs a
+    # pairing rule this model does not define.
+    if not cfg.plan().mirror_ok():
+        raise ValueError(
+            "rx_iq needs a tone plan symmetric about DC: the image "
+            "correction is fitted on mirror pairs and would silently drop "
+            f"the unmatched tones of {cfg.plan().label!r}")
 
     freqs, w2_req = [], []
     h_map: dict[int, complex] = {}

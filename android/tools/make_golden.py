@@ -41,7 +41,8 @@ CASES = [
     # propagation channel: complex-Gaussian tap draws, np.convolve and the
     # median statistic over realisations, on the phone's numpy
     ("channel_study", {"bw_mhz": 40, "qam": 256, "snr_db": 30.0,
-                       "ce_smooth_tones": 9, "n_real": 4, "seed": 0}),
+                       "ce_smooth_tones": 9, "n_real": 4,
+                       "tone_plan": "standard", "seed": 0}),
 ]
 
 

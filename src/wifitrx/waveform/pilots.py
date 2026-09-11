@@ -109,11 +109,28 @@ def standard_pilot_tones(config: OFDMConfig) -> np.ndarray:
 def pilot_positions(config: OFDMConfig) -> np.ndarray:
     """Column indices (into the n_active axis) of the pilot tones.
 
-    Rank-mapped: the k-th occupied tone of the standard's plan is the
-    k-th active tone of the model, so the pilot count and the spread
-    across the band are the standard's even though the model has no
-    null-tone gaps.
+    With a real tone plan (``OFDMConfig.tone_plan``) the pilots sit on
+    their standard tone indices and the mapping is a direct lookup —
+    the lever arm the SCO estimator sees is then the standard's exactly.
+
+    With the historical contiguous block the standard's positions do not
+    exist in the model, so the pilots are **rank-mapped**: the k-th
+    occupied tone of the standard's plan becomes the k-th active tone of
+    the block, which keeps the count and the spread across the band
+    (0.7.17; the lever-arm error this costs is under 5 % at the band
+    edge).
     """
+    if config.tone_plan is not None:
+        idx = config.active_tone_indices()
+        want = standard_pilot_tones(config)
+        cols = np.searchsorted(idx, want)
+        ok = (cols < idx.size) & (idx[np.minimum(cols, idx.size - 1)] == want)
+        if not ok.all():
+            raise ValueError(
+                "tone plan does not carry every standard pilot tone: "
+                f"{want[~ok].tolist()} missing — a punctured plan needs its "
+                "own pilot set, which this model does not define")
+        return cols.astype(int)
     half, ranges = _pilot_half(config)
     occupied = np.concatenate([np.arange(lo, hi + 1) for lo, hi in ranges])
     n_half = config.n_active // 2

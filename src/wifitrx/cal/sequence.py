@@ -129,7 +129,18 @@ def score_views(y: np.ndarray, frame, cols: np.ndarray, pilots: np.ndarray,
     y_acq = apply_cfo(y, -estimate_cfo(y, frame, fs), fs)
     syms_acq = demodulate_ofdm(y_acq[frame.preamble_len:], frame.data)
     y_acq = apply_cfo(y_acq, -pilot_cfo_hz(syms_acq, cols, pilots, cfg, fs), fs)
-    h = smooth_channel_estimate(channel_estimate(y_acq, frame), ce_smooth_tones)
+    # Segments are passed only when the plan has real holes.  The
+    # contiguous block has a one-tone gap at DC and has always been
+    # smoothed straight across it; every number measured before 0.7.31
+    # — the frozen fixture, the golden, the 0.7.18 flagship figures —
+    # carries that convention, and one tone of spacing is not worth
+    # invalidating them for.  A plan with a DC gap, an inter-segment
+    # null or a punctured subchannel is a different matter: there the
+    # window would average across a real discontinuity.
+    plan = cfg.plan()
+    h = smooth_channel_estimate(
+        channel_estimate(y_acq, frame), ce_smooth_tones,
+        None if plan.is_contiguous else plan.segments())
     req = demodulate_ofdm(y_acq[frame.preamble_len:], frame.data)[:n] / h
     modem = correct_cpe_pilots(req, cols, pilots[:n])
     p_ref = float((np.abs(ref[:, data]) ** 2).mean())

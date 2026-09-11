@@ -146,7 +146,8 @@ def channel_estimate(rx: np.ndarray, frame: Frame) -> np.ndarray:
 DEFAULT_CE_SMOOTH_TONES = 9
 
 
-def smooth_channel_estimate(h: np.ndarray, n_tones: int) -> np.ndarray:
+def smooth_channel_estimate(h: np.ndarray, n_tones: int,
+                            segments=None) -> np.ndarray:
     """Average a per-tone channel estimate over ``n_tones`` adjacent
     active tones (complex moving average, edges renormalised).
 
@@ -159,10 +160,31 @@ def smooth_channel_estimate(h: np.ndarray, n_tones: int) -> np.ndarray:
     estimate and -40.0 / -40.8 / -41.4 / -41.8 dB smoothed over 3 / 5 /
     9 / 17 tones against -42.4 dB in the isolation view.  ``n_tones``
     <= 1 returns ``h`` unchanged.
+
+    ``segments`` carries the column ranges that are contiguous *in
+    frequency* (``TonePlan.segments()``).  Without it the window is
+    applied across the whole array, which is right only while the active
+    tones are one block: with a DC gap, an inter-segment null or a
+    punctured subchannel, array neighbours are not frequency neighbours
+    and a window straddling the hole averages across a discontinuity —
+    silently, since nothing changes shape and nothing becomes NaN.
     """
     h = np.asarray(h, dtype=complex)
     n = int(n_tones)
     if n <= 1:
+        return h
+    if segments is None:
+        return _smooth_run(h, n)
+    out = np.empty_like(h)
+    for cols in segments:
+        out[cols] = _smooth_run(h[cols], n)
+    return out
+
+
+def _smooth_run(h: np.ndarray, n: int) -> np.ndarray:
+    """Moving average inside one frequency-contiguous run, edges
+    renormalised so the ends are not pulled toward zero."""
+    if h.size == 0:
         return h
     k = np.ones(n) / n
     num = np.convolve(h, k, mode="same")

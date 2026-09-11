@@ -52,6 +52,12 @@ class OFDMConfig:
     # 0.8 us long GI, 1/8 for the 0.4 us short GI)
     subcarrier_spacing_hz: float = SUBCARRIER_SPACING_HZ
     seed: int | None = 0
+    #: which subcarriers carry something.  None (the default) is the
+    #: historical contiguous block symmetric about DC, bit for bit.
+    #: "standard" builds the numerology's real plan, with the DC gap and
+    #: the inter-segment nulls as actual holes; a TonePlan instance is
+    #: taken as given (see waveform.tone_plan, e.g. for puncturing).
+    tone_plan: object | None = None
 
     @property
     def fft_size(self) -> int:
@@ -61,8 +67,27 @@ class OFDMConfig:
                 "bandwidth must be a multiple of the subcarrier spacing")
         return int(round(n))
 
+    def plan(self):
+        """The resolved TonePlan.  Built fresh each call, so ``replace``
+        on the config cannot leave a stale plan behind."""
+        from .tone_plan import TonePlan, contiguous, standard
+        if self.tone_plan is None:
+            return contiguous(self._block_n_active())
+        if isinstance(self.tone_plan, TonePlan):
+            return self.tone_plan
+        if self.tone_plan == "standard":
+            return standard(self.bandwidth_hz, self.subcarrier_spacing_hz,
+                            SUBCARRIER_SPACING_HZ)
+        raise ValueError(f"unknown tone_plan {self.tone_plan!r}; use None, "
+                         '"standard", or a TonePlan')
+
     @property
     def n_active(self) -> int:
+        if self.tone_plan is not None:
+            return self.plan().n_active
+        return self._block_n_active()
+
+    def _block_n_active(self) -> int:
         # per-numerology occupancy tables; a fraction-of-FFT heuristic
         # covers non-standard bandwidths (0.47 per side ~ 11ax edge,
         # 0.41 ~ the legacy 52-of-64 ratio)
@@ -92,9 +117,10 @@ class OFDMConfig:
         return self.bandwidth_hz * self.oversampling
 
     def active_tone_indices(self) -> np.ndarray:
-        """Signed tone indices, symmetric around (and excluding) DC."""
-        half = self.n_active // 2
-        return np.concatenate([np.arange(-half, 0), np.arange(1, half + 1)])
+        """Signed tone indices of the resolved plan.  With ``tone_plan``
+        unset this is the historical contiguous block, symmetric around
+        (and excluding) DC."""
+        return self.plan().indices
 
 
 @dataclass
@@ -128,8 +154,10 @@ def generate_ofdm(config: OFDMConfig,
 
     if symbols is not None:
         tx_symbols = np.asarray(symbols, dtype=complex)
-        if tx_symbols.shape != (config.n_symbols, config.n_active):
-            raise ValueError("symbols must be (n_symbols, n_active)")
+        if tx_symbols.shape != (config.n_symbols, tones.size):
+            raise ValueError(
+                f"symbols must be (n_symbols, {tones.size}) for this tone "
+                f"plan, got {tx_symbols.shape}")
     else:
         labels = rng.integers(0, config.qam_order,
                               size=(config.n_symbols, config.n_active))
