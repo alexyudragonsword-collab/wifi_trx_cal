@@ -8,6 +8,7 @@
 - **连带效应才是危险的部分**:`android / golden` 与 `ci / dev` 的过滤条件在 `main` 上实测 0 条运行,不钉 `branch=` 就永远空白。**这推翻了 R36 里"都不带 `branch=`"的决策**——那句在旧默认分支下是对的,前提一变就不对。规则跟着前提走。
 - 派发协议升为硬规则:金标 dispatch 必须显式选被测分支;默认 ref 现在是 `main`,误用默认会裁决 `main`,且 `main` 等于开发顶端时在结论上看不出来。
 - 过渡态两条已写进 README:`ci / nightly` 首次 cron 前空白;`ci / main` 近乎恒绿(只从已裁决绿的提交快进),不是守卫。指针:`CHANGELOG.md` 0.7.29、`docs/backlog_zh.md` B28、`cairn/守卫有效性.md`。
+- **裁决(0.7.29)**:`android.yml` run #88(20ccca8)三 job 全绿,两种出货形态的 `on-device tests actually ran`、wheel 版本核对(0.7.29)、`PyInit_*` 导出检查全部 success;`ci.yml` push run #179 绿。**两个 run 的 `head_branch` 都是开发分支**——这既是新派发规则的第一次实地执行,也确认了钉 `branch=` 的那两个徽章读的就是这批数据。
 
 ## 2026-09-11 · R36:观测面处置——让会红的 lane 跑在有人看的地方(0.7.28)
 
