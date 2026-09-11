@@ -1,10 +1,25 @@
 # wifitrx — WiFi 7 直接变频收发器行为模型与校准算法套件
 
-[![ci / push](https://github.com/alexyudragonsword-collab/wifi_trx_cal/actions/workflows/ci.yml/badge.svg?event=push)](https://github.com/alexyudragonsword-collab/wifi_trx_cal/actions/workflows/ci.yml)
+[![ci / main](https://github.com/alexyudragonsword-collab/wifi_trx_cal/actions/workflows/ci.yml/badge.svg?event=push)](https://github.com/alexyudragonsword-collab/wifi_trx_cal/actions/workflows/ci.yml)
 [![ci / nightly](https://github.com/alexyudragonsword-collab/wifi_trx_cal/actions/workflows/ci.yml/badge.svg?event=schedule)](https://github.com/alexyudragonsword-collab/wifi_trx_cal/actions/workflows/ci.yml)
-[![android / golden](https://github.com/alexyudragonsword-collab/wifi_trx_cal/actions/workflows/android.yml/badge.svg?event=workflow_dispatch)](https://github.com/alexyudragonsword-collab/wifi_trx_cal/actions/workflows/android.yml)
+[![ci / dev](https://github.com/alexyudragonsword-collab/wifi_trx_cal/actions/workflows/ci.yml/badge.svg?branch=claude/wifi7-transceiver-calibration-o03ay0&event=push)](https://github.com/alexyudragonsword-collab/wifi_trx_cal/actions/workflows/ci.yml)
+[![android / golden](https://github.com/alexyudragonsword-collab/wifi_trx_cal/actions/workflows/android.yml/badge.svg?branch=claude/wifi7-transceiver-calibration-o03ay0&event=workflow_dispatch)](https://github.com/alexyudragonsword-collab/wifi_trx_cal/actions/workflows/android.yml)
 
-> 徽章按**触发方式**分开,因为一个不分触发的徽章只反映最近一次运行:推送频繁且绿,夜间全量每次都红,徽章却一直绿着——0.7.16 加徽章正是为了让红可见,却看了错的那条 lane(0.7.26)。三者分别是推送线(快线加全量)、只在无推送日才独有价值的定时全量、以及 Android 金标的手动派发。都不带 `branch=` 参数:徽章默认跟随仓库默认分支,而定时与派发运行**只在**默认分支上存在——写死 `branch=main` 会做出两个永远空白的徽章(实测:`main` 上的 schedule 与 workflow_dispatch 运行均为 0 条)。
+> **徽章按触发方式分开,因为不分触发的徽章只反映最近一次运行**:推送频繁且绿,
+> 夜间全量每次都红,徽章却一直绿着——0.7.16 加徽章正是为了让红可见,却看了错的
+> 那条 lane(0.7.26)。四个分别是:`main` 的推送线(交付方看这个)、定时全量
+> (固定的树对着变化的环境,红了只能是环境变了)、开发分支的推送线(**日常真正
+> 会变红的地方**)、Android 金标的手动派发(端上裁决)。
+>
+> **前两个不带 `branch=`,后两个必须带。** 徽章默认跟随仓库默认分支,而默认分支
+> 已切到 `main`(2026-09-11);定时与手动派发**只在默认分支上触发**,所以开发
+> 分支的推送线与 Android 派发在 `main` 上运行数为 0,不钉分支就是两个永远空白的
+> 徽章。**代价**:这两个 URL 写死了分支名,换分支或改名时会静默变空白,必须同批
+> 更新——空白徽章看起来只是「还没跑」,比红更难发现。
+>
+> 两处已知读法:`ci / nightly` 在切换默认分支后的**第一次 cron 之前是空白的**
+> (`main` 上此前没有定时运行);`ci / main` 近乎恒绿,因为 `main` 只从已裁决为绿
+> 的提交快进而来——它回答的是「主干跑过且过了」,不是「主干挡住了什么」。
 
 面向 CMOS WiFi 7(802.11be)收发器设计的**复基带等效行为模型 + 校准算法验证平台**,
 最大带宽 320 MHz,TX/RX 均为直接变频 IQ 结构,PA Psat = 28 dBm(PAE@Psat = 35%)。

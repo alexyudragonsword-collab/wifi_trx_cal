@@ -32,6 +32,10 @@ authoring_mode: ai_generated
   `on-device tests actually ran`(精确条数 5,不是下限)、`the wheels must carry
   this tree's version`、`every compiled module must export its init symbol`。
   条数核对由 job 自身断言,不靠人工翻日志(日志接口按大小截断,取不到中段)。
+- **派发必须显式选分支**(2026-09-11 起):仓库默认分支已切到 `main`,而开发在
+  `claude/…` 分支上。手动 Run workflow 用默认值会去裁决 `main`;当 `main` 恰好
+  等于开发分支顶端时,这次误派发**在结论上完全看不出来**(版本、金标、导出检查
+  全都会通过,只是测的不是你以为的那棵树)。API 派发时显式传 `ref`。
 - **金标**:`android/tools/make_golden.py` 在桌面生成 `golden.json`(四个案例:
   full_cal / rx_evm_sweep / spur_planner / pn_cpe_study),端上 `bridge.self_check()`
   与模拟器 GoldenTest 调同一函数比对(0.05 dB 绝对或 1e-3 相对)。真机 arm64 的
