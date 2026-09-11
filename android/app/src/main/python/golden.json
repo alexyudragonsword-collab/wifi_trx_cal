@@ -145,9 +145,12 @@
    "gi_ns": 800.0,
    "n_realisations": 4,
    "tone_plan_segments": 2,
-   "n_active": 484
+   "n_active": 484,
+   "tilt_still_db": -0.41,
+   "tilt_170hz_db": 6.79,
+   "tilt_670hz_db": 13.42
   },
-  "n_pages": 3
+  "n_pages": 4
  },
  {
   "key": "subband_placement",

@@ -66,6 +66,15 @@ class TDLChannel:
     #: profile truncation; None = 6 tau, where the residual power is
     #: exp(-6) = 0.25 % and the rms is within a fraction of a percent
     max_delay_ns: float | None = None
+    #: maximum Doppler shift.  0 (the default) is block fading: one
+    #: realisation frozen for the capture, which is what every reading
+    #: before 0.7.33 was taken on and is reproduced bit for bit.
+    #: Non-zero makes each tap vary in time with Clarke's spectrum.
+    doppler_hz: float = 0.0
+    #: sinusoids per tap in the sum-of-sinusoids generator.  The
+    #: autocorrelation converges to J0(2 pi f_D tau) as this grows; the
+    #: default is a compromise the guard measures rather than assumes.
+    n_sinusoids: int = 16
     enabled: bool = True
 
     @property
@@ -117,13 +126,50 @@ class TDLChannel:
         delays = np.arange(taps.size) / fs
         return np.exp(-2j * np.pi * np.outer(tone_hz, delays)) @ taps
 
+    def tap_process(self, n: int, fs: float, tap_power: float,
+                    rng: np.random.Generator) -> np.ndarray:
+        """One tap's complex gain over ``n`` samples, Clarke spectrum.
+
+        Sum of sinusoids: arrival angles spread over the circle and
+        independent phases, so the autocorrelation tends to
+        J0(2 pi f_D tau) as the count grows.  That limit is a closed
+        form, which is why this generator is usable here at all — unlike
+        a tabulated profile, it can be checked rather than remembered.
+        """
+        m = int(self.n_sinusoids)
+        t = np.arange(n) / fs
+        alpha = (2.0 * np.pi * (np.arange(m) + 0.5) / m
+                 + rng.uniform(0.0, 2.0 * np.pi))
+        phi = rng.uniform(0.0, 2.0 * np.pi, size=m)
+        f = self.doppler_hz * np.cos(alpha)
+        g = np.exp(2j * np.pi * np.outer(f, t) + 1j * phi[:, None]).sum(axis=0)
+        return g * np.sqrt(tap_power / m)
+
     def apply(self, x: np.ndarray, fs: float,
               rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
         """Convolve and keep the input length; returns (y, taps).  The
         tail past the capture is dropped, which is what a receiver sees
-        anyway.  Disabled, this is ``x`` unchanged."""
+        anyway.  Disabled, this is ``x`` unchanged.
+
+        With ``doppler_hz`` set the taps vary along the capture and the
+        returned ``taps`` are the gains **at the first sample**, which is
+        what an LTF-based estimate would see at the start of the packet.
+        """
         x = np.asarray(x, dtype=complex)
         if not self.enabled or self.rms_delay_s <= 0.0:
             return x, np.ones(1, dtype=complex)
-        taps = self.realize(fs, rng)
-        return np.convolve(x, taps)[:x.size], taps
+        if self.doppler_hz <= 0.0:
+            taps = self.realize(fs, rng)
+            return np.convolve(x, taps)[:x.size], taps
+        delays, power = self.power_delay_profile(fs)
+        n = x.size
+        y = np.zeros(n, dtype=complex)
+        first = np.empty(power.size, dtype=complex)
+        for k, p_k in enumerate(power):
+            g = self.tap_process(n, fs, float(p_k), rng)
+            first[k] = g[0]
+            if k:
+                y[k:] += g[k:] * x[:n - k]
+            else:
+                y += g * x
+        return y, first

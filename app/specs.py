@@ -1477,6 +1477,30 @@ def run_channel_study(p: dict) -> AnalysisResult:
                  "profile leaves 0.25 % of its power past 6 tau", fontsize=9.5)
     fig_c.tight_layout()
 
+    # (d) a moving channel: the frozen LTF estimate goes stale, so the
+    # packet tilts instead of sitting flat
+    fds = [0.0, 30.0, 170.0, 670.0]
+    fig_d = new_figure(figsize=(8.4, 5.2))
+    ax = fig_d.add_subplot(111)
+    tilt = {}
+    for fd in fds:
+        cd = chmod.TDLChannel(rms_delay_ns=50.0, doppler_hz=fd)
+        ps = np.median(np.array([
+            cs.doppler_readings(cfg, cd, snr, int(p["ce_smooth_tones"]), seed + r)
+            ["per_symbol_db"] for r in range(max(n_real // 2, 2))]), axis=0)
+        tilt[fd] = float(ps[-1] - ps[0])
+        ax.plot(np.arange(1, ps.size + 1), ps, "o-",
+                label=f"{fd:.0f} Hz ({fd * 3e8 / 6e9 * 3.6:.0f} km/h at 6 GHz), "
+                      f"tilt {tilt[fd]:+.1f} dB")
+    ax.set_xlabel("data symbol")
+    ax.set_ylabel("modem-form EVM [dB]")
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=8, loc="upper left")
+    ax.set_title("A channel estimate frozen at the LTF goes stale as the channel "
+                 "moves\n(flat is the still case; the tilt is the Doppler)",
+                 fontsize=9.5)
+    fig_d.tight_layout()
+
     metrics = {
         "evm_flat_db": round(float(sw["modem_db"][0][j9]), 2),
         "evm_50ns_db": round(float(sw["modem_db"][2][j9]), 2),
@@ -1490,6 +1514,9 @@ def run_channel_study(p: dict) -> AnalysisResult:
         "n_realisations": n_real,
         "tone_plan_segments": len(cfg.plan().segments()),
         "n_active": cfg.n_active,
+        "tilt_still_db": round(tilt[0.0], 2),
+        "tilt_170hz_db": round(tilt[170.0], 2),
+        "tilt_670hz_db": round(tilt[670.0], 2),
     }
     text = (
         f"Propagation channel, {p['bw_mhz']} MHz {p['qam']}-QAM at {snr:.0f} dB in-band "
@@ -1508,11 +1535,19 @@ def run_channel_study(p: dict) -> AnalysisResult:
         "tone costs 1/|H|^2, whose expectation diverges, and the power-domain mean of these "
         "EVMs has no limit to converge to.\n"
         "The delivered cal-state is unchanged and still a conducted-mode figure: the "
-        "channel lives under link/, which cal and chain are forbidden to import.")
+        "channel lives under link/, which cal and chain are forbidden to import.\n"
+        f"With the channel moving, the estimate frozen at the LTF goes stale and the "
+        f"packet tilts: {metrics['tilt_still_db']:+.1f} dB across the packet when still, "
+        f"{metrics['tilt_170hz_db']:+.1f} dB at 170 Hz (about 31 km/h at 6 GHz) and "
+        f"{metrics['tilt_670hz_db']:+.1f} dB at 670 Hz. The textbook 2[1-J0(2 pi f_D T)] "
+        "describes the channel's own motion and under-predicts this, because equalising "
+        "with a stale estimate divides that motion by |H|^2 and the deep fades carry both "
+        "the worst estimate and the largest divisor.")
     return AnalysisResult(metrics=metrics, figure=fig_b, text=text,
                           figures=(("Frequency response", fig_a),
                                    ("Smoothing width vs delay spread", fig_b),
-                                   ("Both views vs delay spread", fig_c)))
+                                   ("Both views vs delay spread", fig_c),
+                                   ("Doppler: the packet tilts", fig_d)))
 
 
 def run_agc_dynamics(p: dict) -> AnalysisResult:

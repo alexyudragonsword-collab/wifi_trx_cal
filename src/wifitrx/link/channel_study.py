@@ -183,3 +183,78 @@ def delay_sweep(cfg: OFDMConfig, rms_delays_ns, snr_db: float,
             "realized_rms_s": np.asarray(realized),
             "cp_s": cp_duration_s(cfg),
             "ce_smooth_tones": int(ce_smooth_tones)}
+
+
+def doppler_readings(cfg: OFDMConfig, chan: TDLChannel, snr_db: float,
+                     ce_smooth_tones: int = 9, seed: int = 0,
+                     frame=None, cols=None, pilots=None) -> dict:
+    """One packet with a time-varying channel, scored per symbol.
+
+    The LTF estimate is taken at the front and frozen, so a moving
+    channel shows up as a *tilt* across the packet rather than a level
+    shift — which is the whole reason to look at it per symbol."""
+    if frame is None:
+        frame, cols, pilots = study_frame(cfg)
+    fs = cfg.sample_rate_hz
+    rng = np.random.default_rng(seed)
+    y, _ = chan.apply(frame.x, fs, rng)
+    p_sig = float(np.mean(np.abs(frame.x) ** 2))
+    bins = cfg.fft_size * cfg.oversampling / cfg.n_active
+    sigma = np.sqrt(p_sig * bins / (10.0 ** (snr_db / 10.0)) / 2.0)
+    y = y + sigma * (rng.standard_normal(y.size) + 1j * rng.standard_normal(y.size))
+    v = score_views(y, frame, cols, pilots, cfg.n_symbols, ce_smooth_tones)
+    err = np.abs(v["syms_modem"] - v["ref_syms"]) ** 2
+    p_ref = float((np.abs(v["ref_syms"]) ** 2).mean())
+    return {"evm_db": float(v["evm_db"]),
+            "evm_modem_db": float(v["evm_modem_db"]),
+            "per_symbol_db": 10.0 * np.log10(err.mean(axis=1) / p_ref)}
+
+
+def frozen_estimate_change_db(doppler_hz: float, t_s: float) -> float:
+    """How much the channel itself has moved after ``t_s``, flat-weighted:
+    2[1 - J0(2 pi f_D t)] for Clarke's spectrum, which is
+    E|h(t)-h(0)|^2 / E|h|^2.
+
+    **This is not a bound on the EVM, and calling it one was wrong.**
+    The first version of this function did, and the measurement refused:
+    at 40 MHz, 50 ns and 31 km/h the Doppler contribution to the modem
+    EVM comes out about 11 dB worse than this figure.  The reason is the
+    same one that makes the fading EVM's power-mean diverge: equalising
+    with a stale estimate leaves an error of |h(t)-h(0)|^2 **divided by
+    |h(0)|^2**, and averaging that ratio is not averaging the numerator
+    and dividing by the mean denominator.  The deep-fade tones, where the
+    stale estimate is worst *and* the division is largest, dominate.
+
+    Keep it as the textbook reference it is: the channel's own motion,
+    useful for saying how fast the medium changes, not for predicting
+    what a receiver will read."""
+    x = 2.0 * np.pi * float(doppler_hz) * float(t_s)
+    return float(10.0 * np.log10(max(2.0 * (1.0 - bessel_j0(x)), 1e-30)))
+
+
+def bessel_j0(x: float) -> float:
+    """J0 from its integral definition: the mean of cos(x sin t) over a
+    full period, since int_0^2pi cos(x sin t) dt = 2 pi J0(x).
+
+    Not a polynomial fit and not scipy.  The fit would mean shipping
+    coefficients nobody here can derive, and ``scipy.special.j0`` is not
+    on the Android call-surface allowlist, which is a list of names
+    someone verified against scipy 1.4.1.  A plain mean over a uniform
+    grid is used rather than a quadrature rule for two reasons: on a
+    smooth periodic integrand it *is* the spectrally accurate rule, and
+    it keeps ``np.trapz`` out of the file — that name was renamed in
+    numpy 2.0 and the phone runs 1.19.5, which is the exact trap that
+    once broke the Reference tab.
+
+    Two earlier versions were wrong and the tests caught both: the power
+    series, which does not converge at the arguments a fast channel
+    reaches, and the trapezoid form, which did not survive the numpy
+    rename.  Accuracy against scipy is measured in
+    ``tests/test_doppler.py``.
+    """
+    t = np.arange(4096) * (2.0 * np.pi / 4096)
+    return float(np.cos(float(x) * np.sin(t)).mean())
+
+
+def symbol_time_s(cfg: OFDMConfig) -> float:
+    return (cfg.fft_size + cfg.cp_len) / cfg.bandwidth_hz
