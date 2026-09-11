@@ -148,5 +148,29 @@
    "n_active": 484
   },
   "n_pages": 3
+ },
+ {
+  "key": "subband_placement",
+  "params": {
+   "bw_mhz": 80,
+   "ru_tones": 106,
+   "qam": 256,
+   "p_in_dbm": -40.0,
+   "n_points": 3,
+   "seed": 0
+  },
+  "metrics": {
+   "iq_penalty_at_dc_db": 13.42,
+   "dc_im2_penalty_at_dc_db": 2.39,
+   "lpf_penalty_at_edge_db": 5.7,
+   "phase_noise_spread_db": 0.3,
+   "best_centre_mhz": 17.81,
+   "best_evm_db": -39.26,
+   "evm_at_dc_db": -36.3,
+   "evm_at_edge_db": -36.77,
+   "ru_tones": 106,
+   "slice_bw_mhz": 8.28
+  },
+  "n_pages": 2
  }
 ]

@@ -43,6 +43,10 @@ CASES = [
     ("channel_study", {"bw_mhz": 40, "qam": 256, "snr_db": 30.0,
                        "ce_smooth_tones": 9, "n_real": 4,
                        "tone_plan": "standard", "seed": 0}),
+    # sub-band placement: arbitrary tone plans, the model pilot set and a
+    # per-impairment chain sweep on the phone's numpy
+    ("subband_placement", {"bw_mhz": 80, "ru_tones": 106, "qam": 256,
+                           "p_in_dbm": -40.0, "n_points": 3, "seed": 0}),
 ]
 
 

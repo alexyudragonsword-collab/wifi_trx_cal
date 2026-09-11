@@ -1292,6 +1292,98 @@ def run_spur_planner(p: dict) -> AnalysisResult:
                           figure=fig, text=text)
 
 
+def run_subband_placement(p: dict) -> AnalysisResult:
+    """Where in the band should a narrow user sit?  Isolation study: one
+    impairment family at a time, the slice swept across the channel.
+    Two pages: (a) EVM against the slice centre, one curve per isolated
+    impairment plus the combined one; (b) the same as a penalty relative
+    to each curve's own best placement, which is the number an allocator
+    would use.  The slice is built by waveform.tone_plan.subband and
+    carries the model's evenly spaced pilots — the standard's RU pilot
+    tables are an external input this project does not hold, so the
+    shape of the curves is the result, not their absolute offset."""
+    from wifitrx.link import subband_study as ss
+
+    bw = float(p["bw_mhz"]) * 1e6
+    n_tones = int(p["ru_tones"])
+    nfft = int(round(bw / 78.125e3))
+    edge = nfft // 2 - n_tones // 2 - 2
+    centres = np.unique(np.round(np.linspace(0, edge, int(p["n_points"]))
+                                 ).astype(int))
+    sw = ss.centre_sweep(bw, n_tones, centres, float(p["p_in_dbm"]),
+                         seed=int(p["seed"]), qam_order=int(p["qam"]))
+    scs = 78.125e3
+
+    fig_a = new_figure(figsize=(8.4, 5.2))
+    ax = fig_a.add_subplot(111)
+    for name in sw["impairments"]:
+        ax.plot(sw["centre_hz"] / 1e6, sw["evm_db"][name], "o-", label=name)
+    ax.set_xlabel("slice centre offset from the carrier [MHz]")
+    ax.set_ylabel("isolation-view EVM [dB]")
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=8, loc="best")
+    ax.set_title(f"{n_tones}-tone slice swept across a {p['bw_mhz']} MHz channel, "
+                 "one impairment at a time", fontsize=9.5)
+    fig_a.tight_layout()
+
+    fig_b = new_figure(figsize=(8.4, 5.2))
+    ax = fig_b.add_subplot(111)
+    for name in sw["impairments"]:
+        v = sw["evm_db"][name]
+        ax.plot(sw["centre_hz"] / 1e6, v - v.min(), "o-", label=name)
+    ax.set_xlabel("slice centre offset from the carrier [MHz]")
+    ax.set_ylabel("penalty against this curve's best placement [dB]")
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=8, loc="best")
+    ax.set_title("What placement costs: the IQ image wants the slice off centre, "
+                 "the channel filter wants it away from the edge", fontsize=9.5)
+    fig_b.tight_layout()
+
+    e = sw["evm_db"]
+    best = int(np.argmin(e["all"]))
+    metrics = {
+        "iq_penalty_at_dc_db": round(float(e["iq"][0] - e["iq"].min()), 2),
+        "dc_im2_penalty_at_dc_db": round(float(e["dc+im2"][0] - e["dc+im2"].min()), 2),
+        "lpf_penalty_at_edge_db": round(float(e["lpf"][-1] - e["lpf"].min()), 2),
+        # .max()-.min() rather than np.ptp: the Android call-surface
+        # allowlist holds names verified against numpy 1.19.5 and ptp
+        # is not one of them.
+        "phase_noise_spread_db": round(
+            float(e["phase noise"].max() - e["phase noise"].min()), 2),
+        "best_centre_mhz": round(float(sw["centre_hz"][best]) / 1e6, 2),
+        "best_evm_db": round(float(e["all"][best]), 2),
+        "evm_at_dc_db": round(float(e["all"][0]), 2),
+        "evm_at_edge_db": round(float(e["all"][-1]), 2),
+        "ru_tones": n_tones,
+        "slice_bw_mhz": round(n_tones * scs / 1e6, 2),
+    }
+    text = (
+        f"{n_tones}-tone slice ({metrics['slice_bw_mhz']:.1f} MHz) swept across "
+        f"{p['bw_mhz']} MHz at {float(p['p_in_dbm']):.0f} dBm.\n"
+        f"The IQ image is the one that cares most about placement: it costs "
+        f"{metrics['iq_penalty_at_dc_db']:.1f} dB on a slice centred at DC and "
+        "almost nothing off centre, because a centred slice contains its own "
+        "mirror while an off-centre one has empty spectrum there.\n"
+        f"Mixer IM2 adds {metrics['dc_im2_penalty_at_dc_db']:.1f} dB at DC. The DC "
+        "offset itself is invisible: it lands on the DC tone, which is never "
+        "active — which is a large part of why the standard nulls it.\n"
+        f"The channel filter pulls the other way, {metrics['lpf_penalty_at_edge_db']:.1f} "
+        "dB at the edge. Per-tone equalisation removes a static response exactly, "
+        "so that is not the filter's shape, it is the noise enhanced on the tones "
+        "it attenuated.\n"
+        f"Phase noise is flat to {metrics['phase_noise_spread_db']:.1f} dB across the "
+        "sweep, as a common-mode impairment must be.\n"
+        f"Best placement here is {metrics['best_centre_mhz']:+.1f} MHz at "
+        f"{metrics['best_evm_db']:.1f} dB, against {metrics['evm_at_dc_db']:.1f} at "
+        f"DC and {metrics['evm_at_edge_db']:.1f} at the edge: the optimum is "
+        "interior, neither centred nor at the edge.\n"
+        "These are the model's evenly spaced pilots, not the standard's RU pilot "
+        "set, and the slice is not a standard RU. The shape is the result.")
+    return AnalysisResult(metrics=metrics, figure=fig_a, text=text,
+                          figures=(("EVM vs slice placement", fig_a),
+                                   ("Penalty vs best placement", fig_b)))
+
+
 def run_channel_study(p: dict) -> AnalysisResult:
     """What a dispersive channel costs, and what it does to a receiver
     setting chosen on a flat one (isolation study: the channel and
@@ -1857,4 +1949,29 @@ ALL_ANALYSES: tuple[AnalysisSpec, ...] = (
             ParamSpec("seed", "Channel / noise seed", "int", 0, minimum=0),
         ),
         run=run_channel_study),
+    AnalysisSpec(
+        key="subband_placement", title="Where a narrow user should sit in the band",
+        description="Isolation study of impairment localisation: a narrow "
+                    "sub-band swept across the channel with one impairment "
+                    "family at a time, showing that the IQ image punishes a "
+                    "slice centred on DC, the channel filter punishes one at "
+                    "the edge, phase noise is flat, and the best placement is "
+                    "interior",
+        params=(
+            ParamSpec("bw_mhz", "Bandwidth [MHz]", "choice", 80,
+                      choices=(40, 80, 160, 320)),
+            ParamSpec("ru_tones", "Slice width [tones]", "choice", 106,
+                      choices=(26, 52, 106, 242),
+                      tooltip="RU-shaped widths; the slice is built by tone "
+                              "count and offset, not from the standard's RU "
+                              "tables, which this model does not carry"),
+            ParamSpec("qam", "Constellation", "choice", 256,
+                      choices=(256, 1024, 4096)),
+            ParamSpec("p_in_dbm", "RF input power [dBm]", "float", -40.0,
+                      minimum=-80.0, maximum=-10.0),
+            ParamSpec("n_points", "Sweep points", "int", 6, minimum=3,
+                      maximum=16),
+            ParamSpec("seed", "Process / noise seed", "int", 0, minimum=0),
+        ),
+        run=run_subband_placement),
 )

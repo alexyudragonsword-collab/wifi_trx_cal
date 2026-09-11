@@ -58,6 +58,14 @@ class OFDMConfig:
     #: the inter-segment nulls as actual holes; a TonePlan instance is
     #: taken as given (see waveform.tone_plan, e.g. for puncturing).
     tone_plan: object | None = None
+    #: which pilot tones the frame carries.  "standard" (the default)
+    #: uses the numerology's own pilot set and REFUSES a plan that does
+    #: not contain it — a punctured or sub-band plan has a different
+    #: pilot set in the standard, and guessing it would be inventing a
+    #: specification.  "model" opts in to an evenly-spaced set of the
+    #: same size, which is this model's own and is labelled as such
+    #: wherever it is reported.
+    pilot_set: str = "standard"
 
     @property
     def fft_size(self) -> int:

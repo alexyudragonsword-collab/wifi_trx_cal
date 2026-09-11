@@ -151,3 +151,34 @@ def punctured(plan: TonePlan, bandwidth_hz: float,
         raise ValueError("puncturing removed every tone")
     tag = ",".join(str(int(d)) for d in drop)
     return TonePlan(plan.indices[keep], label=f"{plan.label} minus 20MHz #{tag}")
+
+
+def subband(bandwidth_hz: float, subcarrier_spacing_hz: float,
+            n_tones: int, centre_tone: int) -> TonePlan:
+    """``n_tones`` contiguous subcarriers centred on ``centre_tone``.
+
+    This is the RU-shaped plan without the RU tables.  802.11ax/be
+    partitions a channel into resource units of 26, 52, 106, 242, 484,
+    996 and 2x996 tones at tabulated positions, and those tables are an
+    external specification this project does not hold — the same reason
+    the channel models are exponential profiles rather than TGn letters.
+    What a narrow plan is actually *for* here is asking whether an
+    impairment cares where in the band it sits, and that question needs
+    a width and an offset, not the standard's grid.  So this builds one
+    and does not call it an RU.
+
+    DC is skipped; a span straddling it loses that one tone.
+    """
+    if n_tones < 2:
+        raise ValueError("a sub-band needs at least two tones")
+    nfft = int(round(bandwidth_hz / subcarrier_spacing_hz))
+    lo = int(centre_tone) - n_tones // 2
+    idx = np.arange(lo, lo + n_tones)
+    idx = idx[idx != 0]
+    if idx.size == 0:
+        raise ValueError("sub-band collapsed to nothing")
+    if idx.min() < -nfft // 2 or idx.max() > nfft // 2:
+        raise ValueError(
+            f"sub-band {idx.min()}..{idx.max()} leaves the {bandwidth_hz / 1e6:g} "
+            f"MHz channel (+-{nfft // 2} tones)")
+    return TonePlan(idx, label=f"{idx.size}-tone sub-band at {int(centre_tone):+d}")

@@ -135,7 +135,7 @@ CHAPTER = Chapter(
             id="use-gui", title=T("8.4 GUI 工作台", "8.4 The GUI workbench"),
             body=(
                 T("<code>python app/main.py</code>,三个页签。"
-                  "<b>Analyses</b>:十个分析(参数表单由声明式 spec 生成)"
+                  "<b>Analyses</b>:十一个分析(参数表单由声明式 spec 生成)"
                   "——全量校准(结果页 = 四星座:环回前/环回后/TX @ PA 口/"
                   "RX @ 数字口,加 PSD、RX EVM-输入功率曲线与逐步指标;"
                   "校准类分析支持 11ax/be 与 11ac/n 制式、64~4096-QAM,"
@@ -181,7 +181,7 @@ CHAPTER = Chapter(
                   "(<code>android/</code>,Chaquopy + WebView 壳,分析层"
                   "零改动,图形以 SVG 矢量缩放)。",
                   "<code>python app/main.py</code>, three tabs. "
-                  "<b>Analyses</b>: ten analyses (forms generated from "
+                  "<b>Analyses</b>: eleven analyses (forms generated from "
                   "declarative specs) — full calibration (result page = "
                   "four constellations: loopback before / loopback after "
                   "/ TX @ PA out / RX @ digital out, plus PSD, the RX "

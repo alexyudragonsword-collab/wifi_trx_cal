@@ -120,6 +120,8 @@ def pilot_positions(config: OFDMConfig) -> np.ndarray:
     (0.7.17; the lever-arm error this costs is under 5 % at the band
     edge).
     """
+    if getattr(config, "pilot_set", "standard") == "model":
+        return model_pilot_positions(config)
     if config.tone_plan is not None:
         idx = config.active_tone_indices()
         want = standard_pilot_tones(config)
@@ -152,6 +154,44 @@ def pilot_sequence(n_symbols: int, n_pilots: int, seed: int = 42) -> np.ndarray:
     rng = np.random.default_rng(seed)
     return (2.0 * rng.integers(0, 2, size=(n_symbols, n_pilots)) - 1.0).astype(complex)
 
+
+def model_pilot_positions(config: OFDMConfig) -> np.ndarray:
+    """Evenly spaced pilot columns for a plan the standard's pilot set
+    does not fit — a punctured channel, an RU-shaped sub-band, anything
+    custom.
+
+    **These are the model's pilots, not the standard's.**  The standard
+    defines its own set for a punctured channel and for each RU size;
+    that table is an external input this project does not hold, and
+    inventing one under the standard's name would be worse than having
+    none.  So the rule here is stated rather than claimed: keep the
+    numerology's pilot *count* for the channel bandwidth, and place that
+    many at evenly spaced ranks across whatever tones the plan carries.
+
+    The lower half is placed at evenly spaced ranks and the upper half
+    is its mirror, so a mirror-symmetric plan gets a mirror-symmetric
+    pilot set **by construction**.  A first version placed all n_p ranks
+    from one formula and argued the symmetry followed by identity; it
+    does not, and measuring said so before this shipped — the exact
+    ranks sum to n where mirror columns must sum to n-1, and rounding
+    has no reason to repair an off-by-one.  Rank spacing is the same
+    device 0.7.17 used to map the standard's pilots onto the contiguous
+    block, where the lever-arm error it costs was measured under 5 % at
+    the band edge.
+    """
+    n = int(config.n_active)
+    n_p = int(standard_pilot_tones(config).size)
+    if n_p >= n:
+        raise ValueError(f"plan carries {n} tones, fewer than the {n_p} "
+                         "pilots the numerology asks for")
+    if n_p % 2:
+        raise ValueError(f"pilot counts are even in every numerology; got {n_p}")
+    half = n_p // 2
+    low = np.round((np.arange(half) + 0.5) * n / n_p - 0.5).astype(int)
+    cols = np.unique(np.concatenate([low, n - 1 - low[::-1]]))
+    if cols.size != n_p:                      # collisions after rounding
+        raise ValueError(f"cannot place {n_p} distinct pilots in {n} tones")
+    return np.clip(cols, 0, n - 1)
 
 def generate_ofdm_with_pilots(config: OFDMConfig,
                               pilot_seed: int = 42) -> tuple[OFDMWaveform, np.ndarray]:
