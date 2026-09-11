@@ -8,6 +8,7 @@
 - **跨空音平滑**是静默缺陷:160 MHz 最差单音误差 −16.5 → −30.6 dB。连续块保留跨 DC 平滑的老约定(只有一音间隙,冻结夹具与旗舰数字建立其上)。`cal.rx_iq` 对不对称计划改为拒绝而非静默丢音。
 - **自己写的一条守卫被变异判定为空转**:标准计划下 rank 映射与直接查表同解,测试不可区分;改用打孔计划区分。补进 `cairn/守卫有效性.md` 台账。
 - **裁决(0.7.30)**:`android.yml` run #91(dcfd9d5)三 job 全绿,六案例金标上端跑过,wheel 版本与 `PyInit_*` 检查通过。指针:`CHANGELOG.md` 0.7.31、`docs/backlog_zh.md` B30。
+- **裁决(0.7.31)**:`android.yml` run #93(6cc7f9e)三 job 全绿,两种出货形态的 `on-device tests actually ran`、wheel 版本核对(0.7.31)、`PyInit_*` 导出检查全部 success;`ci.yml` push run #185 两条 lane 全绿。**体检 P2 至此全部收口**,backlog 头部只剩 A2/A4 两项外部输入。
 
 ## 2026-09-11 · R38:传播信道进链路层,交付面不变(0.7.30)
 
