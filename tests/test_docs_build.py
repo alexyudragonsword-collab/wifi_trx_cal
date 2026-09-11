@@ -159,3 +159,50 @@ def test_full_build(tmp_path):
         assert "generated from commit" in out
     tut = (tmp_path / "tutorial.html").read_text(encoding="utf-8")
     assert tut.count("data:image/png") >= 15
+
+
+# ------------------------------------- the staleness checker's own logic
+# The nightly compares the committed HTML against a rebuild.  Its
+# normaliser used to strip only the timestamp out of the provenance
+# footer, leaving the commit id — which the committed file can never
+# match, because a file cannot carry the id of the commit containing it.
+# That guard was red on every nightly run for three weeks and hid the
+# schematic check behind it (CHANGELOG 0.7.26).  These pin the two
+# properties it needs: provenance alone is not staleness, real content
+# is, and a footer that stops matching is an error rather than a pass.
+def _staleness():
+    sys.path.insert(0, str(ROOT / "tools"))
+    import docs_staleness
+    return docs_staleness
+
+
+_FOOT = ('<footer>generated from commit <code>{sha}</code>{dirty} · '
+         '{when} · numpy 2.4.6 · rebuild: <code>x</code></footer></main>')
+
+
+def _page(body, sha, dirty="", when="2026-09-11T00:00:00+00:00"):
+    return f"<main><p>{body}</p>" + _FOOT.format(sha=sha, dirty=dirty, when=when)
+
+
+def test_provenance_difference_alone_is_not_staleness():
+    ds = _staleness()
+    committed = _page("same words", "0beb9d4", dirty=" (dirty)")
+    rebuilt = _page("same words", "a698f3b", when="2026-09-12T01:02:03+00:00")
+    assert committed != rebuilt                       # premise: raw text differs
+    assert ds.strip_provenance(committed) == ds.strip_provenance(rebuilt)
+
+
+def test_a_content_difference_is_staleness():
+    ds = _staleness()
+    a = _page("nine analyses", "0beb9d4")
+    b = _page("ten analyses", "0beb9d4")
+    assert ds.strip_provenance(a) != ds.strip_provenance(b)
+
+
+def test_a_footer_that_stopped_matching_is_an_error_not_a_pass():
+    ds = _staleness()
+    with pytest.raises(ValueError):
+        ds.strip_provenance("<main><p>body</p><footer>built somewhere</footer>")
+    with pytest.raises(ValueError):      # two footers is equally wrong
+        ds.strip_provenance(_page("body", "a") + _FOOT.format(
+            sha="b", dirty="", when="2026-09-11T00:00:00+00:00"))

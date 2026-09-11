@@ -15,19 +15,11 @@ QT_QPA_PLATFORM=offscreen python -m pytest tests/ -q \
 
 # The committed HTML is a deliverable, and nothing else notices when it
 # falls behind the code it is generated from.  A rebuild is byte-identical
-# apart from the provenance stamp (the schematics strip matplotlib's
-# per-run timestamp and clip ids), so any other difference means the
-# committed copy is stale.
+# apart from the provenance footer, which names the commit the build ran
+# at and therefore can never match the commit that carries the file: the
+# comparison that only normalised the timestamp inside it was red on
+# every nightly run for three weeks, and took the schematic check below
+# down with it.  tools/docs_staleness.py drops the footer instead.
 QT_QPA_PLATFORM=offscreen MPLBACKEND=Agg python tools/build_docs.py --out docs/
-python - <<'PY'
-import re, subprocess, sys
-stamp = re.compile(r"\d{4}-\d\d-\d\dT[\d:+\-]+")
-for name in ("docs/tutorial.html", "docs/devguide.html"):
-    old = subprocess.run(["git", "show", f"HEAD:{name}"],
-                         capture_output=True, text=True).stdout
-    new = open(name, encoding="utf-8").read()
-    if stamp.sub("", old) != stamp.sub("", new):
-        sys.exit(f"{name} is stale: rebuild with python tools/build_docs.py --out docs/")
-print("committed docs are current")
-PY
+python tools/docs_staleness.py
 MPLBACKEND=Agg python tools/build_assets.py --check
