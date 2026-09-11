@@ -8,6 +8,7 @@
 - **被推翻**:2[1−J0] 不是 EVM 上界(是平权的信道变化量),实测多普勒分量差它 3.2–11.6 dB,与功率均值发散同源。
 - **J0 连错两次**:幂级数不收敛;`np.trapz` 被 numpy 2.0 改名而端上 1.19.5(仓库记载过的事故)。最终周期均值,对 scipy 误差 3.8e-16。守卫改查字节码名字表——第一版匹配到了自己 docstring 里的词,是"错靶"的又一实例,已补进 `cairn/守卫有效性.md`。
 - 指针:`CHANGELOG.md` 0.7.33、`docs/backlog_zh.md` B32、`cairn/传播信道与估计.md`。
+- **裁决(0.7.32 与 0.7.33)**:`android.yml` 手动 dispatch run #96(675c954)与 #98(2e179d7)三 job 全绿,两种出货形态的 `on-device tests actually ran`、wheel 版本核对、`PyInit_*` 导出检查全部 success;`ci.yml` push run #188、#189 两条 lane 全绿。**评估阶段列出的三项未建模项至此全部落地**,backlog 头部仍只有 A2/A4 两项外部输入。
 
 ## 2026-09-11 · R40:模型导频集解开打孔/RU 评分,子带位置研究(0.7.32)
 
