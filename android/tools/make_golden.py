@@ -38,6 +38,10 @@ CASES = [
     # per-symbol scoring on the phone's numpy
     ("agc_dynamics", {"bw_mhz": 40, "qam": 256, "p_in_dbm": -30.0,
                       "start_state": 0, "seed": 0}),
+    # propagation channel: complex-Gaussian tap draws, np.convolve and the
+    # median statistic over realisations, on the phone's numpy
+    ("channel_study", {"bw_mhz": 40, "qam": 256, "snr_db": 30.0,
+                       "ce_smooth_tones": 9, "n_real": 4, "seed": 0}),
 ]
 
 

@@ -1292,6 +1292,130 @@ def run_spur_planner(p: dict) -> AnalysisResult:
                           figure=fig, text=text)
 
 
+def run_channel_study(p: dict) -> AnalysisResult:
+    """What a dispersive channel costs, and what it does to a receiver
+    setting chosen on a flat one (isolation study: the channel and
+    thermal noise, nothing else).  Three pages: (a) one realisation's
+    |H| across the tones with the coherence bandwidth marked; (b) the
+    headline — modem-form EVM against the channel-estimate smoothing
+    width, one curve per delay spread, showing that the shipped 9-tone
+    default is a conducted-mode choice whose cost grows with dispersion;
+    (c) both EVM views against the delay spread, with the guard interval
+    marked.  Nothing here changes the delivered cal-state: the channel
+    lives under ``link/``, which the layering guard forbids ``cal`` and
+    ``chain`` from importing."""
+    from wifitrx.link import channel as chmod
+    from wifitrx.link import channel_study as cs
+    from wifitrx.waveform import OFDMConfig
+
+    bw = float(p["bw_mhz"]) * 1e6
+    cfg = OFDMConfig(bandwidth_hz=bw, qam_order=int(p["qam"]), n_symbols=8,
+                     oversampling=4)
+    snr = float(p["snr_db"])
+    n_real = int(p["n_real"])
+    seed = int(p["seed"])
+    scs = cfg.subcarrier_spacing_hz
+    rms_list = [0.0, 15.0, 50.0, 150.0]
+
+    # (a) one realisation of the frequency response
+    fig_a = new_figure(figsize=(8.4, 5.2))
+    ax = fig_a.add_subplot(111)
+    for rms, colour in zip((15.0, 50.0, 150.0), ("tab:blue", "tab:orange", "tab:red")):
+        r = cs.packet_readings(cfg, chmod.TDLChannel(rms_delay_ns=rms), snr,
+                               int(p["ce_smooth_tones"]), seed)
+        ax.plot(r["tone_hz"] / 1e6, r["h_abs_db"], lw=0.9, color=colour,
+                label=f"rms delay {rms:.0f} ns, Bc "
+                      f"{chmod.coherence_bandwidth_hz(rms * 1e-9) / 1e6:.2f} MHz")
+    ax.axhline(0.0, color="gray", lw=0.8, ls=":")
+    ax.set_xlabel("tone offset from the carrier [MHz]")
+    ax.set_ylabel("|H| [dB]")
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=8, loc="lower left")
+    ax.set_title(f"One channel realisation, {p['bw_mhz']} MHz — the deeper the fade, "
+                 "the more a zero-forcing equaliser amplifies the noise on that tone",
+                 fontsize=9.5)
+    fig_a.tight_layout()
+
+    # (b) the headline: smoothing width against delay spread
+    sw = cs.smoothing_sweep(cfg, rms_list, snr, n_real=n_real, seed=seed)
+    j9 = list(sw["widths"]).index(9)
+    penalty = sw["modem_db"][:, j9] - sw["modem_db"].min(axis=1)
+    fig_b = new_figure(figsize=(8.4, 5.2))
+    ax = fig_b.add_subplot(111)
+    for i, rms in enumerate(sw["rms_delays_ns"]):
+        ax.semilogx(sw["widths"] * scs / 1e3, sw["modem_db"][i], "o-",
+                    label=f"rms delay {rms:.0f} ns (9 tones costs {penalty[i]:.1f} dB)")
+    ax.axvline(9 * scs / 1e3, color="k", ls="--", lw=0.9)
+    ax.annotate("shipped default, 9 tones", (9 * scs / 1e3, ax.get_ylim()[1]),
+                fontsize=8, ha="left", va="top", xytext=(3, -3),
+                textcoords="offset points")
+    ax.set_xlabel("channel-estimate smoothing span [kHz]")
+    ax.set_ylabel("modem-form EVM, median of realisations [dB]")
+    ax.grid(True, alpha=0.3, which="both")
+    ax.legend(fontsize=8, loc="upper left")
+    ax.set_title("The useful smoothing width is a bias-variance trade-off that moves "
+                 "with the delay spread\n(median over realisations: the power mean of a "
+                 "fading EVM does not converge)", fontsize=9.5)
+    fig_b.tight_layout()
+
+    # (c) both views against the delay spread
+    ds = cs.delay_sweep(cfg, [0.0, 25.0, 50.0, 100.0, 150.0, 200.0, 300.0], snr,
+                        int(p["ce_smooth_tones"]), n_real=n_real, seed=seed)
+    fig_c = new_figure(figsize=(8.4, 5.2))
+    ax = fig_c.add_subplot(111)
+    ax.plot(ds["rms_delays_ns"], ds["iso_db"], "s-", color="tab:gray",
+            label="isolation view (exact channel, zero-forcing)")
+    ax.plot(ds["rms_delays_ns"], ds["modem_db"], "o-", color="tab:red",
+            label=f"modem form, {ds['ce_smooth_tones']}-tone smoothing")
+    ax.axvline(ds["cp_s"] * 1e9 / 6.0, color="tab:orange", ls="-.", lw=0.9)
+    ax.annotate(f"tail reaches the {ds['cp_s'] * 1e9:.0f} ns GI",
+                (ds["cp_s"] * 1e9 / 6.0, ax.get_ylim()[0]), fontsize=8, ha="left",
+                va="bottom", xytext=(3, 3), textcoords="offset points",
+                color="tab:orange")
+    ax.set_xlabel("rms delay spread [ns]")
+    ax.set_ylabel("EVM, median of realisations [dB]")
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=8, loc="lower right")
+    ax.set_title("Crossing the guard interval is a slope, not a cliff — an exponential "
+                 "profile leaves 0.25 % of its power past 6 tau", fontsize=9.5)
+    fig_c.tight_layout()
+
+    metrics = {
+        "evm_flat_db": round(float(sw["modem_db"][0][j9]), 2),
+        "evm_50ns_db": round(float(sw["modem_db"][2][j9]), 2),
+        "evm_150ns_db": round(float(sw["modem_db"][3][j9]), 2),
+        "smooth_penalty_50ns_db": round(float(penalty[2]), 2),
+        "smooth_penalty_150ns_db": round(float(penalty[3]), 2),
+        "best_width_50ns": int(sw["best_width"][2]),
+        "best_width_150ns": int(sw["best_width"][3]),
+        "coherence_bw_150ns_mhz": round(float(sw["coherence_bw_hz"][3]) / 1e6, 3),
+        "gi_ns": round(ds["cp_s"] * 1e9, 1),
+        "n_realisations": n_real,
+    }
+    text = (
+        f"Propagation channel, {p['bw_mhz']} MHz {p['qam']}-QAM at {snr:.0f} dB in-band "
+        f"SNR, {n_real} realisations per point, median reported.\n"
+        f"The shipped {p['ce_smooth_tones']}-tone channel-estimate smoothing was chosen in "
+        "0.7.18 on a flat chain. It survives a mild channel and stops working on a "
+        f"dispersive one: against the best width on the same sweep it costs "
+        f"{metrics['smooth_penalty_50ns_db']:.1f} dB at 50 ns rms delay and "
+        f"{metrics['smooth_penalty_150ns_db']:.1f} dB at 150 ns, where 9 tones "
+        f"({9 * scs / 1e3:.0f} kHz) is a sizeable fraction of the "
+        f"{metrics['coherence_bw_150ns_mhz']:.2f} MHz coherence bandwidth.\n"
+        "Two things this study is careful about. The isolation view is NOT a floor here: "
+        "knowing the channel exactly and dividing by it is zero-forcing, which is a bad "
+        "idea in a deep fade, so the smoothed modem estimate can and does read better. "
+        "And the reported statistic is the median, because zero-forcing through a Rayleigh "
+        "tone costs 1/|H|^2, whose expectation diverges, and the power-domain mean of these "
+        "EVMs has no limit to converge to.\n"
+        "The delivered cal-state is unchanged and still a conducted-mode figure: the "
+        "channel lives under link/, which cal and chain are forbidden to import.")
+    return AnalysisResult(metrics=metrics, figure=fig_b, text=text,
+                          figures=(("Frequency response", fig_a),
+                                   ("Smoothing width vs delay spread", fig_b),
+                                   ("Both views vs delay spread", fig_c)))
+
+
 def run_agc_dynamics(p: dict) -> AnalysisResult:
     """AGC settling at the front of a packet (isolation study: the state
     ladder, its DC offsets, the channel LPF, noise and the ADC — nothing
@@ -1692,4 +1816,32 @@ ALL_ANALYSES: tuple[AnalysisSpec, ...] = (
             ParamSpec("seed", "Process / noise seed", "int", 0, minimum=0),
         ),
         run=run_agc_dynamics),
+    AnalysisSpec(
+        key="channel_study", title="Propagation channel and the estimate smoothing",
+        description="Link-level isolation study of a dispersive channel: the "
+                    "frequency response, the modem-form EVM against the "
+                    "channel-estimate smoothing width for several delay "
+                    "spreads (the shipped 9-tone default is a conducted-mode "
+                    "choice), and both EVM views against the delay spread "
+                    "with the guard interval marked",
+        params=(
+            ParamSpec("bw_mhz", "Bandwidth [MHz]", "choice", 40,
+                      choices=(20, 40, 80, 160, 320)),
+            ParamSpec("qam", "Constellation", "choice", 256,
+                      choices=(256, 1024, 4096)),
+            ParamSpec("snr_db", "In-band SNR [dB]", "float", 30.0,
+                      minimum=10.0, maximum=50.0,
+                      tooltip="Per-tone SNR, so a flat channel reads an "
+                              "EVM of about -SNR"),
+            ParamSpec("ce_smooth_tones", "Channel-estimate smoothing [tones]",
+                      "int", 9, minimum=1, maximum=65,
+                      tooltip="The shipped default is 9; this study is about "
+                              "when that stops being the right width"),
+            ParamSpec("n_real", "Channel realisations per point", "int", 16,
+                      minimum=4, maximum=128,
+                      tooltip="Median over realisations; the power mean of a "
+                              "fading EVM does not converge"),
+            ParamSpec("seed", "Channel / noise seed", "int", 0, minimum=0),
+        ),
+        run=run_channel_study),
 )

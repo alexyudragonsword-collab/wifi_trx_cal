@@ -121,5 +121,29 @@
    "states_crossed": 3
   },
   "n_pages": 3
+ },
+ {
+  "key": "channel_study",
+  "params": {
+   "bw_mhz": 40,
+   "qam": 256,
+   "snr_db": 30.0,
+   "ce_smooth_tones": 9,
+   "n_real": 4,
+   "seed": 0
+  },
+  "metrics": {
+   "evm_flat_db": -29.65,
+   "evm_50ns_db": -22.21,
+   "evm_150ns_db": -11.4,
+   "smooth_penalty_50ns_db": 0.0,
+   "smooth_penalty_150ns_db": 8.72,
+   "best_width_50ns": 9,
+   "best_width_150ns": 3,
+   "coherence_bw_150ns_mhz": 1.061,
+   "gi_ns": 800.0,
+   "n_realisations": 4
+  },
+  "n_pages": 3
  }
 ]

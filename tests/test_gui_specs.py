@@ -32,6 +32,8 @@ FAST_PARAMS = {
     "spur_planner": {"bw_mhz": 320, "band": "6g"},
     "agc_dynamics": {"bw_mhz": 40, "qam": 256, "p_in_dbm": -30.0,
                      "start_state": 0, "seed": 0},
+    "channel_study": {"bw_mhz": 40, "qam": 256, "snr_db": 30.0,
+                      "ce_smooth_tones": 9, "n_real": 4, "seed": 0},
 }
 
 
