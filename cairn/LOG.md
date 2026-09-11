@@ -7,6 +7,8 @@
 - 合并 main 前复核 CI 发现:推送快线绿而 **schedule 夜间 job 自 8/22 起每次都红**。根因是守卫结构性写错——陈旧检查只归一化时间戳,把 provenance 页脚的 commit id 留在比对里,而文件不可能记录包含自己的提交,于是永远不等。
 - 连带:排在其后的原理图检查 `build_assets.py --check` 从未执行(现查本身干净)。修法 `tools/docs_staleness.py` 整体去页脚,页脚不匹配时报错而非放行;三条单测钉住逻辑,端到端变异(改教程正文重建 → 红,还原 → 绿)确认。
 - 教训:守卫要双向验证——不只"能变红",还要"正常时会变绿";恒红的守卫和严格的守卫从结论上看一模一样。指针:`CHANGELOG.md` 0.7.26、`docs/backlog_zh.md` B26。
+- **裁决(0.7.26)**:`ci.yml` 手动 dispatch run #169(0ba3adf)两条 lane 全绿——**`full` job 的「full lane (lint, slow cases, coverage floor, docs and assets staleness)」步骤自 8/22 以来第一次 success**,即覆盖率门槛、文档陈旧、原理图三项守卫在远端首次真正执行完毕。`android.yml` run #79 三 job 全绿,两种出货形态的 `on-device tests actually ran`、`the wheels must carry this tree's version`(0.7.26)、`every compiled module must export its init symbol` 全部 success。
+- **合并**:两端裁决通过后,`main` 由 07fd4d5 快进到本条记录所在提交(开发分支一直是主干,`main` 是其严格祖先,无分叉可并)。
 
 ## 2026-09-09 · R33:P2-8 AGC 建立动态落地(0.7.25)
 
